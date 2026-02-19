@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@shopify/shopify-api": "^11.14.1",
+    "@types/pdfkit": "^0.17.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
+    "pdfkit": "^0.17.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {

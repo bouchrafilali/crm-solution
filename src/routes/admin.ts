@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createHmac } from "node:crypto";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { getBusinessProfile, updateBusinessProfile } from "../config/business.js";
@@ -12,6 +13,8 @@ import {
 } from "../services/orderSnapshots.js";
 import { fetchOrdersForPeriod } from "../services/shopifyOrdersSync.js";
 import { listWebhookEvents } from "../services/webhookEvents.js";
+import { buildOrderInvoicePdf } from "../services/invoicePdf.js";
+import { uploadPdfToShopifyFiles } from "../services/shopifyFiles.js";
 
 export const adminRouter = Router();
 
@@ -30,6 +33,11 @@ const syncSchema = z.object({
 
 const shippingStatusSchema = z.enum(["in_progress", "ready", "shipped"]);
 const articleStatusSchema = z.enum(["pending", "in_progress", "prepared", "shipped"]);
+const invoiceTemplateSchema = z.enum(["classic", "coin", "showroom_receipt", "international_invoice"]);
+
+const sendInvoiceTemplateSchema = z.object({
+  templateChoice: invoiceTemplateSchema.optional()
+});
 
 const orderUpdateSchema = z.object({
   shippingStatus: shippingStatusSchema.optional(),
@@ -77,7 +85,285 @@ function parseDateRange(input: unknown): { from: Date; toExclusive: Date } | nul
   return { from, toExclusive };
 }
 
-adminRouter.get("/", (_req, res) => {
+function normalizePhoneForApi(phone: string): string {
+  const digits = String(phone || "").replace(/[^0-9]/g, "");
+  if (digits.length < 8 || digits.length > 15) return "";
+  return digits;
+}
+
+function signInvoiceLink(orderId: string, exp: string, template: string): string {
+  return createHmac("sha256", env.SHOPIFY_API_SECRET).update(`${orderId}:${exp}:${template}`).digest("hex");
+}
+
+function formatInvoiceMoney(amount: number, currency: string): string {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: currency || "MAD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Number(amount || 0));
+}
+
+function escapeInvoiceHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function paymentStatusEn(status: string, outstanding: number): string {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "paid" || Number(outstanding || 0) <= 0) return "Paid";
+  if (normalized === "partially_paid") return "Partially Paid";
+  return "Pending";
+}
+
+function invoiceTitleByTemplate(template: string): string {
+  if (template === "coin") return "Facture - Coin de Couture";
+  if (template === "showroom_receipt") return "Showroom Receipt";
+  if (template === "international_invoice") return "International Couture Invoice";
+  return "Facture";
+}
+
+function buildPublicInvoiceHtml(orderId: string, template: string) {
+  const order = getOrderById(orderId);
+  if (!order) return null;
+
+  const created = new Date(order.createdAt);
+  const createdLabel = Number.isNaN(created.getTime())
+    ? String(order.createdAt || "")
+    : created.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  const lineRows = order.articles
+    .map((article) => {
+      const amount = Number(article.unitPrice || 0) * Number(article.quantity || 0);
+      return `<tr>
+        <td>${escapeInvoiceHtml(article.quantity)}</td>
+        <td>${escapeInvoiceHtml(article.title)}</td>
+        <td class="r">${escapeInvoiceHtml(formatInvoiceMoney(amount, order.currency))}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const headerName = template === "coin" ? "COIN DE COUTURE" : "MAISON BOUCHRA FILALI LAHLOU";
+  const footerMeta =
+    template === "coin"
+      ? "Siège Social 19 ET 21 ROND POINT DES SPORTS QUARTIER RACINE, Casablanca · ICE 002031076000092 · RC 401313"
+      : "Casablanca, Morocco · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com";
+
+  return `<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeInvoiceHtml(invoiceTitleByTemplate(template))} ${escapeInvoiceHtml(order.name)}</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #111; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; background: #fff; }
+    .page { width: 100%; max-width: 820px; margin: 0 auto; }
+    .brand { text-align: center; margin-bottom: 18px; }
+    .brand h1 { margin: 0; font-size: 24px; letter-spacing: .06em; font-family: Georgia, "Times New Roman", serif; }
+    .brand p { margin: 6px 0 0; color: #5d636b; font-size: 12px; }
+    .title { text-align: center; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin: 14px 0 18px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .card { border: 1px solid #e7e7e7; border-radius: 10px; padding: 12px; break-inside: avoid; }
+    .card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: #666; letter-spacing: .07em; }
+    .kv { display: grid; grid-template-columns: 38% 62%; gap: 4px; font-size: 12.5px; }
+    .k { color: #666; }
+    .v { font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { border-bottom: 1px solid #ececec; padding: 8px 6px; text-align: left; vertical-align: top; }
+    th { color: #666; text-transform: uppercase; font-size: 11px; letter-spacing: .07em; }
+    .r { text-align: right; }
+    .totals { max-width: 360px; margin-left: auto; margin-top: 12px; border: 1px solid #ececec; border-radius: 10px; padding: 10px; }
+    .totals-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13px; }
+    .totals-row strong { font-size: 16px; }
+    .note { margin-top: 12px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="brand">
+      <h1>${escapeInvoiceHtml(headerName)}</h1>
+      <p>${escapeInvoiceHtml(footerMeta)}</p>
+    </div>
+    <div class="title">${escapeInvoiceHtml(invoiceTitleByTemplate(template))}</div>
+    <div class="grid">
+      <div class="card">
+        <h3>Commande</h3>
+        <div class="kv"><div class="k">N°</div><div class="v">${escapeInvoiceHtml(order.name)}</div></div>
+        <div class="kv"><div class="k">Date</div><div class="v">${escapeInvoiceHtml(createdLabel)}</div></div>
+        <div class="kv"><div class="k">Statut</div><div class="v">${escapeInvoiceHtml(paymentStatusEn(order.financialStatus, order.outstandingAmount || 0))}</div></div>
+        <div class="kv"><div class="k">Passerelle</div><div class="v">${escapeInvoiceHtml(order.paymentGateway || "-")}</div></div>
+      </div>
+      <div class="card">
+        <h3>Client</h3>
+        <div class="kv"><div class="k">Nom</div><div class="v">${escapeInvoiceHtml(order.customerLabel || "-")}</div></div>
+        <div class="kv"><div class="k">Téléphone</div><div class="v">${escapeInvoiceHtml(order.customerPhone || "-")}</div></div>
+        ${order.customerEmail ? `<div class="kv"><div class="k">Email</div><div class="v">${escapeInvoiceHtml(order.customerEmail)}</div></div>` : ""}
+        ${order.shippingAddress ? `<div class="kv"><div class="k">Adresse</div><div class="v">${escapeInvoiceHtml(order.shippingAddress)}</div></div>` : ""}
+      </div>
+    </div>
+    <table>
+      <thead><tr><th style="width:70px">Qté</th><th>Article</th><th class="r" style="width:190px">Montant</th></tr></thead>
+      <tbody>
+        ${lineRows}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="totals-row"><span>Total</span><span>${escapeInvoiceHtml(formatInvoiceMoney(order.totalAmount || 0, order.currency))}</span></div>
+      <div class="totals-row"><span>Solde restant</span><span>${escapeInvoiceHtml(order.outstandingAmount > 0 ? formatInvoiceMoney(order.outstandingAmount, order.currency) : "-")}</span></div>
+      <div class="totals-row"><strong>À encaisser</strong><strong>${escapeInvoiceHtml(formatInvoiceMoney(order.outstandingAmount || 0, order.currency))}</strong></div>
+    </div>
+    <p class="note">Document généré automatiquement par l’application.</p>
+  </div>
+</body>
+</html>`;
+}
+
+function replaceTemplatePlaceholders(input: unknown, map: Record<string, string>): unknown {
+  if (typeof input === "string") {
+    return input.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_match, key) => map[key] ?? "");
+  }
+  if (Array.isArray(input)) {
+    return input.map((item) => replaceTemplatePlaceholders(item, map));
+  }
+  if (input && typeof input === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      result[k] = replaceTemplatePlaceholders(v, map);
+    }
+    return result;
+  }
+  return input;
+}
+
+async function sendZokoTemplate(
+  payload: unknown,
+  configuredTemplateName: string,
+  configuredTemplateLanguage: string
+): Promise<{
+  ok: boolean;
+  status?: number;
+  providerResponse?: unknown;
+  usedTemplate?: string;
+  usedLanguage?: string;
+  usedType?: string;
+  attempts?: { templates: string[]; languages: string[]; types: string[] };
+  error?: string;
+}> {
+  const authHeader = String(env.ZOKO_AUTH_HEADER || "apikey").trim();
+  const authPrefix = String(env.ZOKO_AUTH_PREFIX || "").trim();
+  const tokenValue = authPrefix ? `${authPrefix} ${env.ZOKO_AUTH_TOKEN}` : env.ZOKO_AUTH_TOKEN;
+
+  const allowInsecureTls = String(env.ZOKO_ALLOW_INSECURE_TLS || "").toLowerCase() === "true";
+  const previousTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  if (allowInsecureTls) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  try {
+    const templateNameCandidates = Array.from(new Set([configuredTemplateName].filter(Boolean)));
+    const rawLanguage = String(configuredTemplateLanguage || "").trim();
+    const frVariants =
+      rawLanguage.toLowerCase() === "fr" || rawLanguage.toLowerCase() === "french"
+        ? ["fr", "French", "french"]
+        : [];
+    const languageCandidates = Array.from(new Set([rawLanguage, rawLanguage.toLowerCase(), ...frVariants].filter(Boolean)));
+    const baseType =
+      payload && typeof payload === "object" && !Array.isArray(payload) ? String((payload as Record<string, unknown>).type || "") : "";
+    const typeCandidates = Array.from(new Set([baseType, "buttonTemplate", "richTemplate", "template"].filter(Boolean)));
+
+    let lastStatus = 0;
+    let lastProviderResponse: unknown = null;
+
+    for (const candidateTemplate of templateNameCandidates) {
+      for (const candidateLanguage of languageCandidates) {
+        for (const candidateType of typeCandidates) {
+          const payloadObj =
+            payload && typeof payload === "object" && !Array.isArray(payload)
+              ? {
+                  ...(payload as Record<string, unknown>),
+                  type: candidateType,
+                  templateId: candidateTemplate,
+                  templateLanguage: candidateLanguage
+                }
+              : payload;
+
+          const apiRes = await fetch(env.ZOKO_API_URL as string, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              [authHeader]: tokenValue as string
+            },
+            body: JSON.stringify(payloadObj),
+            signal: controller.signal
+          });
+
+          const raw = await apiRes.text();
+          let json: unknown = null;
+          try {
+            json = JSON.parse(raw);
+          } catch {
+            json = { raw };
+          }
+
+          if (apiRes.ok) {
+            return {
+              ok: true,
+              providerResponse: json,
+              usedTemplate: candidateTemplate,
+              usedLanguage: candidateLanguage,
+              usedType: candidateType
+            };
+          }
+
+          lastStatus = apiRes.status;
+          lastProviderResponse = json;
+        }
+      }
+    }
+
+    return {
+      ok: false,
+      status: lastStatus,
+      providerResponse: lastProviderResponse,
+      attempts: {
+        templates: templateNameCandidates,
+        languages: languageCandidates,
+        types: typeCandidates
+      },
+      error: "Envoi template API échoué."
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erreur réseau API";
+    return { ok: false, error: message };
+  } finally {
+    if (allowInsecureTls) {
+      if (typeof previousTlsSetting === "string") {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsSetting;
+      } else {
+        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      }
+    }
+    clearTimeout(timeoutId);
+  }
+}
+
+adminRouter.get("/", (req, res) => {
+  const host = typeof req.query.host === "string" ? req.query.host : "";
+  const shop = typeof req.query.shop === "string" ? req.query.shop : "";
+  const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const navParams = new URLSearchParams();
+  if (host) navParams.set("host", host);
+  if (shop) navParams.set("shop", shop);
+  if (embedded) navParams.set("embedded", embedded);
+  const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
+
   res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
@@ -656,6 +942,26 @@ adminRouter.get("/", (_req, res) => {
       gap: 8px;
       margin-top: 14px;
     }
+    .modal-preview-wrap {
+      margin-top: 12px;
+      border: 1px solid #d9dadd;
+      border-radius: 12px;
+      background: #f6f6f7;
+      padding: 10px;
+    }
+    .modal-preview-head {
+      font-size: 13px;
+      font-weight: 600;
+      color: #4a4f54;
+      margin-bottom: 8px;
+    }
+    .modal-preview-frame {
+      width: 100%;
+      min-height: 70vh;
+      border: 1px solid #e1e3e5;
+      border-radius: 10px;
+      background: #fff;
+    }
     .btn-secondary {
       border: 1px solid #c7c9cc;
       border-radius: 10px;
@@ -688,8 +994,8 @@ adminRouter.get("/", (_req, res) => {
       <h1>Panneau de gestion des commandes</h1>
     </div>
     <ui-nav-menu>
-      <a href="/admin">Commandes</a>
-      <a href="/admin/invoices">Factures</a>
+      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/invoices${navSuffix}">Factures</a>
     </ui-nav-menu>
     <p class="intro">Maison Bouchra Filali Lahlou · suivi raffiné des commandes et livraisons</p>
 
@@ -786,8 +1092,7 @@ adminRouter.get("/", (_req, res) => {
         <div style="margin-top:10px;">
           <label for="bankTemplateSelect">Modèle de facture</label>
           <select id="bankTemplateSelect">
-            <option value="classic">Modèle Bouchra Filali Lahlou</option>
-            <option value="coin">Modèle Coin de Couture</option>
+            <option value="classic">Version 1 (Facture)</option>
           </select>
         </div>
         <div id="bankProfileGroup" class="modal-grid">
@@ -836,13 +1141,31 @@ adminRouter.get("/", (_req, res) => {
           </div>
         </div>
         <div id="bankProfileHelp" class="modal-help"></div>
+        <div id="bankModalPreviewWrap" class="modal-preview-wrap hidden">
+          <div class="modal-preview-head">Aperçu de la facture</div>
+          <iframe id="bankModalPreviewFrame" class="modal-preview-frame"></iframe>
+        </div>
         <div class="modal-actions">
           <button id="bankModalCancelBtn" type="button" class="btn-secondary">Annuler</button>
+          <button id="bankModalPreviewBtn" type="button" class="btn-secondary">Aperçu</button>
           <button id="bankModalConfirmBtn" type="button">Utiliser pour la facture</button>
         </div>
       </div>
     </div>
 
+  <script>
+    (() => {
+      const apiKey = document.querySelector('meta[name="shopify-api-key"]')?.content || "";
+      const host = new URLSearchParams(window.location.search).get("host") || "";
+      const appBridge = window["app-bridge"];
+      if (!apiKey || !host || !appBridge?.default) return;
+      try {
+        appBridge.default({ apiKey, host, forceRedirect: true });
+      } catch (err) {
+        console.warn("App Bridge init failed", err);
+      }
+    })();
+  </script>
   <script>
     const syncFromEl = document.getElementById("syncFrom");
     const syncToEl = document.getElementById("syncTo");
@@ -880,7 +1203,10 @@ adminRouter.get("/", (_req, res) => {
     const accountLabelEl = document.getElementById("accountLabel");
     const bankProfileHelpEl = document.getElementById("bankProfileHelp");
     const bankModalCancelBtn = document.getElementById("bankModalCancelBtn");
+    const bankModalPreviewBtn = document.getElementById("bankModalPreviewBtn");
     const bankModalConfirmBtn = document.getElementById("bankModalConfirmBtn");
+    const bankModalPreviewWrap = document.getElementById("bankModalPreviewWrap");
+    const bankModalPreviewFrame = document.getElementById("bankModalPreviewFrame");
     const bankProfileGroupEl = document.getElementById("bankProfileGroup");
     const bankFieldsGroupEl = document.getElementById("bankFieldsGroup");
 
@@ -891,6 +1217,7 @@ adminRouter.get("/", (_req, res) => {
     let syncRunId = 0;
     let syncInFlight = false;
     let syncQueued = false;
+    let invoicePreviewBlobUrl = "";
     const defaultLocationOptions = [
       "Showroom Massira - Casablanca, Maroc",
       "Showroom Triangle D'or - Casablanca, Maroc"
@@ -967,6 +1294,35 @@ adminRouter.get("/", (_req, res) => {
       }
     }
 
+    function extractApiErrorMessage(parsed, fallback) {
+      if (!parsed || !parsed.ok || !parsed.data || typeof parsed.data !== "object") {
+        return fallback || "Erreur API";
+      }
+      const data = parsed.data;
+      if (typeof data.error === "string" && data.error.trim()) {
+        let message = data.error.trim();
+        if (data.status) {
+          message += " (status " + data.status + ")";
+        }
+        const provider = data.providerResponse;
+        if (provider) {
+          if (typeof provider === "string" && provider.trim()) {
+            message += " - " + provider.trim();
+          } else if (provider.raw) {
+            message += " - " + String(provider.raw);
+          } else {
+            try {
+              message += " - " + JSON.stringify(provider);
+            } catch (_e) {
+              // ignore JSON stringify failure
+            }
+          }
+        }
+        return message;
+      }
+      return fallback || "Erreur API";
+    }
+
     function statusLabel(value) {
       if (value === "in_progress") return "En cours";
       if (value === "ready") return "Prête";
@@ -1022,6 +1378,14 @@ adminRouter.get("/", (_req, res) => {
     function customerPhoneLabel(order) {
       const value = String(order.customerPhone || "").trim();
       return value && value.toLowerCase() !== "non renseigné" ? value : "Non renseigné";
+    }
+
+    function normalizeWhatsappPhone(phone) {
+      const raw = String(phone || "").trim();
+      if (!raw || raw.toLowerCase() === "non renseigné") return "";
+      const digits = raw.replace(/[^0-9]/g, "");
+      if (digits.length < 8 || digits.length > 15) return "";
+      return digits;
     }
 
     function remainingAmountLabel(order) {
@@ -1250,7 +1614,67 @@ adminRouter.get("/", (_req, res) => {
         "<p style='margin-top:14px;font-size:13px;color:#7a6a5d;'>Document généré par Coin de Couture</p>" +
         "</body></html>"
       );
-      return templateChoice === "coin" ? coinInvoice : classicInvoice;
+      const showroomInvoice = (
+        "<!doctype html><html><head><meta charset='utf-8' /><title>Showroom Receipt " + escapeHtml(order.name) + "</title>" +
+        "<style>@page{size:A4;margin:12mm}body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#111;background:#fff}" +
+        ".page{padding:8mm 6mm}.head{text-align:center;margin-bottom:16px}.brand{font-family:Georgia,'Times New Roman',serif;letter-spacing:.08em;font-size:20px;text-transform:uppercase;font-weight:600}" +
+        ".meta{margin-top:6px;color:#666;font-size:12px}.title{margin-top:10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase}" +
+        ".grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.card{border:1px solid #e8e8e8;border-radius:10px;padding:12px}" +
+        ".card h3{margin:0 0 8px;color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.07em}.r{display:grid;grid-template-columns:42% 58%;gap:6px;font-size:12.5px;margin-bottom:6px}" +
+        ".k{color:#666}.v{font-weight:600}table{width:100%;border-collapse:collapse;font-size:13px}.th{color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e8e8e8}" +
+        "th,td{padding:9px 10px;border-bottom:1px solid #ededed;text-align:left}td.a{text-align:right}.tot{margin-top:12px;border:1px solid #e8e8e8;border-radius:10px;padding:10px;max-width:360px;margin-left:auto}" +
+        ".line{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}.strong{font-weight:700}</style></head><body><div class='page'>" +
+        "<div class='head'><div class='brand'>Maison Bouchra Filali Lahlou</div><div class='meta'>Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com</div><div class='title'>Showroom Receipt</div></div>" +
+        "<div class='grid'><div class='card'><h3>Order</h3>" +
+        "<div class='r'><div class='k'>Number</div><div class='v'>" + escapeHtml(order.name) + "</div></div>" +
+        "<div class='r'><div class='k'>Date</div><div class='v'>" + dateLabel + " " + dateTimeLabel + "</div></div>" +
+        "<div class='r'><div class='k'>Payment Status</div><div class='v'>" + escapeHtml(financialLabel) + "</div></div>" +
+        "<div class='r'><div class='k'>Payment Method</div><div class='v'>" + paymentGateway + "</div></div>" +
+        "</div><div class='card'><h3>Client</h3>" +
+        "<div class='r'><div class='k'>Name</div><div class='v'>" + escapeHtml(order.customerLabel || "Client inconnu") + "</div></div>" +
+        "<div class='r'><div class='k'>Phone</div><div class='v'>" + escapeHtml(order.customerPhone || "-") + "</div></div>" +
+        "<div class='r'><div class='k'>Email</div><div class='v'>" + escapeHtml(order.customerEmail || "-") + "</div></div>" +
+        "<div class='r'><div class='k'>Address</div><div class='v'>" + shippingAddress + "</div></div>" +
+        "</div></div>" +
+        "<table><thead><tr class='th'><th style='width:72px'>Qty</th><th>Article</th><th style='width:180px;text-align:right'>Amount</th></tr></thead><tbody>" +
+        rows +
+        "</tbody></table>" +
+        "<div class='tot'>" +
+          "<div class='line'><span>Subtotal</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div>" +
+          "<div class='line'><span>Total paid</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
+          (hasOutstanding ? "<div class='line strong'><span>Balance due</span><span>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</span></div>" : "<div class='line strong'><span>Balance due</span><span>-</span></div>") +
+        "</div>" +
+        "</div></body></html>"
+      );
+      const internationalInvoice = (
+        "<!doctype html><html><head><meta charset='utf-8' /><title>International Invoice " + escapeHtml(order.name) + "</title>" +
+        "<style>@page{size:A4;margin:14mm 12mm 18mm}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}" +
+        "*{box-sizing:border-box}.page{padding:2mm 0 14mm}.top{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start;margin-bottom:16px}" +
+        ".brand{font-family:Georgia,'Times New Roman',serif;letter-spacing:.11em;font-size:18px;text-transform:uppercase}.meta{font-size:12px;color:#666;line-height:1.5;margin-top:6px}" +
+        ".ibox{border:1px solid #ddd;border-radius:10px;padding:12px}.ibox h2{margin:0 0 8px;font-size:26px;letter-spacing:.08em}.kv{display:grid;grid-template-columns:42% 58%;gap:6px;font-size:12.5px;margin-bottom:5px}" +
+        ".k{color:#666}.v{font-weight:600}.cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}.card{border:1px solid #e6e6e6;border-radius:10px;padding:12px}" +
+        ".card h3{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#666}table{width:100%;border-collapse:collapse;font-size:13px}" +
+        "thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#666;border-bottom:1px solid #ddd;padding:9px 10px}" +
+        "tbody td{padding:9px 10px;border-bottom:1px solid #ededed}td.r{text-align:right}.totals{margin-top:12px;border:1px solid #ddd;border-radius:10px;padding:10px;max-width:380px;margin-left:auto}" +
+        ".line{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}.line strong{font-size:14px}</style></head><body><div class='page'>" +
+        "<div class='top'><div><div class='brand'>Maison Bouchra Filali Lahlou</div><div class='meta'>Casablanca, Morocco<br/>contact@bouchrafilalilahlou.com<br/>www.bouchrafilalilahlou.com</div></div>" +
+        "<div class='ibox'><h2>INVOICE</h2><div class='kv'><div class='k'>No.</div><div class='v'>" + escapeHtml(order.name) + "</div></div><div class='kv'><div class='k'>Date</div><div class='v'>" + dateLabel + "</div></div><div class='kv'><div class='k'>Status</div><div class='v'>" + escapeHtml(financialLabel) + "</div></div><div class='kv'><div class='k'>Method</div><div class='v'>" + paymentGateway + "</div></div></div></div>" +
+        "<div class='cards'><div class='card'><h3>Client</h3>" +
+        "<div class='kv'><div class='k'>Name</div><div class='v'>" + escapeHtml(order.customerLabel || "Client inconnu") + "</div></div>" +
+        "<div class='kv'><div class='k'>Phone</div><div class='v'>" + escapeHtml(order.customerPhone || "-") + "</div></div>" +
+        "<div class='kv'><div class='k'>Email</div><div class='v'>" + escapeHtml(order.customerEmail || "-") + "</div></div>" +
+        "</div><div class='card'><h3>Addresses</h3><div class='kv'><div class='k'>Billing</div><div class='v'>" + billingAddress + "</div></div><div class='kv'><div class='k'>Shipping</div><div class='v'>" + shippingAddress + "</div></div></div></div>" +
+        "<table><thead><tr><th style='width:72px'>Qty</th><th>Description</th><th class='r' style='width:190px'>Amount</th></tr></thead><tbody>" +
+        rows +
+        "</tbody></table>" +
+        "<div class='totals'><div class='line'><span>Subtotal</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div><div class='line'><span>Paid</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
+        (hasOutstanding ? "<div class='line'><strong>Balance due</strong><strong>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</strong></div>" : "<div class='line'><strong>Balance due</strong><strong>-</strong></div>") +
+        "</div></div></body></html>"
+      );
+      if (templateChoice === "coin") return coinInvoice;
+      if (templateChoice === "showroom_receipt") return showroomInvoice;
+      if (templateChoice === "international_invoice") return internationalInvoice;
+      return classicInvoice;
     }
 
     function applyBankProfileUI(profileType) {
@@ -1308,12 +1732,19 @@ adminRouter.get("/", (_req, res) => {
         applyBankProfileUI(bankProfileTypeEl.value);
         bankFieldsGroupEl.classList.toggle("hidden", !showBankSection);
         bankProfileGroupEl.classList.toggle("hidden", !showBankSection);
+        bankModalPreviewWrap.classList.add("hidden");
+        bankModalPreviewFrame.removeAttribute("src");
         bankModalEl.classList.remove("hidden");
 
         const cleanup = () => {
           bankModalConfirmBtn.onclick = null;
           bankModalCancelBtn.onclick = null;
+          bankModalPreviewBtn.onclick = null;
           bankProfileTypeEl.onchange = null;
+          if (invoicePreviewBlobUrl) {
+            URL.revokeObjectURL(invoicePreviewBlobUrl);
+            invoicePreviewBlobUrl = "";
+          }
         };
 
         bankProfileTypeEl.onchange = () => applyBankProfileUI(bankProfileTypeEl.value);
@@ -1321,6 +1752,32 @@ adminRouter.get("/", (_req, res) => {
           bankModalEl.classList.add("hidden");
           cleanup();
           resolve(null);
+        };
+        bankModalPreviewBtn.onclick = () => {
+          const currentSelection = {
+            bankDetails:
+              showBankSection
+                ? {
+                    bankName: bankNameInputEl.value.trim() || undefined,
+                    swiftBic: swiftInputEl.value.trim() || undefined,
+                    routingNumber: routingInputEl.value.trim() || undefined,
+                    beneficiaryName: bankBeneficiaryNameEl.value.trim() || undefined,
+                    accountNumber: accountInputEl.value.trim() || undefined,
+                    bankAddress: bankAddressInputEl.value.trim() || undefined,
+                    paymentReference: referenceInputEl.value.trim() || undefined
+                  }
+                : undefined,
+            templateChoice: bankTemplateSelectEl.value
+          };
+          const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
+          if (invoicePreviewBlobUrl) {
+            URL.revokeObjectURL(invoicePreviewBlobUrl);
+            invoicePreviewBlobUrl = "";
+          }
+          const blob = new Blob([html], { type: "text/html" });
+          invoicePreviewBlobUrl = URL.createObjectURL(blob);
+          bankModalPreviewFrame.src = invoicePreviewBlobUrl;
+          bankModalPreviewWrap.classList.remove("hidden");
         };
         bankModalConfirmBtn.onclick = () => {
           const selected = {
@@ -1772,7 +2229,7 @@ adminRouter.get("/", (_req, res) => {
     function renderOrderDetail(order) {
       orderDetailEl.innerHTML = "";
       const detail = document.createElement("div");
-      const isPartiallyPaid = String(order.financialStatus || "").toLowerCase() === "partially_paid";
+      const needsBankDetails = Number(order.outstandingAmount || 0) > 0;
       const createdDate = new Date(order.createdAt);
       const createdDateLabel = createdDate.toLocaleDateString("fr-FR");
       const createdTimeLabel = createdDate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -1843,6 +2300,9 @@ adminRouter.get("/", (_req, res) => {
             "<div class='info-list'>" +
             clientInfoRows.join("") +
             "</div>" +
+            "<div class='line' style='margin-top:10px; gap:8px;'>" +
+              "<button type='button' id='reviewBtn' class='save-order-btn' style='margin-top:0;'>Envoyer demande avis Google</button>" +
+            "</div>" +
           "</div>" +
           "<div class='order-card'>" +
             "<h4>Traitement</h4>" +
@@ -1854,7 +2314,10 @@ adminRouter.get("/", (_req, res) => {
             "<div class='info-list'>" +
             paymentInfoRows.join("") +
             "</div>" +
-            "<button type='button' id='invoiceBtn' class='save-order-btn'>Télécharger / Imprimer la facture</button>" +
+            "<div class='line' style='margin-top:10px; gap:8px;'>" +
+              "<button type='button' id='invoiceBtn' class='save-order-btn' style='margin-top:0;'>Imprimer la facture</button>" +
+              "<button type='button' id='whatsappBtn' class='save-order-btn' style='margin-top:0;'>Envoyer facture via WhatsApp</button>" +
+            "</div>" +
           "</div>" +
         "</div>";
 
@@ -1942,9 +2405,70 @@ adminRouter.get("/", (_req, res) => {
 
       const quickContainer = detail.querySelector("#quickOrderForm");
       quickContainer.appendChild(form);
+      const reviewBtn = detail.querySelector("#reviewBtn");
+      const whatsappBtn = detail.querySelector("#whatsappBtn");
       const invoiceBtn = detail.querySelector("#invoiceBtn");
+
+      whatsappBtn.addEventListener("click", async () => {
+        try {
+          syncStatusEl.textContent = "Préparation de l’envoi facture...";
+          const modalResult = await openInvoiceModal(order, needsBankDetails);
+          if (!modalResult) {
+            syncStatusEl.textContent = "Envoi annulé.";
+            return;
+          }
+
+          if (modalResult.bankDetails) {
+            await fetch("/admin/api/orders/" + encodeURIComponent(order.id), {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ bankDetails: modalResult.bankDetails })
+            });
+          }
+
+          syncStatusEl.textContent = "Envoi API en cours...";
+          const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(order.id) + "/send-invoice-template", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ templateChoice: modalResult.templateChoice || "classic" })
+          });
+          const parsed = await readJsonSafe(sendRes);
+          if (!sendRes.ok) {
+            const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
+            syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
+            return;
+          }
+          syncStatusEl.textContent = "Facture envoyée via API template.";
+        } catch (error) {
+          syncStatusEl.textContent =
+            "Envoi API échoué: " +
+            (error instanceof Error ? error.message : "Erreur inattendue");
+        }
+      });
+
+      reviewBtn.addEventListener("click", async () => {
+        try {
+          syncStatusEl.textContent = "Envoi demande avis Google...";
+          const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(order.id) + "/send-review-template", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+          const parsed = await readJsonSafe(sendRes);
+          if (!sendRes.ok) {
+            const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
+            syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
+            return;
+          }
+          syncStatusEl.textContent = "Demande d'avis Google envoyée via WhatsApp.";
+        } catch (error) {
+          syncStatusEl.textContent =
+            "Envoi API échoué: " +
+            (error instanceof Error ? error.message : "Erreur inattendue");
+        }
+      });
+
       invoiceBtn.addEventListener("click", async () => {
-        const modalResult = await openInvoiceModal(order, isPartiallyPaid);
+        const modalResult = await openInvoiceModal(order, needsBankDetails);
         if (!modalResult) return;
         if (modalResult.bankDetails) {
           await fetch("/admin/api/orders/" + encodeURIComponent(order.id), {
@@ -2105,7 +2629,16 @@ adminRouter.get("/", (_req, res) => {
 </html>`);
 });
 
-adminRouter.get("/invoices", (_req, res) => {
+adminRouter.get("/invoices", (req, res) => {
+  const host = typeof req.query.host === "string" ? req.query.host : "";
+  const shop = typeof req.query.shop === "string" ? req.query.shop : "";
+  const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const navParams = new URLSearchParams();
+  if (host) navParams.set("host", host);
+  if (shop) navParams.set("shop", shop);
+  if (embedded) navParams.set("embedded", embedded);
+  const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
+
   res.type("html").send(`<!doctype html>
 <html lang="fr">
 <head>
@@ -2164,8 +2697,8 @@ adminRouter.get("/invoices", (_req, res) => {
       <h1>Factures</h1>
     </div>
     <ui-nav-menu>
-      <a href="/admin">Commandes</a>
-      <a href="/admin/invoices">Factures</a>
+      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/invoices${navSuffix}">Factures</a>
     </ui-nav-menu>
     <p class="intro">Version 1: génération manuelle premium avec modèles Bouchra / Coin de Couture.</p>
     <div class="layout">
@@ -2176,8 +2709,10 @@ adminRouter.get("/invoices", (_req, res) => {
             <div>
               <label for="modelType">Modèle</label>
               <select id="modelType">
-                <option value="classic">Bouchra Filali Lahlou</option>
-                <option value="coin">Coin de Couture</option>
+                <option value="classic">Modèle Bouchra Filali Lahlou</option>
+                <option value="coin">Modèle Coin de Couture</option>
+                <option value="showroom_receipt">Version 1 — Showroom Receipt (MAD, Cash/Card)</option>
+                <option value="international_invoice">Version 2 — International Couture Invoice (€ / $)</option>
               </select>
             </div>
             <div>
@@ -2197,6 +2732,7 @@ adminRouter.get("/invoices", (_req, res) => {
               <select id="currency">
                 <option value="MAD">MAD</option>
                 <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
               </select>
             </div>
             <div>
@@ -2236,6 +2772,30 @@ adminRouter.get("/invoices", (_req, res) => {
             <div>
               <label for="depositAmount">Acompte versé</label>
               <input id="depositAmount" type="number" min="0" step="0.01" value="0" />
+            </div>
+            <div class="bouchra-only">
+              <label for="productionTimeline">Timeline production</label>
+              <input id="productionTimeline" type="text" placeholder="Ex: 4 weeks from measurement confirmation" />
+            </div>
+            <div class="bouchra-only">
+              <label for="designCollection">Collection</label>
+              <input id="designCollection" type="text" placeholder="Ex: Fall / Winter 2026" />
+            </div>
+            <div class="bouchra-only">
+              <label for="designType">Type</label>
+              <input id="designType" type="text" placeholder="Ex: Demi-mesure couture" />
+            </div>
+            <div class="bouchra-only">
+              <label for="designColor">Coloris</label>
+              <input id="designColor" type="text" placeholder="Ex: Deep emerald" />
+            </div>
+            <div class="bouchra-only">
+              <label for="designFabric">Tissu</label>
+              <input id="designFabric" type="text" placeholder="Ex: Silk base with hand embroidery" />
+            </div>
+            <div class="bouchra-only">
+              <label for="designCustomization">Personnalisation</label>
+              <input id="designCustomization" type="text" placeholder="Ex: Tailored to client measurements" />
             </div>
             <div>
               <label for="discountAmount">Remise (montant)</label>
@@ -2304,6 +2864,19 @@ adminRouter.get("/invoices", (_req, res) => {
     </div>
   </div>
   <script>
+    (() => {
+      const apiKey = document.querySelector('meta[name="shopify-api-key"]')?.content || "";
+      const host = new URLSearchParams(window.location.search).get("host") || "";
+      const appBridge = window["app-bridge"];
+      if (!apiKey || !host || !appBridge?.default) return;
+      try {
+        appBridge.default({ apiKey, host, forceRedirect: true });
+      } catch (err) {
+        console.warn("App Bridge init failed", err);
+      }
+    })();
+  </script>
+  <script>
     const modelTypeEl = document.getElementById("modelType");
     const invoiceNumberEl = document.getElementById("invoiceNumber");
     const invoiceDateEl = document.getElementById("invoiceDate");
@@ -2316,6 +2889,12 @@ adminRouter.get("/invoices", (_req, res) => {
     const paymentGatewayEl = document.getElementById("paymentGateway");
     const financialStatusEl = document.getElementById("financialStatus");
     const depositAmountEl = document.getElementById("depositAmount");
+    const productionTimelineEl = document.getElementById("productionTimeline");
+    const designCollectionEl = document.getElementById("designCollection");
+    const designTypeEl = document.getElementById("designType");
+    const designColorEl = document.getElementById("designColor");
+    const designFabricEl = document.getElementById("designFabric");
+    const designCustomizationEl = document.getElementById("designCustomization");
     const discountAmountEl = document.getElementById("discountAmount");
     const shippingAmountEl = document.getElementById("shippingAmount");
     const billingAddressEl = document.getElementById("billingAddress");
@@ -2391,6 +2970,22 @@ adminRouter.get("/invoices", (_req, res) => {
       return "Due";
     }
 
+    function paymentLabelEn(status) {
+      if (status === "paid") return "Paid";
+      if (status === "partially_paid") return "Partially Paid";
+      if (status === "proforma") return "Proforma";
+      return "Due";
+    }
+
+    function paymentMethodLabelEn(method) {
+      const text = String(method || "").toLowerCase();
+      if (!text) return "Cash (Showroom)";
+      if (text.includes("cash")) return "Cash (Showroom)";
+      if (text.includes("carte") || text.includes("card")) return "Card";
+      if (text.includes("virement") || text.includes("bank")) return "Bank Transfer";
+      return String(method);
+    }
+
     function collectData() {
       normalizeInvoiceField();
       const items = Array.from(lineItemsBodyEl.querySelectorAll("tr"))
@@ -2425,6 +3020,12 @@ adminRouter.get("/invoices", (_req, res) => {
         customerTaxId: customerTaxIdEl.value.trim(),
         paymentGateway: paymentGatewayEl.value,
         financialStatus: status,
+        productionTimeline: productionTimelineEl.value.trim(),
+        designCollection: designCollectionEl.value.trim(),
+        designType: designTypeEl.value.trim(),
+        designColor: designColorEl.value.trim(),
+        designFabric: designFabricEl.value.trim(),
+        designCustomization: designCustomizationEl.value.trim(),
         billingAddress: billingAddressEl.value.trim(),
         shippingAddress: shippingAddressEl.value.trim(),
         items,
@@ -2468,7 +3069,7 @@ adminRouter.get("/invoices", (_req, res) => {
       const outstandingRow = data.outstanding > 0 ? "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>Montant impayé</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;color:#b41c18;'><strong>" + fmtMoney(data.outstanding, data.currency) + "</strong></td></tr>" : "";
       return "<!doctype html><html><head><meta charset='utf-8' /><title>Facture " + esc(data.invoiceNumber) + "</title>" +
         "<style>body{max-width:860px;margin:0 auto;font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.55;color:#222;padding:24px;background:#fff}table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:14px}thead tr{background:#fafafa}th{font-weight:600;text-align:left;padding:10px 12px}.cards{display:flex;gap:12px;flex-wrap:wrap}.box{flex:1;min-width:180px;background:#fff;padding:16px;border-radius:10px;border:1px solid #f0f0f0}</style></head><body>" +
-        "<div style='display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;'><div style='display:flex;align-items:center;gap:12px;'><img src='https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750' style='max-width:150px;height:auto;' alt='Logo' /><div style='font-size:14px;color:#555;'><strong style='display:block;color:#222;'>Bouchra Filali Lahlou</strong>www.bouchrafilalilahlou.com</div></div><div style='text-align:right;background:#f6f6f8;padding:10px 12px;border-radius:8px;border:1px solid #eee;'><div style='font-size:12px;color:#777;'>Facture</div><div style='font-size:16px;font-weight:700;'>" + esc(data.invoiceNumber) + "</div></div></div>" +
+        "<div style='display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;'><div style='display:flex;align-items:center;gap:12px;'><img src='https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750' style='max-width:150px;height:auto;' alt='Logo' /><div style='font-size:14px;color:#555;'><strong style='display:block;color:#222;'>Bouchra Filali Lahlou</strong>www.bouchrafilalilahlou.com<br/>contact@bouchrafilalilahlou.com</div></div><div style='text-align:right;background:#f6f6f8;padding:10px 12px;border-radius:8px;border:1px solid #eee;'><div style='font-size:12px;color:#777;'>Facture</div><div style='font-size:16px;font-weight:700;'>" + esc(data.invoiceNumber) + "</div></div></div>" +
         "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;'><h1 style='margin:0;font-size:22px;'>Facture</h1><div style='text-align:right;color:#555;font-size:14px;'>Statut : " + paymentLabel(data.financialStatus) + "<br/>Date: " + esc(data.invoiceDate) + "</div></div>" +
         "<div class='cards' style='margin-bottom:14px;'><div class='box'><strong>Client</strong><br/>" + esc(data.customerName) + "<br/>" + (data.customerPhone ? esc(data.customerPhone) + "<br/>" : "") + (data.customerEmail ? esc(data.customerEmail) : "") + "</div><div class='box'><strong>Adresse de facturation</strong><br/>" + (data.billingAddress ? esc(data.billingAddress).replace(/\\n/g, "<br/>") : "<span style='color:#888;'>Non fournie</span>") + "</div><div class='box'><strong>Adresse de livraison</strong><br/>" + (data.shippingAddress ? esc(data.shippingAddress).replace(/\\n/g, "<br/>") : "<span style='color:#888;'>Non fournie</span>") + "</div></div>" +
         "<table><thead><tr><th>Qté</th><th>Article</th><th style='text-align:right;'>Prix</th></tr></thead><tbody>" +
@@ -2507,7 +3108,7 @@ adminRouter.get("/invoices", (_req, res) => {
         "@media screen{body{padding:20px}.page{max-width:840px;margin:0 auto;padding-bottom:20px}.footer{position:static;margin-top:14px}}" +
         "</style></head><body><div class='page'>" +
         "<div class='top'>" +
-          "<div class='brand'><div class='logo'>CDC</div><div><h1>COIN DE COUTURE</h1><div class='small'>Siège Social 19 ET 21 ROND POINT DES SPORTS QUARTIER RACINE, Casablanca<br/>ICE 002031076000092<br/>RC (Registre analytique): 401313</div></div></div>" +
+          "<div class='brand'><div class='logo'>CDC</div><div><h1>COIN DE COUTURE</h1><div class='small'>Siège Social 19 ET 21 ROND POINT DES SPORTS QUARTIER RACINE, Casablanca<br/>ICE 002031076000092<br/>RC (Registre analytique): 401313<br/>contact@bouchrafilalilahlou.com</div></div></div>" +
           "<div class='invoice-box'><h2 class='invoice-title'>FACTURE</h2>" +
             "<div class='kv'><span class='k'>Numéro</span><span class='v'>" + esc(data.invoiceNumber) + "</span></div>" +
             "<div class='kv'><span class='k'>Date</span><span class='v'>" + esc(data.invoiceDate) + "</span></div>" +
@@ -2539,7 +3140,121 @@ adminRouter.get("/invoices", (_req, res) => {
       "</div></body></html>";
     }
 
+    function buildShowroomReceiptHtml(data) {
+      const itemsHtml = data.items.map((item) =>
+        "<tr>" +
+          "<td style='padding:8px 10px;border-bottom:1px solid #ececec;'>" + item.qty + "</td>" +
+          "<td style='padding:8px 10px;border-bottom:1px solid #ececec;font-weight:600;'>" + esc(item.title) + "</td>" +
+          "<td style='padding:8px 10px;border-bottom:1px solid #ececec;text-align:right;'>" + fmtMoney(item.price * item.qty, data.currency || "MAD") + "</td>" +
+        "</tr>"
+      ).join("");
+      return "<!doctype html><html><head><meta charset='utf-8' /><title>Showroom Receipt " + esc(data.invoiceNumber) + "</title>" +
+        "<style>@page{size:A4;margin:12mm}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}" +
+        ".page{padding:8mm 6mm}.header{text-align:center;margin-bottom:14px}.brand{font-family:Georgia,'Times New Roman',serif;letter-spacing:.1em;font-size:18px;font-weight:600;text-transform:uppercase}" +
+        ".meta{font-size:12px;color:#666;margin-top:6px}.title{font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-top:10px}" +
+        ".boxes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.box{border:1px solid #e8e8e8;border-radius:10px;padding:12px;break-inside:avoid;page-break-inside:avoid}" +
+        ".box h3{margin:0 0 8px;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.07em}.row{display:grid;grid-template-columns:42% 58%;gap:4px;margin-bottom:6px;font-size:12.5px}" +
+        ".k{color:#666}.v{font-weight:600}.sep{height:1px;background:#ececec;margin:12px 0}" +
+        "table{width:100%;border-collapse:collapse;font-size:13px}thead th{text-align:left;color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e8e8e8;padding:8px 10px}" +
+        "tbody tr{break-inside:avoid;page-break-inside:avoid}.totals{margin-top:10px;border:1px solid #e8e8e8;border-radius:10px;padding:10px;max-width:340px;margin-left:auto}" +
+        ".tr{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px}.strong{font-weight:700}.note{margin-top:10px;font-size:12px;color:#666}" +
+        "@media screen{body{background:#f6f6f6}.page{max-width:860px;margin:20px auto;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.08);padding:18mm 14mm}}" +
+        "</style></head><body><div class='page'>" +
+          "<div class='header'><div class='brand'>Maison Bouchra Filali Lahlou</div><div class='meta'>Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com</div><div class='title'>Showroom Receipt</div></div>" +
+          "<div class='boxes'>" +
+            "<div class='box'><h3>Order</h3>" +
+              "<div class='row'><div class='k'>Number</div><div class='v'>" + esc(data.invoiceNumber) + "</div></div>" +
+              "<div class='row'><div class='k'>Date</div><div class='v'>" + esc(data.invoiceDate) + "</div></div>" +
+              "<div class='row'><div class='k'>Payment Status</div><div class='v'>" + esc(paymentLabelEn(data.financialStatus)) + "</div></div>" +
+              "<div class='row'><div class='k'>Payment Method</div><div class='v'>" + esc(paymentMethodLabelEn(data.paymentGateway)) + "</div></div>" +
+            "</div>" +
+            "<div class='box'><h3>Client</h3>" +
+              "<div class='row'><div class='k'>Name</div><div class='v'>" + esc(data.customerName) + "</div></div>" +
+              "<div class='row'><div class='k'>Phone</div><div class='v'>" + (data.customerPhone ? esc(data.customerPhone) : "-") + "</div></div>" +
+              "<div class='row'><div class='k'>Address</div><div class='v'>" + (data.shippingAddress ? esc(data.shippingAddress).replace(/\\n/g, "<br/>") : "-") + "</div></div>" +
+            "</div>" +
+          "</div>" +
+          "<div class='sep'></div>" +
+          "<table><thead><tr><th style='width:70px'>Qty</th><th>Description</th><th style='width:180px;text-align:right'>Amount</th></tr></thead><tbody>" +
+            itemsHtml +
+          "</tbody></table>" +
+          "<div class='totals'>" +
+            "<div class='tr'><span>Subtotal</span><span>" + fmtMoney(data.subtotal, data.currency || "MAD") + "</span></div>" +
+            (data.discountAmount > 0 ? "<div class='tr'><span>Discount</span><span>-" + fmtMoney(data.discountAmount, data.currency || "MAD") + "</span></div>" : "") +
+            (data.shippingAmount > 0 ? "<div class='tr'><span>Shipping</span><span>" + fmtMoney(data.shippingAmount, data.currency || "MAD") + "</span></div>" : "") +
+            (data.withVat ? "<div class='tr'><span>Tax (" + data.vatRate + "%)</span><span>" + fmtMoney(data.vatAmount, data.currency || "MAD") + "</span></div>" : "") +
+            "<div class='tr strong'><span>Total</span><span>" + fmtMoney(data.total, data.currency || "MAD") + "</span></div>" +
+            "<div class='tr'><span>Deposit Paid</span><span>" + fmtMoney(data.depositAmount, data.currency || "MAD") + "</span></div>" +
+            (data.outstanding > 0 ? "<div class='tr strong'><span>Balance Due</span><span>" + fmtMoney(data.outstanding, data.currency || "MAD") + "</span></div>" : "") +
+          "</div>" +
+          "<div class='note'>Issued by Maison Bouchra Filali Lahlou.</div>" +
+        "</div></body></html>";
+    }
+
+    function buildMaisonReceiptHtml(data) {
+      const firstDesignName = data.items.length ? data.items[0].title : "Design personnalisé";
+      return "<!doctype html><html><head><meta charset='utf-8' /><title>Receipt " + esc(data.invoiceNumber) + "</title>" +
+      "<style>:root{--ink:#121212;--muted:#646464;--paper:#fff;--rule:#e7e7e7}*{box-sizing:border-box}" +
+      "@page{size:A4;margin:14mm 12mm 18mm}" +
+      "html,body{margin:0;padding:0;background:#f6f6f6;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;line-height:1.35}" +
+      ".page{width:210mm;min-height:297mm;margin:14mm auto;background:var(--paper);padding:16mm 14mm 20mm;box-shadow:0 8px 24px rgba(0,0,0,.08)}" +
+      ".brand{text-align:center;margin-bottom:10mm}.brand .logo{font-family:Georgia,'Times New Roman',serif;letter-spacing:.12em;font-size:18px;font-weight:600;text-transform:uppercase}.brand .meta{margin-top:3.5mm;color:var(--muted);font-size:12px}" +
+      ".title{text-align:center;margin:9mm 0 8mm;font-family:Georgia,'Times New Roman',serif;letter-spacing:.08em;text-transform:uppercase;font-size:14px}" +
+      ".row{display:flex;gap:9mm;align-items:stretch}.col{flex:1}.card{border:1px solid var(--rule);padding:5.5mm;border-radius:10px;break-inside:avoid;page-break-inside:avoid}" +
+      "h3{margin:0 0 3.8mm;font-size:11.8px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}" +
+      ".kv{display:grid;grid-template-columns:40% 60%;gap:2mm 4mm;font-size:12.5px}.k{color:var(--muted)}.v{font-weight:500}" +
+      ".rule{height:1px;background:var(--rule);margin:8mm 0}" +
+      "table{width:100%;border-collapse:collapse;font-size:12.5px}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th,td{padding:3.2mm 0}" +
+      "th{text-align:left;font-size:11.2px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;border-bottom:1px solid var(--rule)}" +
+      "td{border-bottom:1px solid var(--rule);vertical-align:top}.right{text-align:right}.total{font-weight:700;font-size:13.5px}" +
+      ".note{color:var(--muted);font-size:12px;margin-top:4.5mm}.disclaimer{margin-top:7.5mm;font-size:12px;color:var(--muted);border-left:2px solid var(--rule);padding-left:4.5mm;break-inside:avoid;page-break-inside:avoid}" +
+      ".footer{display:flex;justify-content:space-between;align-items:flex-end;color:var(--muted);font-size:11.5px;gap:10mm;margin-top:12mm}" +
+      ".signature{text-align:right;color:var(--ink)}.signature .name{font-family:Georgia,'Times New Roman',serif;font-style:italic;margin-top:9mm;display:inline-block}" +
+      "@media print{body{background:#fff}.page{margin:0;box-shadow:none;width:auto;min-height:auto;padding:0 0 10mm}}</style></head><body>" +
+      "<div class='page'>" +
+      "<div class='brand'><div class='logo'>Maison Bouchra Filali Lahlou</div><div class='meta'>Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com</div></div>" +
+      "<div class='title'>Couture Order Confirmation & Payment Receipt</div>" +
+      "<div class='row'>" +
+      "<div class='col card'><h3>Order</h3>" +
+      "<div class='kv'><div class='k'>Order Number</div><div class='v'>" + esc(data.invoiceNumber) + "</div></div>" +
+      "<div class='kv'><div class='k'>Order Date</div><div class='v'>" + esc(data.invoiceDate) + "</div></div>" +
+      "<div class='kv'><div class='k'>Production Timeline</div><div class='v'>" + esc(data.productionTimeline || "-") + "</div></div>" +
+      "<div class='kv'><div class='k'>Payment Status</div><div class='v'>" + esc(paymentLabelEn(data.financialStatus)) + "</div></div>" +
+      "<div class='kv'><div class='k'>Payment Method</div><div class='v'>" + esc(paymentMethodLabelEn(data.paymentGateway)) + "</div></div>" +
+      "</div>" +
+      "<div class='col card'><h3>Client</h3>" +
+      "<div class='kv'><div class='k'>Client Name</div><div class='v'>" + esc(data.customerName) + "</div></div>" +
+      "<div class='kv'><div class='k'>Email</div><div class='v'>" + esc(data.customerEmail || "-") + "</div></div>" +
+      "<div class='kv'><div class='k'>Phone</div><div class='v'>" + esc(data.customerPhone || "-") + "</div></div>" +
+      "<div class='kv'><div class='k'>Shipping Address</div><div class='v'>" + (data.shippingAddress ? esc(data.shippingAddress).replace(/\\n/g, "<br/>") : "-") + "</div></div>" +
+      "</div></div>" +
+      "<div class='rule'></div>" +
+      "<div class='card'><h3>Design Details</h3>" +
+      "<div class='kv'><div class='k'>Design Name</div><div class='v'>" + esc(firstDesignName) + "</div></div>" +
+      "<div class='kv'><div class='k'>Collection</div><div class='v'>" + esc(data.designCollection || "-") + "</div></div>" +
+      "<div class='kv'><div class='k'>Type</div><div class='v'>" + esc(data.designType || "-") + "</div></div>" +
+      "<div class='kv'><div class='k'>Color</div><div class='v'>" + esc(data.designColor || "-") + "</div></div>" +
+      "<div class='kv'><div class='k'>Fabric</div><div class='v'>" + esc(data.designFabric || "-") + "</div></div>" +
+      "<div class='kv'><div class='k'>Customization</div><div class='v'>" + esc(data.designCustomization || "-") + "</div></div>" +
+      "</div>" +
+      "<div class='rule'></div>" +
+      "<table><thead><tr><th>Description</th><th class='right'>Amount</th></tr></thead><tbody>" +
+      "<tr><td>Subtotal</td><td class='right'>" + fmtMoney(data.subtotal, data.currency) + "</td></tr>" +
+      "<tr><td>Shipping</td><td class='right'>" + fmtMoney(data.shippingAmount || 0, data.currency) + "</td></tr>" +
+      "<tr><td>Taxes</td><td class='right'>" + fmtMoney(data.vatAmount || 0, data.currency) + "</td></tr>" +
+      "<tr><td class='total'>Total</td><td class='right total'>" + fmtMoney(data.total, data.currency) + "</td></tr>" +
+      (data.depositAmount > 0 ? "<tr><td>Deposit Received</td><td class='right'>" + fmtMoney(data.depositAmount, data.currency) + "</td></tr>" : "") +
+      (data.outstanding > 0 ? "<tr><td class='total'>Remaining Balance</td><td class='right total'>" + fmtMoney(data.outstanding, data.currency) + "</td></tr>" : "") +
+      "</tbody></table>" +
+      "<div class='note'>Currency shown in " + esc(data.currency) + ". If you need this receipt in MAD or USD, we can provide an additional copy upon request.</div>" +
+      "<div class='disclaimer'>Each Maison Bouchra Filali Lahlou creation is handcrafted in our Casablanca atelier by skilled artisans. Production begins once measurements are confirmed. Estimated completion time is 4 weeks. Demi-mesure and custom-made pieces are final sale.</div>" +
+      "<div class='footer'><div>Handcrafted in Morocco<br/>Order Reference: <strong style='color:#111;font-weight:600'>" + esc(data.invoiceNumber) + "</strong></div><div class='signature'>Signature<br/><span class='name'>Bouchra Filali Lahlou</span></div></div>" +
+      "</div></body></html>";
+    }
+
     function buildInvoiceHtml(data) {
+      if (data.modelType === "showroom_receipt") return buildShowroomReceiptHtml(data);
+      if (data.modelType === "international_invoice") return buildMaisonReceiptHtml(data);
       if (data.modelType === "coin") return buildCoinHtml(data);
       return buildClassicHtml(data);
     }
@@ -2633,6 +3348,220 @@ adminRouter.post("/api/orders/sync", async (req, res) => {
     const message = error instanceof Error ? error.message : "Échec de la synchronisation";
     return res.status(500).json({ error: message });
   }
+});
+
+adminRouter.get("/public/invoices/:orderId", (req, res) => {
+  const template = invoiceTemplateSchema.safeParse(req.query.template).success
+    ? String(req.query.template)
+    : "classic";
+  const exp = typeof req.query.exp === "string" ? req.query.exp : "";
+  const sig = typeof req.query.sig === "string" ? req.query.sig : "";
+  const now = Date.now();
+  const expMs = Number(exp);
+
+  if (!exp || !sig || !Number.isFinite(expMs) || expMs < now) {
+    return res.status(403).send("Lien expiré ou invalide.");
+  }
+
+  const expected = signInvoiceLink(req.params.orderId, exp, template);
+  if (sig !== expected) {
+    return res.status(403).send("Signature invalide.");
+  }
+
+  const html = buildPublicInvoiceHtml(req.params.orderId, template);
+  if (!html) return res.status(404).send("Commande introuvable.");
+  return res.type("html").send(html);
+});
+
+adminRouter.post("/api/orders/:orderId/send-invoice-template", async (req, res) => {
+  const parsed = sendInvoiceTemplateSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Paramètres invalides." });
+  }
+
+  if (!env.ZOKO_API_URL || !env.ZOKO_AUTH_TOKEN) {
+    return res.status(400).json({
+      error: "Configuration API manquante. Ajoutez ZOKO_API_URL et ZOKO_AUTH_TOKEN dans .env."
+    });
+  }
+
+  const order = getOrderById(req.params.orderId);
+  if (!order) {
+    return res.status(404).json({ error: "Commande introuvable." });
+  }
+
+  const phone = normalizePhoneForApi(order.customerPhone || "");
+  if (!phone) {
+    return res.status(400).json({ error: "Numéro client invalide pour envoi API." });
+  }
+
+  const templateChoice = parsed.data.templateChoice ?? "classic";
+  const expMs = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  const exp = String(expMs);
+  const sig = signInvoiceLink(order.id, exp, templateChoice);
+  const invoicePreviewUrl = `${env.SHOPIFY_APP_URL}/admin/public/invoices/${encodeURIComponent(order.id)}?template=${encodeURIComponent(
+    templateChoice
+  )}&exp=${encodeURIComponent(exp)}&sig=${encodeURIComponent(sig)}`;
+
+  const orderNumberOnly = String(order.name || "0000")
+    .replace(/[^0-9]/g, "")
+    .trim() || "0000";
+  const timestampCode = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  const randomCode = Math.random().toString(36).slice(2, 10).toUpperCase();
+  const pdfFilename = `BFL-REF-${timestampCode}-${orderNumberOnly}-${randomCode}.pdf`;
+  let invoiceFileUrl = "";
+  try {
+    const pdfBuffer = await buildOrderInvoicePdf(order, templateChoice);
+    invoiceFileUrl = await uploadPdfToShopifyFiles(pdfFilename, pdfBuffer);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "PDF generation/upload failed";
+    return res.status(502).json({ error: `PDF Shopify Files échoué: ${message}` });
+  }
+
+  const configuredTemplateName = String(env.ZOKO_TEMPLATE_NAME || "invoice_notification").trim();
+  const configuredTemplateLanguage = String(env.ZOKO_TEMPLATE_LANGUAGE || "fr").trim();
+
+  const payloadVars = {
+    phone,
+    channel: env.ZOKO_CHANNEL || "whatsapp",
+    customer_name: order.customerLabel || "",
+    order_name: order.name || "",
+    invoice_url: invoiceFileUrl || invoicePreviewUrl,
+    total_amount: String(order.totalAmount || 0),
+    outstanding_amount: String(order.outstandingAmount || 0),
+    currency: order.currency || "MAD"
+  };
+
+  let payload: unknown;
+  if (env.ZOKO_TEMPLATE_PAYLOAD_JSON) {
+    try {
+      const parsedJson = JSON.parse(env.ZOKO_TEMPLATE_PAYLOAD_JSON) as unknown;
+      payload = replaceTemplatePlaceholders(parsedJson, payloadVars) as unknown;
+    } catch {
+      return res.status(400).json({
+        error: "ZOKO_TEMPLATE_PAYLOAD_JSON invalide (JSON incorrect)."
+      });
+    }
+  } else {
+    let templateArgs: unknown[] = [payloadVars.invoice_url];
+    if (env.ZOKO_TEMPLATE_ARGS_JSON) {
+      try {
+        const parsedArgs = JSON.parse(env.ZOKO_TEMPLATE_ARGS_JSON) as unknown;
+        const replacedArgs = replaceTemplatePlaceholders(parsedArgs, payloadVars);
+        if (Array.isArray(replacedArgs) && replacedArgs.length > 0) {
+          templateArgs = replacedArgs;
+        }
+      } catch {
+        // keep default template args
+      }
+    }
+
+    payload = {
+      channel: payloadVars.channel,
+      recipient: phone,
+      type: env.ZOKO_TEMPLATE_TYPE || "richTemplate",
+      templateId: configuredTemplateName,
+      templateLanguage: configuredTemplateLanguage,
+      templateArgs
+    };
+  }
+
+  const sendResult = await sendZokoTemplate(payload, configuredTemplateName, configuredTemplateLanguage);
+  if (!sendResult.ok) {
+    return res.status(502).json({
+      error: sendResult.error || "Envoi template API échoué.",
+      status: sendResult.status || 0,
+      providerResponse: sendResult.providerResponse || null,
+      attempts: sendResult.attempts || null
+    });
+  }
+  return res.status(200).json({
+    ok: true,
+    providerResponse: sendResult.providerResponse,
+    invoiceUrl: payloadVars.invoice_url,
+    usedTemplate: sendResult.usedTemplate,
+    usedLanguage: sendResult.usedLanguage,
+    usedType: sendResult.usedType
+  });
+});
+
+adminRouter.post("/api/orders/:orderId/send-review-template", async (req, res) => {
+  if (!env.ZOKO_API_URL || !env.ZOKO_AUTH_TOKEN) {
+    return res.status(400).json({
+      error: "Configuration API manquante. Ajoutez ZOKO_API_URL et ZOKO_AUTH_TOKEN dans .env."
+    });
+  }
+
+  const order = getOrderById(req.params.orderId);
+  if (!order) {
+    return res.status(404).json({ error: "Commande introuvable." });
+  }
+
+  const phone = normalizePhoneForApi(order.customerPhone || "");
+  if (!phone) {
+    return res.status(400).json({ error: "Numéro client invalide pour envoi API." });
+  }
+
+  const configuredTemplateName = String(env.ZOKO_REVIEW_TEMPLATE_NAME || "demander_avis").trim();
+  const configuredTemplateLanguage = String(env.ZOKO_REVIEW_TEMPLATE_LANGUAGE || "French").trim();
+
+  const payloadVars = {
+    phone,
+    channel: env.ZOKO_CHANNEL || "whatsapp",
+    customer_name: order.customerLabel || "",
+    order_name: order.name || ""
+  };
+
+  let payload: unknown;
+  if (env.ZOKO_REVIEW_TEMPLATE_PAYLOAD_JSON) {
+    try {
+      const parsedJson = JSON.parse(env.ZOKO_REVIEW_TEMPLATE_PAYLOAD_JSON) as unknown;
+      payload = replaceTemplatePlaceholders(parsedJson, payloadVars) as unknown;
+    } catch {
+      return res.status(400).json({
+        error: "ZOKO_REVIEW_TEMPLATE_PAYLOAD_JSON invalide (JSON incorrect)."
+      });
+    }
+  } else {
+    let reviewTemplateArgs: unknown[] = [payloadVars.customer_name];
+    if (env.ZOKO_REVIEW_TEMPLATE_ARGS_JSON) {
+      try {
+        const parsedArgs = JSON.parse(env.ZOKO_REVIEW_TEMPLATE_ARGS_JSON) as unknown;
+        const replacedArgs = replaceTemplatePlaceholders(parsedArgs, payloadVars);
+        if (Array.isArray(replacedArgs) && replacedArgs.length > 0) {
+          reviewTemplateArgs = replacedArgs;
+        }
+      } catch {
+        // keep default template args
+      }
+    }
+
+    payload = {
+      channel: payloadVars.channel,
+      recipient: phone,
+      type: env.ZOKO_REVIEW_TEMPLATE_TYPE || env.ZOKO_TEMPLATE_TYPE || "buttonTemplate",
+      templateId: configuredTemplateName,
+      templateLanguage: configuredTemplateLanguage,
+      templateArgs: reviewTemplateArgs
+    };
+  }
+
+  const sendResult = await sendZokoTemplate(payload, configuredTemplateName, configuredTemplateLanguage);
+  if (!sendResult.ok) {
+    return res.status(502).json({
+      error: sendResult.error || "Envoi template API échoué.",
+      status: sendResult.status || 0,
+      providerResponse: sendResult.providerResponse || null,
+      attempts: sendResult.attempts || null
+    });
+  }
+  return res.status(200).json({
+    ok: true,
+    providerResponse: sendResult.providerResponse,
+    usedTemplate: sendResult.usedTemplate,
+    usedLanguage: sendResult.usedLanguage,
+    usedType: sendResult.usedType
+  });
 });
 
 adminRouter.get("/api/business", (_req, res) => {
