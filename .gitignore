@@ -25,3 +25,7 @@ Thumbs.db
 # Editor/IDE
 .vscode/
 .idea/
+
+
+**/bouchrafilalilahlou-*.json
+**/*service-account*.json

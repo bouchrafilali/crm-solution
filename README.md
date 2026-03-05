@@ -19,6 +19,11 @@ Custom Shopify app starter built for adapting behavior to your business model.
 5. If no Admin token is available, sync uses client credentials (`SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_SCOPES`).
 6. For PDF invoice upload to Shopify Files, include `write_files` in `SHOPIFY_SCOPES` and re-authorize app if needed.
 7. `SHOPIFY_REFRESH_TOKEN` remains only as legacy fallback.
+8. Optional but recommended for persistent history: set `DATABASE_URL` (Postgres).
+9. Optional Team Quote Approval automation:
+   - `ENABLE_TEAM_QUOTE_APPROVAL=true`
+   - `ENABLE_TEAM_QUOTE_ANALYTICS=true`
+   - `WHATSAPP_TEAM_NUMBER` in E.164 format (ex: `+2126XXXXXXX`)
 
 ## 2) Install and run
 
@@ -87,3 +92,20 @@ https://your-app-url/webhooks/orders/create
    - `ZOKO_REVIEW_TEMPLATE_PAYLOAD_JSON` with placeholders: `{{phone}}`, `{{customer_name}}`, `{{order_name}}`
    - If your Zoko template already has a static CTA URL, no extra URL env variable is needed
 3. In order details (Client card), click `Envoyer demande avis Google`.
+
+## BigQuery ML revenue forecast (optional)
+
+1. Set in `.env`:
+   - `GCP_PROJECT_ID`
+   - `BIGQUERY_DATASET` (ex: `analytics`)
+   - `BIGQUERY_LOCATION` (ex: `US`)
+   - `GOOGLE_APPLICATION_CREDENTIALS` (absolute path to service account JSON key)
+   - Optional Search Console signal: `GSC_SITE_URL` (ex: `https://example.com/` or `sc-domain:example.com`)
+   - Optional Trends signal: `TRENDS_KEYWORDS` (comma separated, ex: `bouchra filali lahlou,caftan marocain`)
+   - Optional Trends geo: `TRENDS_GEO` (default: `MA`)
+2. Required IAM roles for service account:
+   - `BigQuery Data Editor`
+   - `BigQuery Job User`
+3. For Search Console signal, grant this same service account read access on your GSC property.
+4. Open `http://localhost:3000/admin/forecast`.
+5. Click `Actualiser forecast complet` to compute all horizons (30/90/180/365).

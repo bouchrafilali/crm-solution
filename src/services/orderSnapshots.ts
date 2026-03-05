@@ -18,6 +18,17 @@ export type OrderSnapshot = {
   shippingAddress?: string;
   billingAddress?: string;
   paymentGateway?: string;
+  paymentBreakdown?: Array<{
+    gateway: string;
+    amount: number;
+    currency: string;
+  }>;
+  paymentTransactions?: Array<{
+    gateway: string;
+    amount: number;
+    currency: string;
+    occurredAt?: string;
+  }>;
   bankDetails?: {
     bankName?: string;
     swiftBic?: string;
@@ -44,6 +55,16 @@ type ShopifyLineItem = {
   quantity?: string | number;
   price?: string | number;
   fulfillment_status?: string | null;
+};
+
+type ShopifyTransaction = {
+  gateway?: string;
+  kind?: string;
+  status?: string;
+  amount?: string | number;
+  currency?: string;
+  processed_at?: string;
+  created_at?: string;
 };
 
 export type ShopifyOrderPayload = {
@@ -82,6 +103,7 @@ export type ShopifyOrderPayload = {
     phone?: string;
   };
   payment_gateway_names?: string[];
+  transactions?: ShopifyTransaction[];
   line_items?: ShopifyLineItem[];
 };
 
@@ -214,6 +236,68 @@ function paymentGatewayFromPayload(payload: ShopifyOrderPayload, existing?: Orde
   return normalized.length ? normalized.join(", ") : existing?.paymentGateway;
 }
 
+function paymentBreakdownFromPayload(
+  payload: ShopifyOrderPayload,
+  paidAmount: number,
+  fallbackCurrency: string,
+  existing?: OrderSnapshot
+): Array<{ gateway: string; amount: number; currency: string }> | undefined {
+  const details = paymentTransactionsFromPayload(payload, fallbackCurrency, existing);
+  if (details && details.length > 0) {
+    const grouped = new Map<string, { gateway: string; amount: number; currency: string }>();
+    details.forEach((entry) => {
+      const key = `${entry.gateway}__${entry.currency}`;
+      const current = grouped.get(key);
+      if (current) {
+        current.amount += entry.amount;
+      } else {
+        grouped.set(key, { ...entry });
+      }
+    });
+    return Array.from(grouped.values()).filter((item) => item.amount > 0);
+  }
+
+  const gatewayNames = (payload.payment_gateway_names ?? [])
+    .map((name) => String(name || "").trim())
+    .filter(Boolean);
+  if (gatewayNames.length === 1 && paidAmount > 0) {
+    return [
+      {
+        gateway: gatewayNames[0],
+        amount: paidAmount,
+        currency: String(fallbackCurrency || "MAD").toUpperCase()
+      }
+    ];
+  }
+
+  return existing?.paymentBreakdown;
+}
+
+function paymentTransactionsFromPayload(
+  payload: ShopifyOrderPayload,
+  fallbackCurrency: string,
+  existing?: OrderSnapshot
+): Array<{ gateway: string; amount: number; currency: string; occurredAt?: string }> | undefined {
+  const transactions = Array.isArray(payload.transactions) ? payload.transactions : [];
+  if (transactions.length > 0) {
+    const entries: Array<{ gateway: string; amount: number; currency: string; occurredAt?: string }> = [];
+    transactions.forEach((tx) => {
+      const status = String(tx.status ?? "").toLowerCase();
+      const kind = String(tx.kind ?? "").toLowerCase();
+      if (status && status !== "success") return;
+      if (kind === "refund" || kind === "void" || kind === "authorization") return;
+      const amount = Math.max(0, toNumber(tx.amount));
+      if (amount <= 0) return;
+      const gateway = String(tx.gateway || "Autre").trim() || "Autre";
+      const currency = String(tx.currency || fallbackCurrency || "MAD").toUpperCase();
+      const occurredAtRaw = String(tx.processed_at ?? tx.created_at ?? "").trim();
+      entries.push({ gateway, amount, currency, occurredAt: occurredAtRaw || undefined });
+    });
+    if (entries.length > 0) return entries;
+  }
+  return existing?.paymentTransactions;
+}
+
 function locationFromPayload(payload: ShopifyOrderPayload, existing?: OrderSnapshot): string {
   const source = String(payload.source_name ?? "").trim();
   if (source) return source;
@@ -238,6 +322,25 @@ function upsertOrder(payload: ShopifyOrderPayload): OrderSnapshot {
     shippingAddress: shippingAddressFromPayload(payload, existing),
     billingAddress: billingAddressFromPayload(payload, existing),
     paymentGateway: paymentGatewayFromPayload(payload, existing),
+    paymentBreakdown: paymentBreakdownFromPayload(
+      payload,
+      Math.max(
+        0,
+        (payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0) -
+          inferOutstandingAmount(
+            payload,
+            payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0,
+            existing
+          )
+      ),
+      payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
+      existing
+    ),
+    paymentTransactions: paymentTransactionsFromPayload(
+      payload,
+      payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
+      existing
+    ),
     bankDetails: existing?.bankDetails,
     orderLocation: locationFromPayload(payload, existing),
     createdAt: payload.created_at ? String(payload.created_at) : existing?.createdAt ?? new Date().toISOString(),
@@ -299,6 +402,12 @@ export function listOrdersForQueue(): Array<OrderSnapshot & { rank: number }> {
 
 export function getOrderById(orderId: string): OrderSnapshot | null {
   return ordersById.get(orderId) ?? null;
+}
+
+export function removeOrderSnapshot(orderId: string): boolean {
+  const normalizedId = String(orderId || "").trim();
+  if (!normalizedId) return false;
+  return ordersById.delete(normalizedId);
 }
 
 export function updateOrder(orderId: string, input: OrderUpdate): OrderSnapshot | null {
