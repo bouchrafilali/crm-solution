@@ -4701,25 +4701,13 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         gap: 0;
       }
       .app-desktop::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background:
-          radial-gradient(55% 45% at 46% -6%, rgba(92, 161, 255, .2) 0%, rgba(0,0,0,0) 68%),
-          radial-gradient(56% 62% at 92% 32%, rgba(162, 96, 255, .2) 0%, rgba(0,0,0,0) 74%),
-          radial-gradient(46% 55% at 84% 86%, rgba(136, 82, 255, .18) 0%, rgba(0,0,0,0) 76%),
-          radial-gradient(38% 42% at 8% 72%, rgba(55, 226, 255, .13) 0%, rgba(0,0,0,0) 76%);
-        filter: blur(10px);
+        content: none;
       }
       .app-desktop::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background: linear-gradient(180deg, rgba(255,255,255,.04), transparent 20%, transparent 82%, rgba(255,255,255,.03));
+        content: none;
       }
       .desk-col {
+        position: relative;
         min-height: 0;
         display: flex;
         flex-direction: column;
@@ -4735,22 +4723,49 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .desk-col.left {
         margin-left: 10px;
         background:
-          radial-gradient(120% 90% at 18% -10%, rgba(62, 205, 255, .11) 0%, rgba(8,12,24,0) 68%),
+          radial-gradient(120% 90% at 18% -10%, rgba(62, 205, 255, .12) 0%, rgba(8,12,24,0) 68%),
           linear-gradient(180deg, rgba(13,21,38,.78), rgba(9,14,27,.72));
       }
       .desk-col.center {
         margin-left: 10px;
         background:
-          radial-gradient(120% 90% at 46% -16%, rgba(87, 145, 255, .14) 0%, rgba(8,12,24,0) 66%),
-          radial-gradient(80% 90% at 92% 42%, rgba(158, 92, 255, .15) 0%, rgba(8,12,24,0) 72%),
+          radial-gradient(120% 90% at 46% -16%, rgba(87, 145, 255, .16) 0%, rgba(8,12,24,0) 66%),
+          radial-gradient(80% 90% at 92% 42%, rgba(158, 92, 255, .17) 0%, rgba(8,12,24,0) 72%),
           linear-gradient(180deg, rgba(14,23,42,.78), rgba(9,15,28,.72));
       }
       .desk-col.right {
         margin-left: 10px;
         margin-right: 10px;
         background:
-          radial-gradient(120% 95% at 92% -12%, rgba(145, 101, 255, .13) 0%, rgba(8,12,24,0) 68%),
+          radial-gradient(120% 95% at 92% -12%, rgba(155, 102, 255, .2) 0%, rgba(8,12,24,0) 68%),
           linear-gradient(180deg, rgba(14,24,43,.8), rgba(10,16,30,.74));
+      }
+      .desk-col.left::before,
+      .desk-col.center::before,
+      .desk-col.right::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 22px;
+        filter: blur(8px);
+      }
+      .desk-col.left::before {
+        background:
+          radial-gradient(62% 46% at 15% 8%, rgba(62, 214, 255, .12) 0%, rgba(0,0,0,0) 72%),
+          linear-gradient(180deg, rgba(255,255,255,.04), transparent 22%, transparent 82%, rgba(255,255,255,.025));
+      }
+      .desk-col.center::before {
+        background:
+          radial-gradient(56% 40% at 46% 6%, rgba(90, 156, 255, .14) 0%, rgba(0,0,0,0) 70%),
+          radial-gradient(44% 48% at 86% 78%, rgba(151, 98, 255, .13) 0%, rgba(0,0,0,0) 74%),
+          linear-gradient(180deg, rgba(255,255,255,.045), transparent 22%, transparent 84%, rgba(255,255,255,.03));
+      }
+      .desk-col.right::before {
+        background:
+          radial-gradient(60% 52% at 90% 18%, rgba(168, 103, 255, .2) 0%, rgba(0,0,0,0) 74%),
+          radial-gradient(44% 44% at 18% 84%, rgba(98, 170, 255, .12) 0%, rgba(0,0,0,0) 76%),
+          linear-gradient(180deg, rgba(255,255,255,.04), transparent 24%, transparent 82%, rgba(255,255,255,.03));
       }
       .desk-col.left .section-head {
         border-bottom: 1px solid rgba(167, 204, 248, .15);
