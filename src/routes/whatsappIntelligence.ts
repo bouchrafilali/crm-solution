@@ -4563,7 +4563,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
 
   const modeRaw = typeof req.query.mode === "string" ? req.query.mode.trim().toLowerCase() : "";
-  const mode = modeRaw === "live" ? "live" : "mock";
+  const mode = modeRaw === "mock" ? "mock" : "live";
   const leadId = typeof req.query.leadId === "string" ? req.query.leadId.trim().slice(0, 120) : "";
 
   const html = `<!doctype html>
@@ -4817,11 +4817,122 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       const MODE = ${JSON.stringify(mode)};
       const LEAD_ID = ${JSON.stringify(leadId)};
       const MAX_LEN = 120;
+      const LIVE_MODE = String(MODE) !== "mock";
 
       function clampText(value) {
         const raw = String(value || "").replace(/\\s+/g, " ").trim();
+        if (!raw) return "";
         if (raw.length <= MAX_LEN) return raw;
         return raw.slice(0, MAX_LEN - 1).trimEnd() + "…";
+      }
+
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      function initials(name) {
+        const parts = String(name || "").trim().split(/\\s+/).filter(Boolean);
+        if (!parts.length) return "WA";
+        return parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("");
+      }
+
+      function stageForUi(raw) {
+        const value = String(raw || "").toUpperCase();
+        if (value.includes("DEPOSIT")) return "DEPOSIT_PENDING";
+        if (value.includes("PRICE")) return "PRICE_SENT";
+        return "QUALIFICATION";
+      }
+
+      function urgencyForUi(raw) {
+        const value = String(raw || "").toLowerCase();
+        if (value === "high") return "High";
+        if (value === "low") return "Low";
+        return "Medium";
+      }
+
+      function formatTime(raw) {
+        const d = new Date(String(raw || ""));
+        if (Number.isNaN(d.getTime())) return "--:--";
+        return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      }
+
+      function relativeTime(raw) {
+        const d = new Date(String(raw || ""));
+        if (Number.isNaN(d.getTime())) return "Now";
+        const min = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+        if (min < 1) return "Now";
+        if (min < 60) return min + " min";
+        const h = Math.floor(min / 60);
+        if (h < 24) return h + " h";
+        return Math.floor(h / 24) + " j";
+      }
+
+      function splitToBubbles(input) {
+        const raw = String(input || "").replace(/\\s+/g, " ").trim();
+        if (!raw) return [];
+        const chunks = raw.split(/\\n\\s*\\n+/).map((x) => x.trim()).filter(Boolean);
+        const source = chunks.length > 1 ? chunks : [raw];
+        const out = [];
+        for (const chunk of source) {
+          if (chunk.length <= MAX_LEN) {
+            out.push(chunk);
+            continue;
+          }
+          const words = chunk.split(/\\s+/).filter(Boolean);
+          let cursor = "";
+          for (const word of words) {
+            const next = cursor ? cursor + " " + word : word;
+            if (next.length > MAX_LEN && cursor) {
+              out.push(cursor);
+              cursor = word;
+            } else {
+              cursor = next;
+            }
+          }
+          if (cursor) out.push(cursor);
+        }
+        return out.map((x) => clampText(x)).filter(Boolean).slice(0, 4);
+      }
+
+      function ensureBubbleSet(messages) {
+        const list = Array.isArray(messages) ? messages : [];
+        const normalized = list.flatMap((text) => splitToBubbles(text)).slice(0, 4);
+        if (normalized.length >= 2) return normalized;
+        if (normalized.length === 1) {
+          const split = splitToBubbles(normalized[0]);
+          if (split.length >= 2) return split.slice(0, 4);
+        }
+        return ["Bonjour, merci pour votre message.", "Je vous partage une proposition adaptée dans un instant."];
+      }
+
+      function withNav(path) {
+        const current = new URL(window.location.href);
+        const url = new URL(path, window.location.origin);
+        ["host", "shop", "embedded"].forEach((key) => {
+          const value = current.searchParams.get(key);
+          if (value && !url.searchParams.get(key)) url.searchParams.set(key, value);
+        });
+        return url.pathname + (url.search || "");
+      }
+
+      async function fetchJson(path, options) {
+        const response = await fetch(withNav(path), options);
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || ("http_" + response.status));
+        }
+        if (response.status === 204) return null;
+        return response.json();
+      }
+
+      async function fetchJsonOptional(path) {
+        const response = await fetch(withNav(path));
+        if (response.status === 204) return null;
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || ("http_" + response.status));
+        }
+        return response.json();
       }
 
       const urgencyClass = { High: "urg-high", Medium: "urg-medium", Low: "urg-low" };
@@ -4883,56 +4994,256 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
       ];
 
+      function mapLeadFromApi(lead) {
+        const stageRaw = String((lead && lead.stage) || "QUALIFICATION");
+        return {
+          id: String((lead && lead.id) || ""),
+          name: String((lead && lead.client) || "Client"),
+          stage: stageForUi(stageRaw),
+          stageLabel: stageRaw,
+          urgency: urgencyForUi(lead && lead.urgency),
+          unread: 0,
+          lastAt: relativeTime((lead && lead.last_activity_at) || (lead && lead.created_at)),
+          preview: clampText((lead && lead.last_message_snippet) || "Conversation WhatsApp"),
+          avatar: initials(lead && lead.client),
+          suggestions: [],
+          messages: []
+        };
+      }
+
+      function mapMessagesFromApi(items) {
+        return (Array.isArray(items) ? items : []).map((item, index) => {
+          const isBrand = String((item && item.direction) || "").toUpperCase() === "OUT";
+          return {
+            id: String((item && item.id) || ("msg-" + index)),
+            from: isBrand ? "brand" : "client",
+            text: clampText((item && item.text) || ""),
+            time: formatTime(item && item.created_at),
+            status: isBrand ? "sent" : undefined
+          };
+        });
+      }
+
+      function fallbackSuggestionsFromMessages(messages) {
+        const clientMessages = (Array.isArray(messages) ? messages : []).filter((msg) => msg && msg.from === "client");
+        const latest = clientMessages.length ? clientMessages[clientMessages.length - 1].text : "";
+        return [
+          {
+            id: "fallback-1",
+            title: "Clarifier le besoin",
+            tag: "FALLBACK",
+            messages: ensureBubbleSet([
+              "Merci pour votre message.",
+              latest ? "J'ai bien noté: " + latest : "Pouvez-vous préciser la date de l'événement ?",
+              "Je prépare les options les plus adaptées."
+            ])
+          },
+          {
+            id: "fallback-2",
+            title: "Date et destination",
+            tag: "FALLBACK",
+            messages: ensureBubbleSet([
+              "Pouvez-vous partager la date exacte de l'événement ?",
+              "Et le pays de livraison pour confirmer les délais ?"
+            ])
+          }
+        ];
+      }
+
+      function mapAiSuggestions(runPayload, provider) {
+        const list = runPayload && Array.isArray(runPayload.suggestions) ? runPayload.suggestions : [];
+        return list.slice(0, 3).map((entry, index) => {
+          const rawMessages = Array.isArray(entry && entry.messages) && entry.messages.length
+            ? entry.messages
+            : splitToBubbles((entry && (entry.reply || entry.text)) || "");
+          return {
+            id: String((entry && entry.id) || ("ai-" + index)),
+            title: clampText((entry && entry.title) || (entry && entry.goal) || ("Suggestion " + (index + 1))),
+            tag: String(provider || "claude").toUpperCase(),
+            messages: ensureBubbleSet(rawMessages)
+          };
+        });
+      }
+
       function App() {
         const [leads, setLeads] = React.useState(leadsSeed);
-        const [selectedLeadId, setSelectedLeadId] = React.useState(leadsSeed[0].id);
+        const [selectedLeadId, setSelectedLeadId] = React.useState(String(leadsSeed[0].id));
         const [draftMessages, setDraftMessages] = React.useState([]);
         const [filter, setFilter] = React.useState("All");
         const [query, setQuery] = React.useState("");
         const [sending, setSending] = React.useState(false);
+        const [loadingLeads, setLoadingLeads] = React.useState(false);
+        const [loadingMessages, setLoadingMessages] = React.useState(false);
+        const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
+        const [aiProvider, setAiProvider] = React.useState("claude");
+        const [errorText, setErrorText] = React.useState("");
 
-        const selectedLead = React.useMemo(() => leads.find((lead) => lead.id === selectedLeadId) || leads[0], [leads, selectedLeadId]);
+        const selectedLead = React.useMemo(
+          () => leads.find((lead) => String(lead.id) === String(selectedLeadId)) || leads[0] || null,
+          [leads, selectedLeadId]
+        );
 
         const filteredLeads = React.useMemo(() => {
           return leads.filter((lead) => {
             const matchesFilter = filter === "All" ? true : lead.urgency === filter;
-            const haystack = (lead.name + " " + lead.preview + " " + lead.stage).toLowerCase();
+            const haystack = (lead.name + " " + lead.preview + " " + (lead.stageLabel || lead.stage)).toLowerCase();
             return matchesFilter && haystack.includes(String(query || "").toLowerCase());
           });
         }, [leads, filter, query]);
 
+        const patchLead = React.useCallback((leadId, patch) => {
+          setLeads((prev) => prev.map((lead) => (String(lead.id) === String(leadId) ? { ...lead, ...patch } : lead)));
+        }, []);
+
+        const loadLeads = React.useCallback(async () => {
+          if (!LIVE_MODE) return;
+          setLoadingLeads(true);
+          setErrorText("");
+          try {
+            const payload = await fetchJson("/api/whatsapp/leads?range=30");
+            const mapped = (Array.isArray(payload && payload.items) ? payload.items : [])
+              .map(mapLeadFromApi)
+              .filter((lead) => lead.id);
+            if (!mapped.length) return;
+            setLeads((prev) => {
+              const prevMap = new Map((Array.isArray(prev) ? prev : []).map((lead) => [String(lead.id), lead]));
+              return mapped.map((lead) => {
+                const old = prevMap.get(String(lead.id));
+                return old
+                  ? { ...lead, messages: Array.isArray(old.messages) ? old.messages : [], suggestions: Array.isArray(old.suggestions) ? old.suggestions : [] }
+                  : lead;
+              });
+            });
+            setSelectedLeadId((current) => {
+              if (LEAD_ID && mapped.some((lead) => String(lead.id) === LEAD_ID)) return LEAD_ID;
+              if (current && mapped.some((lead) => String(lead.id) === String(current))) return current;
+              return String(mapped[0].id);
+            });
+          } catch (error) {
+            setErrorText("Impossible de charger les conversations WhatsApp.");
+            console.error("[mobile-lab] load leads failed", error);
+          } finally {
+            setLoadingLeads(false);
+          }
+        }, []);
+
+        const loadMessages = React.useCallback(async (leadId) => {
+          if (!LIVE_MODE || !leadId) return;
+          setLoadingMessages(true);
+          try {
+            const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/messages?limit=80");
+            const messages = mapMessagesFromApi(payload && payload.items);
+            const last = messages.length ? messages[messages.length - 1] : null;
+            patchLead(leadId, {
+              messages,
+              preview: last ? clampText(last.text) : "Conversation WhatsApp",
+              lastAt: "Now"
+            });
+          } catch (error) {
+            setErrorText("Impossible de charger les messages.");
+            console.error("[mobile-lab] load messages failed", { leadId, error });
+          } finally {
+            setLoadingMessages(false);
+          }
+        }, [patchLead]);
+
+        const loadSuggestions = React.useCallback(async (leadId, forceRegenerate) => {
+          if (!leadId) return;
+          if (!LIVE_MODE) return;
+          setLoadingSuggestions(true);
+          const applySuggestions = (cards) => {
+            setLeads((prev) =>
+              prev.map((lead) => {
+                if (String(lead.id) !== String(leadId)) return lead;
+                const fallback = fallbackSuggestionsFromMessages(Array.isArray(lead.messages) ? lead.messages : []);
+                return { ...lead, suggestions: Array.isArray(cards) && cards.length ? cards : fallback };
+              })
+            );
+          };
+          try {
+            let runPayload = null;
+            if (!forceRegenerate) {
+              runPayload = await fetchJsonOptional("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/ai-latest");
+            }
+            const hasSuggestions = Boolean(
+              runPayload &&
+                runPayload.status === "success" &&
+                Array.isArray(runPayload.suggestions) &&
+                runPayload.suggestions.length
+            );
+            if (!hasSuggestions) {
+              runPayload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/ai-regenerate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ provider: aiProvider })
+              });
+            }
+            const mapped = mapAiSuggestions(runPayload, aiProvider);
+            applySuggestions(mapped);
+          } catch (error) {
+            applySuggestions([]);
+            console.error("[mobile-lab] load suggestions failed", { leadId, error });
+          } finally {
+            setLoadingSuggestions(false);
+          }
+        }, [aiProvider]);
+
+        React.useEffect(() => {
+          if (!LIVE_MODE) return;
+          void loadLeads();
+        }, [loadLeads]);
+
+        React.useEffect(() => {
+          if (!selectedLeadId) return;
+          if (!LIVE_MODE) return;
+          void loadMessages(selectedLeadId);
+          void loadSuggestions(selectedLeadId, false);
+        }, [selectedLeadId, loadMessages, loadSuggestions]);
+
         function insertSuggestion(messages) {
-          setDraftMessages((Array.isArray(messages) ? messages : []).slice(0, 4).map((m) => clampText(m)));
+          setDraftMessages(ensureBubbleSet(messages));
         }
 
         async function sendMessages() {
-          if (!draftMessages.length || sending) return;
+          if (!draftMessages.length || sending || !selectedLead) return;
           setSending(true);
           try {
-            for (let i = 0; i < draftMessages.length; i += 1) {
-              await new Promise((resolve) => setTimeout(resolve, 80 + i * 90));
+            const payload = ensureBubbleSet(draftMessages);
+            if (!LIVE_MODE) {
+              patchLead(selectedLead.id, {
+                preview: payload[payload.length - 1] || selectedLead.preview,
+                lastAt: "Now",
+                messages: (selectedLead.messages || []).concat(
+                  payload.map((msg, i) => ({
+                    id: "draft-" + Date.now() + "-" + i,
+                    from: "brand",
+                    text: clampText(msg),
+                    time: "Now",
+                    status: "sent"
+                  }))
+                )
+              });
+              setDraftMessages([]);
+              return;
             }
-            setLeads((prev) =>
-              prev.map((lead) => {
-                if (lead.id !== selectedLeadId) return lead;
-                const nextPreview = draftMessages[draftMessages.length - 1];
-                return {
-                  ...lead,
-                  preview: nextPreview,
-                  lastAt: "Now",
-                  messages: lead.messages.concat(
-                    draftMessages.map((msg, i) => ({
-                      id: Date.now() + i + Math.random(),
-                      from: "brand",
-                      text: clampText(msg),
-                      time: "Now",
-                      status: "sent"
-                    }))
-                  )
-                };
-              })
-            );
+            for (let i = 0; i < payload.length; i += 1) {
+              await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(selectedLead.id) + "/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  direction: "OUT",
+                  text: payload[i],
+                  provider: "system",
+                  message_type: "text"
+                })
+              });
+              await sleep(80);
+            }
             setDraftMessages([]);
+            await Promise.all([loadMessages(selectedLead.id), loadLeads()]);
+          } catch (error) {
+            setErrorText("Envoi impossible via WhatsApp API.");
+            console.error("[mobile-lab] send failed", error);
           } finally {
             setSending(false);
           }
@@ -4967,10 +5278,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 </div>
 
                 <div className="lead-list">
+                  {loadingLeads ? <div className="preview">Chargement conversations...</div> : null}
                   {filteredLeads.map((lead) => {
-                    const active = lead.id === selectedLeadId;
+                    const active = String(lead.id) === String(selectedLeadId);
                     return (
-                      <button key={lead.id} onClick={() => setSelectedLeadId(lead.id)} className={"lead-item " + (active ? "active" : "")}>
+                      <button key={lead.id} onClick={() => setSelectedLeadId(String(lead.id))} className={"lead-item " + (active ? "active" : "")}>
                         <div className="lead-row">
                           <div className="avatar">{lead.avatar}</div>
                           <div style={{ minWidth: 0, flex: 1 }}>
@@ -4981,7 +5293,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             <div className="preview">{lead.preview}</div>
                             <div className="lead-meta">
                               <span className={"badge " + urgencyClass[lead.urgency]}>{lead.urgency}</span>
-                              <span className={"stage " + stageClass[lead.stage]}>{lead.stage}</span>
+                              <span className={"stage " + stageClass[lead.stage]}>{lead.stageLabel || lead.stage}</span>
                               {lead.unread > 0 ? <span className="unread">{lead.unread}</span> : null}
                             </div>
                           </div>
@@ -4994,35 +5306,58 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 <div className="suggestion-wrap">
                   <div className="chat-head">
                     <div>
-                      <div className="n">{selectedLead.name}</div>
-                      <div className="sub">Timing pressure détecté · suggestions prêtes · {String(MODE).toUpperCase()}</div>
+                      <div className="n">{selectedLead ? selectedLead.name : "Lead"}</div>
+                      <div className="sub">WhatsApp API · Suggestions {String(aiProvider).toUpperCase()} · {String(MODE).toUpperCase()}</div>
                     </div>
-                    <button className="icon-btn">✦</button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => {
+                        if (!selectedLead) return;
+                        void loadSuggestions(selectedLead.id, true);
+                      }}
+                    >
+                      {loadingSuggestions ? "…" : "✦"}
+                    </button>
+                  </div>
+                  <div className="filters" style={{ marginBottom: "8px" }}>
+                    {["claude", "gpt"].map((provider) => (
+                      <button
+                        key={provider}
+                        className={"pill " + (aiProvider === provider ? "active" : "")}
+                        onClick={() => setAiProvider(provider)}
+                      >
+                        {provider.toUpperCase()}
+                      </button>
+                    ))}
                   </div>
                   <div className="cards">
-                    {(selectedLead.suggestions || []).map((card) => (
-                      <div key={card.id} className="card">
-                        <div className="card-top">
-                          <div>
-                            <div className="card-title">{card.title}</div>
-                            <div className="card-tag">{card.tag}</div>
+                    {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
+                      ? selectedLead.suggestions.map((card) => (
+                        <div key={card.id} className="card">
+                          <div className="card-top">
+                            <div>
+                              <div className="card-title">{card.title}</div>
+                              <div className="card-tag">{card.tag}</div>
+                            </div>
+                            <div className="card-zap">⚡</div>
                           </div>
-                          <div className="card-zap">⚡</div>
+                          <div className="snips">
+                            {ensureBubbleSet(card.messages).map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
+                          </div>
+                          <div className="card-actions">
+                            <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
+                            <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
+                          </div>
                         </div>
-                        <div className="snips">
-                          {card.messages.map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
-                        </div>
-                        <div className="card-actions">
-                          <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
-                          <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                      : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
                   </div>
                 </div>
 
                 <div className="chat-messages">
-                  {(selectedLead.messages || []).map((message) => {
+                  {errorText ? <div className="preview">{errorText}</div> : null}
+                  {loadingMessages ? <div className="preview">Chargement messages...</div> : null}
+                  {selectedLead && Array.isArray(selectedLead.messages) && selectedLead.messages.map((message) => {
                     const own = message.from === "brand";
                     return (
                       <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
@@ -5040,9 +5375,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
                 <div className="composer">
                   <div className="stats">
-                    <div className="stat"><div className="k">AI</div><div className="v">{selectedLead.suggestions.length} cartes</div></div>
-                    <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead.stage}</div></div>
-                    <div className="stat"><div className="k">Speed</div><div className="v">Fast reply</div></div>
+                    <div className="stat"><div className="k">AI</div><div className="v">{selectedLead ? selectedLead.suggestions.length : 0} cartes</div></div>
+                    <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead ? (selectedLead.stageLabel || selectedLead.stage) : "-"}</div></div>
+                    <div className="stat"><div className="k">Provider</div><div className="v">{String(aiProvider).toUpperCase()}</div></div>
                   </div>
 
                   {draftMessages.length ? (
@@ -5052,16 +5387,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   ) : null}
 
                   <div className="composer-row">
-                    <button className="mini-btn">＋</button>
+                    <button className="mini-btn" onClick={() => setDraftMessages([])}>＋</button>
                     <div className="composer-pill">
                       {draftMessages.length ? String(draftMessages.length) + " messages prêts à être envoyés" : "Sélectionner une suggestion AI..."}
                     </div>
-                    <button className="send-fab" onClick={() => { void sendMessages(); }}>➤</button>
+                    <button className="send-fab" disabled={sending} onClick={() => { void sendMessages(); }}>➤</button>
                   </div>
 
                   <div className="hint">
-                    <span>✦ Suggestions courtes, style WhatsApp</span>
-                    <span>Ouvrir détail ›</span>
+                    <span>✦ Suggestions 2–4 messages · ≤120 caractères</span>
+                    <span>{LIVE_MODE ? "Live API" : "Mock mode"}</span>
                   </div>
                 </div>
               </div>
