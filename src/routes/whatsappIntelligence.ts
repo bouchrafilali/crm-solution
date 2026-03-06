@@ -4699,6 +4699,24 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         grid-template-columns: 364px 560px minmax(300px, 1fr);
         gap: 0;
       }
+      .app-desktop::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(55% 45% at 46% -6%, rgba(92, 161, 255, .2) 0%, rgba(0,0,0,0) 68%),
+          radial-gradient(40% 48% at 90% 30%, rgba(150, 98, 255, .14) 0%, rgba(0,0,0,0) 74%),
+          radial-gradient(38% 42% at 8% 72%, rgba(55, 226, 255, .13) 0%, rgba(0,0,0,0) 76%);
+        filter: blur(10px);
+      }
+      .app-desktop::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(255,255,255,.04), transparent 20%, transparent 82%, rgba(255,255,255,.03));
+      }
       .desk-col {
         min-height: 0;
         display: flex;
@@ -4757,14 +4775,28 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         overflow-x: auto;
         overflow-y: hidden;
         margin-top: 14px;
-        padding-bottom: 2px;
+        padding: 8px 6px 12px;
+        align-items: flex-start;
       }
       .desk-col.center .card {
+        position: relative;
         border: 1px solid rgba(173, 214, 255, .2);
         background: linear-gradient(180deg, rgba(26,40,66,.78), rgba(18,31,52,.74));
         box-shadow:
-          0 18px 32px rgba(0,0,0,.38),
-          0 0 0 1px rgba(176, 221, 255, .08) inset;
+          0 24px 34px rgba(0,0,0,.42),
+          0 0 24px rgba(80, 178, 255, .12),
+          0 0 0 1px rgba(176, 221, 255, .1) inset;
+        transform: translateY(-2px);
+      }
+      .desk-col.center .card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 24px;
+        background:
+          radial-gradient(80% 55% at 10% 0%, rgba(110, 210, 255, .13) 0%, rgba(0,0,0,0) 65%),
+          radial-gradient(70% 50% at 100% 100%, rgba(153, 102, 255, .12) 0%, rgba(0,0,0,0) 72%);
       }
       .desk-col.center .card .card-zap {
         border-color: rgba(146, 233, 255, .3);
@@ -4802,6 +4834,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .desk-col.right .chat-messages {
         background:
           radial-gradient(120% 90% at 50% -18%, rgba(76, 147, 255, .14) 0%, rgba(0,0,0,0) 60%),
+          radial-gradient(70% 80% at 90% 100%, rgba(140, 93, 255, .11) 0%, rgba(0,0,0,0) 72%),
           linear-gradient(180deg, rgba(11, 18, 33, .7), rgba(10, 16, 30, .64));
       }
       .chat-panel-foot .draft-stack {
