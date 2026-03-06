@@ -4661,7 +4661,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         border-radius: 2.2rem;
       }
       .shell.desktop {
-        max-width: 1180px;
+        max-width: 1500px;
         border-radius: 2rem;
       }
       .app-desktop {
