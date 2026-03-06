@@ -5138,14 +5138,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         flex: 1;
         min-height: 0;
         padding: 10px;
-        display: flex;
+        display: grid;
         gap: 10px;
-        overflow-x: auto;
-        overflow-y: hidden;
+        overflow-y: auto;
+        overflow-x: hidden;
       }
       .shell.mobile .mobile-ai-cards .card {
-        min-width: 305px;
-        max-width: 305px;
+        min-width: 100%;
+        max-width: 100%;
+      }
+      .shell.mobile .mobile-ai-cards .snips {
+        min-height: 0;
       }
       .shell.tablet .card,
       .shell.desktop .card {
@@ -5624,6 +5627,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setSelectedLeadId(String(leadId));
           setMobileScreen("conversation");
           setMobileBackSwipeOffset(0);
+          setMobileDrawerOffset(0);
         }
 
         function closeMobileConversation() {
