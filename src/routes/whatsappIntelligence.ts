@@ -5250,11 +5250,195 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         color: #0f172a;
       }
       .bubble .text { font-size: 14px; line-height: 1.45; }
+      .bubble .text .line { white-space: pre-wrap; word-break: break-word; }
+      .bubble .text a {
+        color: inherit;
+        text-decoration: underline;
+        text-decoration-color: rgba(255,255,255,.45);
+      }
       .bubble .meta {
         margin-top: 6px; font-size: 11px; display: flex; gap: 4px;
       }
       .bubble.client .meta { color: rgba(255,255,255,.45); }
       .bubble.brand .meta { color: rgba(15,23,42,.68); justify-content: flex-end; }
+      .day-sep {
+        display: inline-flex;
+        align-self: center;
+        margin: 8px auto;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(172, 212, 255, .22);
+        background: rgba(17, 29, 51, .56);
+        color: rgba(210, 228, 251, .84);
+        font-size: 11px;
+        letter-spacing: .05em;
+      }
+      .quote-box {
+        border-left: 2px solid rgba(145, 198, 255, .68);
+        background: rgba(255,255,255,.06);
+        border-radius: 10px;
+        padding: 7px 9px;
+        margin-bottom: 8px;
+        cursor: pointer;
+      }
+      .quote-box .q-author { font-size: 11px; color: rgba(179, 218, 255, .92); margin-bottom: 4px; }
+      .quote-box .q-text { font-size: 12px; color: rgba(226, 240, 255, .84); }
+      .media-wrap {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(179, 216, 255, .24);
+        background: rgba(6, 13, 25, .45);
+      }
+      .media-thumb {
+        width: 100%;
+        max-width: 260px;
+        display: block;
+        object-fit: contain;
+        max-height: 280px;
+        cursor: pointer;
+      }
+      .media-caption {
+        padding: 8px 10px 0;
+        font-size: 12px;
+        color: rgba(229, 242, 255, .88);
+      }
+      .video-thumb-wrap {
+        position: relative;
+        display: inline-block;
+      }
+      .video-play {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ecf7ff;
+        font-size: 32px;
+        text-shadow: 0 4px 10px rgba(0,0,0,.5);
+        pointer-events: none;
+      }
+      .audio-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(176, 214, 255, .26);
+        background: rgba(10, 18, 33, .45);
+      }
+      .audio-bars {
+        display: grid;
+        grid-template-columns: repeat(18, 1fr);
+        gap: 2px;
+        width: 100%;
+        min-width: 130px;
+        height: 20px;
+      }
+      .audio-bars span {
+        align-self: end;
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(114, 229, 255, .95), rgba(124, 149, 255, .86));
+      }
+      .doc-row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(176, 214, 255, .26);
+        background: rgba(10, 18, 33, .45);
+      }
+      .doc-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(99, 216, 255, .18);
+      }
+      .doc-meta { min-width: 0; flex: 1; }
+      .doc-name { font-size: 12px; color: rgba(235, 246, 255, .94); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .doc-sub { font-size: 11px; color: rgba(193, 216, 242, .74); }
+      .doc-link { color: #b8ebff; font-size: 11px; text-decoration: underline; }
+      .lp-card {
+        border-radius: 12px;
+        border: 1px solid rgba(178, 213, 255, .24);
+        background: rgba(12, 21, 38, .45);
+        overflow: hidden;
+        max-width: 280px;
+      }
+      .lp-img {
+        width: 100%;
+        max-height: 144px;
+        object-fit: cover;
+        display: block;
+      }
+      .lp-body { padding: 9px 10px; }
+      .lp-domain { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(173, 205, 235, .72); }
+      .lp-title { margin-top: 4px; font-size: 12px; color: rgba(230, 243, 255, .96); }
+      .lp-desc { margin-top: 4px; font-size: 11px; color: rgba(188, 213, 240, .78); }
+      .react-row {
+        margin-top: 6px;
+        display: inline-flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .react-chip {
+        border-radius: 999px;
+        border: 1px solid rgba(174, 206, 248, .30);
+        background: rgba(20, 36, 60, .42);
+        font-size: 11px;
+        padding: 2px 7px;
+      }
+      .sys-row {
+        display: flex;
+        justify-content: center;
+        margin: 8px 0;
+      }
+      .sys-pill {
+        border-radius: 999px;
+        border: 1px solid rgba(165, 202, 247, .25);
+        background: rgba(13, 24, 43, .5);
+        color: rgba(203, 221, 243, .8);
+        font-size: 11px;
+        padding: 6px 10px;
+      }
+      .media-viewer {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        background: rgba(5,8,16,.92);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .media-viewer-box {
+        max-width: min(92vw, 960px);
+        max-height: 88vh;
+      }
+      .media-viewer-box img,
+      .media-viewer-box video {
+        max-width: 100%;
+        max-height: 78vh;
+        border-radius: 14px;
+        border: 1px solid rgba(186, 220, 255, .28);
+        background: #0a1220;
+      }
+      .media-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        border: 1px solid rgba(179, 214, 255, .32);
+        background: rgba(12, 21, 38, .78);
+        color: #eaf3ff;
+        border-radius: 12px;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+      }
       .composer {
         padding: 10px; border-top: 1px solid rgba(255,255,255,.1);
         background: rgba(0,0,0,.2); backdrop-filter: blur(18px);
@@ -5675,14 +5859,334 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       function mapMessagesFromApi(items) {
         return (Array.isArray(items) ? items : []).map((item, index) => {
           const isBrand = String((item && item.direction) || "").toUpperCase() === "OUT";
+          const metadata = item && item.metadata && typeof item.metadata === "object" ? item.metadata : null;
+          const rawType = String(
+            (item && item.message_type) ||
+            (metadata && (metadata.message_type || metadata.type || metadata.media_type)) ||
+            "text"
+          ).trim().toLowerCase();
+          const textRaw = String((item && item.text) || "");
+          const textUrlMatch = textRaw.match(/https?:\/\/[^\s<>"')]+/i);
+          const mediaUrl = String(
+            (metadata && (metadata.media_url || metadata.mediaUrl || metadata.url || metadata.link || metadata.file_url || metadata.fileUrl || metadata.image_url)) ||
+            (textUrlMatch ? textUrlMatch[0] : "") ||
+            ""
+          ).trim();
+          const mimeType = String((metadata && (metadata.mime_type || metadata.mimeType || metadata.content_type)) || "").trim().toLowerCase();
+          const hasReply = item && item.reply_to && typeof item.reply_to === "object";
+          const replyTo = hasReply
+            ? {
+                id: String(item.reply_to.id || "").trim(),
+                senderName: String(item.reply_to.sender_name || "").trim() || (isBrand ? "Client" : "You"),
+                text: String(item.reply_to.text || "").trim()
+              }
+            : null;
+          const reactionsRaw =
+            (metadata && (metadata.reactions || metadata.reaction || metadata.emoji_reactions)) || [];
+          const reactions = Array.isArray(reactionsRaw)
+            ? reactionsRaw.map((entry) => String(
+              (entry && typeof entry === "object" && entry.emoji) || entry || ""
+            ).trim()).filter(Boolean)
+            : typeof reactionsRaw === "object" && reactionsRaw
+              ? Object.keys(reactionsRaw).filter(Boolean)
+              : [];
+          const linkPreviewRaw = metadata && typeof metadata.link_preview === "object" ? metadata.link_preview : null;
+          const linkPreview = linkPreviewRaw
+            ? {
+                url: String(linkPreviewRaw.url || linkPreviewRaw.link || "").trim(),
+                title: String(linkPreviewRaw.title || "").trim(),
+                description: String(linkPreviewRaw.description || linkPreviewRaw.desc || "").trim(),
+                image: String(linkPreviewRaw.image || linkPreviewRaw.image_url || linkPreviewRaw.thumbnail || "").trim(),
+                domain: String(linkPreviewRaw.domain || "").trim()
+              }
+            : null;
+          const eventName = String((metadata && (metadata.zoko_event || metadata.event || metadata.system_event)) || "").trim();
+          const systemByText =
+            /message supprim[eé]|deleted this message|encryption|chiffrement|joined|left|added|removed|changed the subject/i.test(textRaw);
+          let kind = "text";
+          if (rawType.includes("system") || rawType.includes("notification") || rawType.includes("event") || systemByText || /group/i.test(eventName)) kind = "system";
+          else if (rawType.includes("video") || mimeType.startsWith("video/")) kind = "video";
+          else if (rawType.includes("audio") || rawType.includes("voice") || rawType.includes("ptt") || mimeType.startsWith("audio/")) kind = "audio";
+          else if (rawType.includes("image") || rawType.includes("photo") || mimeType.startsWith("image/")) kind = "image";
+          else if (rawType.includes("document") || rawType.includes("file") || mimeType.includes("pdf") || mimeType.includes("msword")) kind = "document";
+          else if (rawType.includes("link") || (linkPreview && linkPreview.url)) kind = "link_preview";
+          else if (textUrlMatch && !mediaUrl) kind = "link_preview";
+          else if (mediaUrl && /\.(mp4|mov|webm|m4v)(\?|$)/i.test(mediaUrl)) kind = "video";
+          else if (mediaUrl && /\.(mp3|m4a|ogg|wav|opus|aac)(\?|$)/i.test(mediaUrl)) kind = "audio";
+          else if (mediaUrl && /\.(png|jpe?g|webp|gif|bmp|avif|svg)(\?|$)/i.test(mediaUrl)) kind = "image";
+          else if (mediaUrl && /\.(pdf|docx?|xlsx?|pptx?|zip|rar|txt)(\?|$)/i.test(mediaUrl)) kind = "document";
+          else if (mediaUrl && !textRaw.trim()) kind = "document";
+          const delivery = String((metadata && (metadata.delivery_status || metadata.status || metadata.whatsapp_status)) || "").trim().toUpperCase();
+          const status = isBrand
+            ? (delivery === "READ" ? "read" : (delivery === "DELIVERED" ? "delivered" : "sent"))
+            : undefined;
+          const fileName = String((metadata && (metadata.file_name || metadata.filename || metadata.name)) || "").trim();
+          const fileSize = Number((metadata && (metadata.file_size || metadata.size || metadata.filesize)) || 0);
+          const durationSec = Number((metadata && (metadata.duration_sec || metadata.duration || metadata.audio_duration)) || 0);
           return {
             id: String((item && item.id) || ("msg-" + index)),
             from: isBrand ? "brand" : "client",
-            text: clampText((item && item.text) || ""),
+            text: textRaw,
             time: formatTime(item && item.created_at),
-            status: isBrand ? "sent" : undefined
+            status,
+            createdAt: String((item && item.created_at) || ""),
+            kind,
+            messageType: rawType,
+            mediaUrl,
+            thumbnailUrl: String((metadata && (metadata.thumbnail_url || metadata.preview_url || metadata.poster_url)) || "").trim(),
+            caption: String((metadata && metadata.caption) || "").trim(),
+            mimeType,
+            fileName,
+            fileSize: Number.isFinite(fileSize) ? fileSize : 0,
+            durationSec: Number.isFinite(durationSec) ? durationSec : 0,
+            linkPreview,
+            replyTo,
+            reactions,
+            eventName,
+            metadata
           };
         });
+      }
+
+      function safeUrl(raw) {
+        const value = String(raw || "").trim();
+        if (!value) return "";
+        try {
+          const parsed = new URL(value);
+          if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.toString();
+        } catch {}
+        return "";
+      }
+
+      function formatBytes(value) {
+        const size = Number(value || 0);
+        if (!Number.isFinite(size) || size <= 0) return "";
+        if (size < 1024) return size + " B";
+        if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
+        return (size / (1024 * 1024)).toFixed(1) + " MB";
+      }
+
+      function formatDuration(value) {
+        const sec = Math.max(0, Math.round(Number(value || 0)));
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return String(m).padStart(1, "0") + ":" + String(s).padStart(2, "0");
+      }
+
+      function renderTextWithLinks(text) {
+        const source = String(text || "");
+        const lines = source.split(/\n/);
+        return lines.map((line, lineIndex) => {
+          const parts = [];
+          const regex = /(https?:\/\/[^\s<>"')]+)/g;
+          let cursor = 0;
+          let match;
+          while ((match = regex.exec(line)) !== null) {
+            const url = String(match[0] || "");
+            if (match.index > cursor) parts.push({ type: "text", value: line.slice(cursor, match.index) });
+            parts.push({ type: "url", value: url });
+            cursor = match.index + url.length;
+          }
+          if (cursor < line.length) parts.push({ type: "text", value: line.slice(cursor) });
+          if (!parts.length) parts.push({ type: "text", value: "" });
+          return (
+            <div key={"line-" + lineIndex} className="line">
+              {parts.map((part, idx) => (
+                part.type === "url"
+                  ? <a key={"p-" + lineIndex + "-" + idx} href={part.value} target="_blank" rel="noreferrer noopener">{part.value}</a>
+                  : <React.Fragment key={"p-" + lineIndex + "-" + idx}>{part.value}</React.Fragment>
+              ))}
+            </div>
+          );
+        });
+      }
+
+      function TextMessage(props) {
+        return <div className="text">{renderTextWithLinks(props.message && props.message.text)}</div>;
+      }
+
+      function ImageMessage(props) {
+        const mediaUrl = safeUrl(props.message && props.message.mediaUrl);
+        if (!mediaUrl) return <TextMessage message={props.message} />;
+        return (
+          <div className="media-wrap">
+            <img
+              className="media-thumb"
+              src={mediaUrl}
+              alt="WhatsApp media"
+              loading="lazy"
+              onClick={() => props.onOpenMedia({ type: "image", url: mediaUrl, caption: props.message.caption || props.message.text || "" })}
+            />
+            {props.message.caption ? <div className="media-caption">{renderTextWithLinks(props.message.caption)}</div> : null}
+          </div>
+        );
+      }
+
+      function VideoMessage(props) {
+        const mediaUrl = safeUrl(props.message && props.message.mediaUrl);
+        const preview = safeUrl((props.message && props.message.thumbnailUrl) || mediaUrl);
+        if (!mediaUrl) return <TextMessage message={props.message} />;
+        return (
+          <div className="media-wrap">
+            <div className="video-thumb-wrap" onClick={() => props.onOpenMedia({ type: "video", url: mediaUrl, caption: props.message.caption || props.message.text || "" })}>
+              <img className="media-thumb" src={preview} alt="Video preview" loading="lazy" />
+              <div className="video-play">▶</div>
+            </div>
+            {props.message.caption ? <div className="media-caption">{renderTextWithLinks(props.message.caption)}</div> : null}
+          </div>
+        );
+      }
+
+      function AudioMessage(props) {
+        const mediaUrl = safeUrl(props.message && props.message.mediaUrl);
+        const [playing, setPlaying] = React.useState(false);
+        const audioRef = React.useRef(null);
+        function toggle() {
+          const node = audioRef.current;
+          if (!node) return;
+          if (playing) {
+            node.pause();
+            setPlaying(false);
+          } else {
+            void node.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+          }
+        }
+        return (
+          <div className="audio-chip">
+            <button className="mini-btn" style={{ width: "34px", height: "34px" }} onClick={toggle}>{playing ? "❚❚" : "▶"}</button>
+            <div className="audio-bars">
+              {Array.from({ length: 18 }).map((_, idx) => (
+                <span key={idx} style={{ height: (8 + (idx % 5) * 2) + "px" }} />
+              ))}
+            </div>
+            <div style={{ fontSize: "11px", minWidth: "40px", textAlign: "right" }}>
+              {props.message.durationSec ? formatDuration(props.message.durationSec) : ""}
+            </div>
+            {mediaUrl ? <audio ref={audioRef} src={mediaUrl} onEnded={() => setPlaying(false)} preload="none" /> : null}
+          </div>
+        );
+      }
+
+      function DocumentMessage(props) {
+        const mediaUrl = safeUrl(props.message && props.message.mediaUrl);
+        const name = String((props.message && props.message.fileName) || "").trim() || "Document";
+        const size = formatBytes(props.message && props.message.fileSize);
+        return (
+          <div className="doc-row">
+            <div className="doc-icon">📄</div>
+            <div className="doc-meta">
+              <div className="doc-name">{name}</div>
+              <div className="doc-sub">{size || (props.message && props.message.mimeType) || "File"}</div>
+            </div>
+            {mediaUrl ? <a className="doc-link" href={mediaUrl} target="_blank" rel="noreferrer noopener">Download</a> : null}
+          </div>
+        );
+      }
+
+      function LinkPreviewMessage(props) {
+        const preview = props.message && props.message.linkPreview ? props.message.linkPreview : null;
+        const fallbackUrl = safeUrl((props.message && props.message.mediaUrl) || (props.message && props.message.text));
+        const url = safeUrl(preview && preview.url) || fallbackUrl;
+        if (!url) return <TextMessage message={props.message} />;
+        let domain = "";
+        try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+        const image = safeUrl(preview && preview.image);
+        const title = String((preview && preview.title) || "").trim() || url;
+        const description = String((preview && preview.description) || "").trim();
+        return (
+          <a className="lp-card" href={url} target="_blank" rel="noreferrer noopener">
+            {image ? <img className="lp-img" src={image} alt="Link preview" loading="lazy" /> : null}
+            <div className="lp-body">
+              <div className="lp-domain">{String((preview && preview.domain) || domain || "link")}</div>
+              <div className="lp-title">{title}</div>
+              {description ? <div className="lp-desc">{description}</div> : null}
+            </div>
+          </a>
+        );
+      }
+
+      function SystemMessage(props) {
+        const text = String((props.message && (props.message.text || props.message.eventName || "System message")) || "System message").trim();
+        return (
+          <div className="sys-row">
+            <div className="sys-pill">{text}</div>
+          </div>
+        );
+      }
+
+      function MessageRenderer(props) {
+        const message = props.message || {};
+        const type = String(message.kind || message.messageType || "text").toLowerCase();
+        if (type === "system") return <SystemMessage message={message} />;
+        if (type === "image") return <ImageMessage message={message} onOpenMedia={props.onOpenMedia} />;
+        if (type === "video") return <VideoMessage message={message} onOpenMedia={props.onOpenMedia} />;
+        if (type === "audio") return <AudioMessage message={message} />;
+        if (type === "document") return <DocumentMessage message={message} />;
+        if (type === "link_preview") return <LinkPreviewMessage message={message} />;
+        if (type === "text" || type === "template") return <TextMessage message={message} />;
+        return <TextMessage message={{ ...message, text: (message.text || "[Unsupported message]") + " (" + String(message.messageType || "unknown") + ")" }} />;
+      }
+
+      function dayKeyFromIso(iso) {
+        const ts = Date.parse(String(iso || ""));
+        if (!Number.isFinite(ts)) return "";
+        const d = new Date(ts);
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      }
+
+      function dayLabelFromIso(iso) {
+        const ts = Date.parse(String(iso || ""));
+        if (!Number.isFinite(ts)) return "";
+        const d = new Date(ts);
+        return d.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
+      }
+
+      function renderConversationMessages(messages, opts) {
+        const list = Array.isArray(messages) ? messages : [];
+        const showDaySeparators = !(opts && opts.hideDaySeparators);
+        const rendered = [];
+        let lastDay = "";
+        list.forEach((message) => {
+          if (!message) return;
+          const currentDay = dayKeyFromIso(message.createdAt);
+          if (showDaySeparators && currentDay && currentDay !== lastDay) {
+            lastDay = currentDay;
+            rendered.push(<div key={"d-" + currentDay} className="day-sep">{dayLabelFromIso(message.createdAt)}</div>);
+          }
+          const own = message.from === "brand";
+          if (message.kind === "system") {
+            rendered.push(<SystemMessage key={message.id} message={message} />);
+            return;
+          }
+          rendered.push(
+            <div key={message.id} id={"msg-" + String(message.id)} className={"msg-row " + (own ? "brand" : "client")}>
+              <div className={"bubble " + (own ? "brand" : "client")}>
+                {message.replyTo && String(message.replyTo.text || "").trim() ? (
+                  <div
+                    className="quote-box"
+                    onClick={() => {
+                      if (opts && typeof opts.onJumpToMessage === "function") opts.onJumpToMessage(message.replyTo.id);
+                    }}
+                  >
+                    <div className="q-author">{message.replyTo.senderName || "Message"}</div>
+                    <div className="q-text">{clampText(message.replyTo.text)}</div>
+                  </div>
+                ) : null}
+                <MessageRenderer message={message} onOpenMedia={opts && opts.onOpenMedia} />
+                {message.reactions && message.reactions.length ? (
+                  <div className="react-row">
+                    {message.reactions.map((emoji, idx) => <span key={String(message.id) + "-r-" + idx} className="react-chip">{emoji}</span>)}
+                  </div>
+                ) : null}
+                <div className="meta">
+                  <span>{message.time}</span>
+                  {own ? <span>{message.status === "read" ? "✓✓" : message.status === "delivered" ? "✓✓" : "✓"}</span> : null}
+                </div>
+              </div>
+            </div>
+          );
+        });
+        return rendered;
       }
 
       function fallbackSuggestionsFromMessages(messages) {
@@ -5783,6 +6287,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [aiProvider, setAiProvider] = React.useState("claude");
         const [errorText, setErrorText] = React.useState("");
         const [mobileManualText, setMobileManualText] = React.useState("");
+        const [mediaViewer, setMediaViewer] = React.useState(null);
         const [cardBubbleSelection, setCardBubbleSelection] = React.useState({});
         const [mobileUiState, setMobileUiState] = React.useState({
           view: "inbox",
@@ -5823,6 +6328,25 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [streamDraftMessagesByLead, setStreamDraftMessagesByLead] = React.useState({});
         const [streamSendingLeadId, setStreamSendingLeadId] = React.useState("");
         const [streamManualTextByLead, setStreamManualTextByLead] = React.useState({});
+
+        const openMediaViewer = React.useCallback((payload) => {
+          if (!payload || !payload.url) return;
+          setMediaViewer({
+            type: String(payload.type || "image"),
+            url: String(payload.url || ""),
+            caption: String(payload.caption || "")
+          });
+        }, []);
+
+        const closeMediaViewer = React.useCallback(() => setMediaViewer(null), []);
+
+        const jumpToMessage = React.useCallback((messageId) => {
+          const safe = String(messageId || "").trim();
+          if (!safe) return;
+          const node = document.getElementById("msg-" + safe);
+          if (!node || !node.scrollIntoView) return;
+          node.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, []);
 
         const deviceOrder = React.useMemo(() => ["mobile", "tablet", "desktop"], []);
         const visibleDevices = viewMode === "all" ? deviceOrder : [viewMode];
@@ -6710,20 +7234,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   >
                     {errorText ? <div className="preview">{errorText}</div> : null}
                     {loadingMessages ? <div className="preview">Chargement messages...</div> : null}
-                    {selectedLead && Array.isArray(selectedLead.messages) && selectedLead.messages.map((message) => {
-                      const own = message.from === "brand";
-                      return (
-                        <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
-                          <div className={"bubble " + (own ? "brand" : "client")}>
-                            <div className="text">{clampText(message.text)}</div>
-                            <div className="meta">
-                              <span>{message.time}</span>
-                              {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {selectedLead && Array.isArray(selectedLead.messages)
+                      ? renderConversationMessages(selectedLead.messages, { onOpenMedia: openMediaViewer, onJumpToMessage: jumpToMessage })
+                      : null}
                   </div>
                   {renderMobileAiDrawer()}
                 </div>
@@ -6867,20 +7380,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   </div>
 
                   <div className="chat-messages" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-                    {messages.length ? messages.map((message) => {
-                      const own = message.from === "brand";
-                      return (
-                        <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
-                          <div className={"bubble " + (own ? "brand" : "client")}>
-                            <div className="text">{clampText(message.text)}</div>
-                            <div className="meta">
-                              <span>{message.time}</span>
-                              {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }) : <div className="preview">Chargement messages...</div>}
+                    {messages.length
+                      ? renderConversationMessages(messages, { onOpenMedia: openMediaViewer, onJumpToMessage: jumpToMessage })
+                      : <div className="preview">Chargement messages...</div>}
                   </div>
 
                   <div className="mobile-ai-cards" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
@@ -7202,20 +7704,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             <div className="chat-messages">
                               {errorText ? <div className="preview">{errorText}</div> : null}
                               {loadingMessages ? <div className="preview">Chargement messages...</div> : null}
-                              {selectedLead && Array.isArray(selectedLead.messages) && selectedLead.messages.map((message) => {
-                                const own = message.from === "brand";
-                                return (
-                                  <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
-                                    <div className={"bubble " + (own ? "brand" : "client")}>
-                                      <div className="text">{clampText(message.text)}</div>
-                                      <div className="meta">
-                                        <span>{message.time}</span>
-                                        {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                              {selectedLead && Array.isArray(selectedLead.messages)
+                                ? renderConversationMessages(selectedLead.messages, { onOpenMedia: openMediaViewer, onJumpToMessage: jumpToMessage })
+                                : null}
                             </div>
 
                             <div className="chat-panel-foot">
@@ -7374,20 +7865,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                           <div className="chat-messages">
                             {errorText ? <div className="preview">{errorText}</div> : null}
                             {loadingMessages ? <div className="preview">Chargement messages...</div> : null}
-                            {selectedLead && Array.isArray(selectedLead.messages) && selectedLead.messages.map((message) => {
-                              const own = message.from === "brand";
-                              return (
-                                <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
-                                  <div className={"bubble " + (own ? "brand" : "client")}>
-                                    <div className="text">{clampText(message.text)}</div>
-                                    <div className="meta">
-                                      <span>{message.time}</span>
-                                      {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                            {selectedLead && Array.isArray(selectedLead.messages)
+                              ? renderConversationMessages(selectedLead.messages, { onOpenMedia: openMediaViewer, onJumpToMessage: jumpToMessage })
+                              : null}
                           </div>
 
                           <div className="composer">
@@ -7424,6 +7904,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 ))}
               </div>
             )}
+            {mediaViewer ? (
+              <div className="media-viewer" onClick={closeMediaViewer}>
+                <button className="media-close" onClick={closeMediaViewer}>✕</button>
+                <div className="media-viewer-box" onClick={(event) => event.stopPropagation()}>
+                  {mediaViewer.type === "video"
+                    ? <video src={mediaViewer.url} controls autoPlay />
+                    : <img src={mediaViewer.url} alt="Media preview" />}
+                  {mediaViewer.caption ? <div className="media-caption" style={{ marginTop: "6px" }}>{renderTextWithLinks(mediaViewer.caption)}</div> : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         );
       }
