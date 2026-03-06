@@ -186,6 +186,10 @@ const aiAdvisorProviderSchema = z.object({
   provider: z.enum(["claude", "gpt"]).optional()
 });
 
+const leadIdParamSchema = z.object({
+  id: z.string().uuid()
+});
+
 const deleteTestLeadsSchema = z
   .object({
     mode: z.enum(["all"]).optional(),
@@ -2624,8 +2628,9 @@ async function postProcessAfterOutboundMessage(input: {
 }
 
 whatsappRouter.post("/api/whatsapp/leads/:id/messages", async (req, res) => {
-  const leadId = String(req.params.id || "").trim();
-  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
   const parsed = messageCreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
 
@@ -3084,8 +3089,9 @@ whatsappRouter.post("/api/leads/:leadId/send-approved-quote", async (req, res) =
 });
 
 whatsappRouter.get("/api/whatsapp/leads/:id/messages", async (req, res) => {
-  const leadId = String(req.params.id || "").trim();
-  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
   const parsed = z.object({ limit: z.coerce.number().int().min(1).max(200).optional() }).safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
   try {
@@ -3208,8 +3214,9 @@ whatsappRouter.get("/api/whatsapp/leads/:id/ai-runs", async (req, res) => {
 });
 
 whatsappRouter.get("/api/whatsapp/leads/:id/ai-latest", async (req, res) => {
-  const leadId = String(req.params.id || "").trim();
-  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
   try {
     const run = await getLatestAiAgentRunByLead(leadId);
     if (!run) return res.status(204).send();
@@ -3242,8 +3249,9 @@ whatsappRouter.get("/api/ai/runs/:runId", async (req, res) => {
 });
 
 whatsappRouter.get("/api/whatsapp/leads/:id/ai-flow-latest", async (req, res) => {
-  const leadId = String(req.params.id || "").trim();
-  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
   try {
     const run = await getLatestAiAgentRunByLead(leadId);
     if (!run) return res.status(204).send();
@@ -3288,8 +3296,9 @@ async function runAdvisorByProvider(input: {
 }
 
 whatsappRouter.post("/api/whatsapp/leads/:id/ai-retry", async (req, res) => {
-  const leadId = String(req.params.id || "").trim();
-  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
   const parsedBody = aiAdvisorProviderSchema.safeParse(req.body || {});
   if (!parsedBody.success) return res.status(400).json({ error: "invalid_body" });
   const provider = resolveAdvisorProvider(parsedBody.data.provider);
@@ -3316,8 +3325,9 @@ whatsappRouter.post("/api/whatsapp/leads/:id/ai-retry", async (req, res) => {
 });
 
 whatsappRouter.post("/api/whatsapp/leads/:id/ai-regenerate", async (req, res) => {
-  const leadId = String(req.params.id || "").trim();
-  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
   const parsedBody = aiAdvisorProviderSchema.safeParse(req.body || {});
   if (!parsedBody.success) return res.status(400).json({ error: "invalid_body" });
   const provider = resolveAdvisorProvider(parsedBody.data.provider);
@@ -5325,6 +5335,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         return parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("");
       }
 
+      function isUuidValue(value) {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim());
+      }
+
       function stageForUi(raw) {
         const value = String(raw || "").toUpperCase();
         if (value.includes("DEPOSIT")) return "DEPOSIT_PENDING";
@@ -5750,7 +5764,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }, []);
 
         const loadMessages = React.useCallback(async (leadId) => {
-          if (!LIVE_MODE || !leadId) return;
+          if (!LIVE_MODE || !leadId || !isUuidValue(leadId)) return;
           setLoadingMessages(true);
           try {
             const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/messages?limit=80");
@@ -5770,7 +5784,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }, [patchLead]);
 
         const loadSuggestions = React.useCallback(async (leadId, forceRegenerate) => {
-          if (!leadId) return;
+          if (!leadId || !isUuidValue(leadId)) return;
           if (!LIVE_MODE) return;
           setLoadingSuggestions(true);
           const applySuggestions = (cards) => {
@@ -5817,6 +5831,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
         React.useEffect(() => {
           if (!selectedLeadId) return;
+          if (LIVE_MODE && !isUuidValue(selectedLeadId)) return;
           if (!LIVE_MODE) return;
           void loadMessages(selectedLeadId);
           void loadSuggestions(selectedLeadId, false);
