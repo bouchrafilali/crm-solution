@@ -4661,7 +4661,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         border-radius: 2.2rem;
       }
       .shell.desktop {
-        max-width: 1500px;
+        max-width: 1452px;
         border-radius: 2rem;
       }
       .app-desktop {
@@ -4669,7 +4669,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         z-index: 3;
         height: 100%;
         display: grid;
-        grid-template-columns: 280px 560px minmax(320px, 1fr);
+        grid-template-columns: 364px 560px minmax(300px, 1fr);
         gap: 0;
       }
       .desk-col {
@@ -4703,6 +4703,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         display: flex;
         flex-direction: column;
         min-height: 0;
+        padding-top: 14px;
       }
       .desk-col.center .cards {
         display: flex;
@@ -4710,6 +4711,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         gap: 10px;
         overflow-x: auto;
         overflow-y: hidden;
+        margin-top: 14px;
         padding-bottom: 2px;
       }
       .chat-panel {
