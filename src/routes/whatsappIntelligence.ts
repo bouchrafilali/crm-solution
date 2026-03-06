@@ -5843,7 +5843,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         async function sendMessages(customMessages, sourceCardId) {
-          const payloadRaw = Array.isArray(customMessages) && customMessages.length ? customMessages : draftMessages;
+          const hasCustomMessages = Array.isArray(customMessages);
+          const payloadRaw = hasCustomMessages ? customMessages : draftMessages;
           if (!payloadRaw.length || sending || !selectedLead) return;
           setSending(true);
           try {
@@ -6055,7 +6056,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                         ))}
                                       </div>
                                       <div className="card-actions">
-                                        <button className="btn send" disabled={sending || !selectedForCard.length} onClick={() => { void sendMessages(selectedForCard, card.id); }}>Envoyer</button>
+                                        <button
+                                          className="btn send"
+                                          disabled={sending || !selectedForCard.length}
+                                          onClick={() => {
+                                            const selectedNow = selectedMessagesForCard(card);
+                                            void sendMessages(selectedNow, card.id);
+                                          }}
+                                        >
+                                          Envoyer
+                                        </button>
                                       </div>
                                     </div>
                                   );
@@ -6283,7 +6293,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                                 ))}
                                               </div>
                                               <div className="card-actions">
-                                                <button className="btn send" disabled={sending || !selectedForCard.length} onClick={() => { void sendMessages(selectedForCard, card.id); }}>Envoyer</button>
+                                                <button
+                                                  className="btn send"
+                                                  disabled={sending || !selectedForCard.length}
+                                                  onClick={() => {
+                                                    const selectedNow = selectedMessagesForCard(card);
+                                                    void sendMessages(selectedNow, card.id);
+                                                  }}
+                                                >
+                                                  Envoyer
+                                                </button>
                                               </div>
                                             </div>
                                           );
@@ -6426,7 +6445,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                         ))}
                                       </div>
                                       <div className="card-actions">
-                                        <button className="btn send" disabled={sending || !selectedForCard.length} onClick={() => { void sendMessages(selectedForCard, card.id); }}>Envoyer</button>
+                                        <button
+                                          className="btn send"
+                                          disabled={sending || !selectedForCard.length}
+                                          onClick={() => {
+                                            const selectedNow = selectedMessagesForCard(card);
+                                            void sendMessages(selectedNow, card.id);
+                                          }}
+                                        >
+                                          Envoyer
+                                        </button>
                                       </div>
                                     </div>
                                   );
