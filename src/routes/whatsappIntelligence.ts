@@ -5180,6 +5180,19 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         min-width: 244px;
         max-width: 244px;
       }
+      .stream-ai-cards {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        max-height: 320px;
+      }
+      .stream-ai-cards .card {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+      }
       .mobile-ai-handle {
         position: absolute;
         left: 0;
@@ -7405,7 +7418,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       : <div className="preview">Chargement messages...</div>}
                   </div>
 
-                  <div className="mobile-ai-cards" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+                  <div className="mobile-ai-cards stream-ai-cards" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
                     {suggestions.length
                       ? suggestions.map((card) => {
                         const selectedForCard = selectedStreamMessagesForCard(safeLeadId, card);
@@ -7531,7 +7544,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function renderOperatorStreamMode() {
-          const visibleLeads = streamAttentionLeads.slice(0, 9);
+          const primary = streamAttentionLeads.slice(0, 4);
+          const fallback = leads
+            .filter((lead) => !primary.some((picked) => String(picked.id) === String(lead.id)))
+            .sort((a, b) => leadAttentionAge(a) - leadAttentionAge(b))
+            .slice(0, Math.max(0, 4 - primary.length));
+          const visibleLeads = [...primary, ...fallback].slice(0, 4);
           return (
             <div className="stream-shell">
               <div className="stream-head">
