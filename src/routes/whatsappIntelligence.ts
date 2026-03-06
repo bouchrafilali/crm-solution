@@ -5028,7 +5028,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         top: 8px;
         right: 0;
         bottom: 8px;
-        width: 318px;
+        width: calc(100% - 8px);
         border-radius: 24px 0 0 24px;
         border: 1px solid rgba(170, 212, 255, .28);
         border-right: 0;
@@ -5211,9 +5211,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       const LEAD_ID = ${JSON.stringify(leadId)};
       const MAX_LEN = 120;
       const LIVE_MODE = String(MODE) !== "mock";
-      const MOBILE_DRAWER_WIDTH = 318;
       const MOBILE_DRAWER_PEEK = 34;
-      const MOBILE_DRAWER_CLOSED = MOBILE_DRAWER_WIDTH - MOBILE_DRAWER_PEEK;
+      const MOBILE_DRAWER_FALLBACK_WIDTH = 340;
+      const MOBILE_DRAWER_FALLBACK_CLOSED = MOBILE_DRAWER_FALLBACK_WIDTH - MOBILE_DRAWER_PEEK;
 
       function clampText(value) {
         const raw = String(value || "").replace(/\\s+/g, " ").trim();
@@ -5473,14 +5473,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
         const [aiProvider, setAiProvider] = React.useState("claude");
         const [errorText, setErrorText] = React.useState("");
-        const [mobileDrawerOffset, setMobileDrawerOffset] = React.useState(MOBILE_DRAWER_CLOSED);
+        const [mobileDrawerOffset, setMobileDrawerOffset] = React.useState(MOBILE_DRAWER_FALLBACK_CLOSED);
         const [mobileDrawerDragging, setMobileDrawerDragging] = React.useState(false);
-        const mobileDrawerOffsetRef = React.useRef(MOBILE_DRAWER_CLOSED);
+        const mobileDrawerOffsetRef = React.useRef(MOBILE_DRAWER_FALLBACK_CLOSED);
+        const mobileDrawerClosedRef = React.useRef(MOBILE_DRAWER_FALLBACK_CLOSED);
+        const mobileDrawerRef = React.useRef(null);
         const mobileDrawerDragRef = React.useRef({
           active: false,
           moved: false,
           startX: 0,
-          startOffset: MOBILE_DRAWER_CLOSED
+          startOffset: MOBILE_DRAWER_FALLBACK_CLOSED
         });
         const [viewMode, setViewMode] = React.useState("all");
 
@@ -5500,7 +5502,19 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function clampDrawerOffset(value) {
-          return Math.max(0, Math.min(MOBILE_DRAWER_CLOSED, Number(value) || 0));
+          return Math.max(0, Math.min(mobileDrawerClosedRef.current, Number(value) || 0));
+        }
+
+        function refreshMobileDrawerBounds() {
+          const drawerEl = mobileDrawerRef.current;
+          const width = drawerEl && drawerEl.getBoundingClientRect ? drawerEl.getBoundingClientRect().width : 0;
+          const closed = Math.max(0, Math.round((width || MOBILE_DRAWER_FALLBACK_WIDTH) - MOBILE_DRAWER_PEEK));
+          mobileDrawerClosedRef.current = closed;
+          setMobileDrawerOffset((current) => {
+            const clamped = Math.max(0, Math.min(closed, Number(current) || 0));
+            if (Math.abs(clamped - closed) < 2 || Math.abs(clamped - MOBILE_DRAWER_FALLBACK_CLOSED) < 2) return closed;
+            return clamped;
+          });
         }
 
         function onMobileDrawerPointerDown(event) {
@@ -5520,16 +5534,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           mobileDrawerDragRef.current.active = false;
           setMobileDrawerDragging(false);
           const current = mobileDrawerOffsetRef.current;
+          const closed = mobileDrawerClosedRef.current;
           const moved = mobileDrawerDragRef.current.moved;
           if (!moved) {
-            setMobileDrawerOffset(current > MOBILE_DRAWER_CLOSED * 0.5 ? 0 : MOBILE_DRAWER_CLOSED);
+            setMobileDrawerOffset(current > closed * 0.5 ? 0 : closed);
             return;
           }
-          setMobileDrawerOffset(current < MOBILE_DRAWER_CLOSED * 0.55 ? 0 : MOBILE_DRAWER_CLOSED);
+          setMobileDrawerOffset(current < closed * 0.55 ? 0 : closed);
         }
 
         function toggleMobileDrawer() {
-          setMobileDrawerOffset((current) => (current > MOBILE_DRAWER_CLOSED * 0.5 ? 0 : MOBILE_DRAWER_CLOSED));
+          setMobileDrawerOffset((current) => (current > mobileDrawerClosedRef.current * 0.5 ? 0 : mobileDrawerClosedRef.current));
         }
 
         const selectedLead = React.useMemo(
@@ -5657,6 +5672,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;
         }, [mobileDrawerOffset]);
+
+        React.useEffect(() => {
+          refreshMobileDrawerBounds();
+          function onResize() {
+            refreshMobileDrawerBounds();
+          }
+          window.addEventListener("resize", onResize);
+          return () => window.removeEventListener("resize", onResize);
+        }, []);
 
         React.useEffect(() => {
           function onMove(event) {
@@ -5985,6 +6009,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
                               <div
                                 className="mobile-ai-drawer"
+                                ref={mobileDrawerRef}
                                 style={{
                                   transform: "translateX(" + mobileDrawerOffset + "px)",
                                   transition: mobileDrawerDragging ? "none" : "transform .32s cubic-bezier(.22,.74,.22,1)"
