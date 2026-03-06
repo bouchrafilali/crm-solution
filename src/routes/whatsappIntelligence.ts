@@ -4939,6 +4939,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .name-line { display: flex; justify-content: space-between; gap: 8px; }
       .name-line .name { font-size: 15px; font-weight: 600; }
       .name-line .at { font-size: 11px; color: rgba(255,255,255,.45); white-space: nowrap; }
+      .name-line .at.unread { color: #67e8f9; font-weight: 700; }
       .preview { margin-top: 3px; font-size: 13px; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .lead-meta { margin-top: 7px; display: flex; align-items: center; gap: 7px; }
       .badge { border-radius: 999px; border: 1px solid transparent; padding: 4px 8px; font-size: 11px; }
@@ -5339,11 +5340,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       function relativeTime(raw) {
         const d = new Date(String(raw || ""));
         if (Number.isNaN(d.getTime())) return "Now";
+        const now = new Date();
+        const sameDay =
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === now.getDate();
+        if (sameDay) return formatTime(d.toISOString());
         const min = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
-        if (min < 1) return "Now";
-        if (min < 60) return min + " min";
+        if (min < 1) return formatTime(d.toISOString());
         const h = Math.floor(min / 60);
-        if (h < 24) return h + " h";
         return Math.floor(h / 24) + " j";
       }
 
@@ -5482,7 +5487,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           stage: stageForUi(stageRaw),
           stageLabel: stageRaw,
           urgency: urgencyForUi(lead && lead.urgency),
-          unread: 0,
+          unread: Math.max(0, Number((lead && (lead.unread_count ?? lead.unread)) || 0)),
           lastAt: relativeTime((lead && lead.last_activity_at) || (lead && lead.created_at)),
           preview: clampText((lead && lead.last_message_snippet) || "Conversation WhatsApp"),
           avatar: initials(lead && lead.client),
@@ -5719,7 +5724,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             patchLead(leadId, {
               messages,
               preview: last ? clampText(last.text) : "Conversation WhatsApp",
-              lastAt: "Now"
+              lastAt: last ? String(last.time || "") : formatTime(new Date().toISOString())
             });
           } catch (error) {
             setErrorText("Impossible de charger les messages.");
@@ -5886,7 +5891,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             if (!LIVE_MODE) {
               patchLead(selectedLead.id, {
                 preview: payload[payload.length - 1] || selectedLead.preview,
-                lastAt: "Now",
+                lastAt: formatTime(new Date().toISOString()),
                 messages: (selectedLead.messages || []).concat(
                   payload.map((msg, i) => ({
                     id: "draft-" + Date.now() + "-" + i,
@@ -6023,7 +6028,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     <div style={{ minWidth: 0, flex: 1 }}>
                                       <div className="name-line">
                                         <span className="name">{lead.name}</span>
-                                        <span className="at">{lead.lastAt}</span>
+                                        <span className={"at " + (lead.unread > 0 ? "unread" : "")}>{lead.lastAt}</span>
                                       </div>
                                       <div className="preview">{lead.preview}</div>
                                       <div className="lead-meta">
@@ -6212,7 +6217,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                         <div style={{ minWidth: 0, flex: 1 }}>
                                           <div className="name-line">
                                             <span className="name">{lead.name}</span>
-                                            <span className="at">{lead.lastAt}</span>
+                                            <span className={"at " + (lead.unread > 0 ? "unread" : "")}>{lead.lastAt}</span>
                                           </div>
                                           <div className="preview">{lead.preview}</div>
                                           <div className="lead-meta">
@@ -6428,7 +6433,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     <div style={{ minWidth: 0, flex: 1 }}>
                                       <div className="name-line">
                                         <span className="name">{lead.name}</span>
-                                        <span className="at">{lead.lastAt}</span>
+                                        <span className={"at " + (lead.unread > 0 ? "unread" : "")}>{lead.lastAt}</span>
                                       </div>
                                       <div className="preview">{lead.preview}</div>
                                       <div className="lead-meta">
