@@ -1,12 +1,10 @@
 import { Router } from "express";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { env } from "../config/env.js";
 import { isDbEnabled, withDbClient } from "../db/db.js";
 
 export const blueprintV2Router = Router();
-const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 
 function firstExistingPath(candidates: string[]): string | null {
   for (const candidate of candidates) {
@@ -148,8 +146,7 @@ blueprintV2Router.get("/api/blueprint", async (_req, res) => {
   try {
     const blueprintPath = firstExistingPath([
       join(process.cwd(), "system-blueprint.json"),
-      resolve(CURRENT_DIR, "../../system-blueprint.json"),
-      resolve(CURRENT_DIR, "../system-blueprint.json")
+      join(process.cwd(), "dist/system-blueprint.json")
     ]);
     const blueprint = blueprintPath
       ? JSON.parse(readFileSync(blueprintPath, "utf-8"))
@@ -244,13 +241,11 @@ function getNodeImportance(node: any): "core" | "secondary" {
 blueprintV2Router.get("/blueprint", (_req, res) => {
   const stylesPath = firstExistingPath([
     join(process.cwd(), "frontend/blueprint-v2/styles.css"),
-    resolve(CURRENT_DIR, "../../frontend/blueprint-v2/styles.css"),
-    resolve(CURRENT_DIR, "../frontend/blueprint-v2/styles.css")
+    join(process.cwd(), "dist/frontend/blueprint-v2/styles.css")
   ]);
   const appPath = firstExistingPath([
     join(process.cwd(), "frontend/blueprint-v2/app.js"),
-    resolve(CURRENT_DIR, "../../frontend/blueprint-v2/app.js"),
-    resolve(CURRENT_DIR, "../frontend/blueprint-v2/app.js")
+    join(process.cwd(), "dist/frontend/blueprint-v2/app.js")
   ]);
   
   let styles = "";
