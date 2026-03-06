@@ -44,6 +44,7 @@ async function dispatchWhatsAppText(message: WhatsAppOutboundMessage): Promise<W
     { channel, recipient: message.phoneNumber, type: "text", text: message.text },
     { channel, recipient: message.phoneNumber, text: message.text }
   ];
+  let lastFailure: string | null = null;
 
   for (const payload of payloadVariants) {
     try {
@@ -70,7 +71,9 @@ async function dispatchWhatsAppText(message: WhatsAppOutboundMessage): Promise<W
           payload: json
         };
       }
+      lastFailure = `zoko_http_${res.status}`;
     } catch {
+      lastFailure = "zoko_network_error";
       // Try next payload variant
     }
   }
@@ -78,7 +81,7 @@ async function dispatchWhatsAppText(message: WhatsAppOutboundMessage): Promise<W
   return {
     ok: false,
     provider: "zoko",
-    error: "zoko_send_failed"
+    error: lastFailure || "zoko_send_failed"
   };
 }
 
@@ -86,6 +89,7 @@ export async function dispatchWhatsAppFollowUp(
   kind: WhatsAppFollowUpKind,
   message: WhatsAppOutboundMessage
 ): Promise<WhatsAppDispatchResult> {
+  const allowPlaceholderDispatch = String(env.WHATSAPP_ALLOW_PLACEHOLDER_DISPATCH || "").trim().toLowerCase() === "true";
   const zokoResult = await dispatchWhatsAppText(message);
   if (zokoResult.ok) {
     console.log("[whatsapp] zoko dispatch", {
@@ -97,8 +101,23 @@ export async function dispatchWhatsAppFollowUp(
     return zokoResult;
   }
 
+  if (!allowPlaceholderDispatch) {
+    console.warn("[whatsapp] dispatch failed (no placeholder fallback)", {
+      kind,
+      leadId: message.leadId,
+      phoneNumber: message.phoneNumber,
+      shop: message.shop || null,
+      error: zokoResult.error || "zoko_send_failed"
+    });
+    return {
+      ok: false,
+      provider: "zoko",
+      error: zokoResult.error || "zoko_send_failed"
+    };
+  }
+
   const syntheticMessageId = `wa_${kind}_${Date.now()}_${message.leadId.slice(0, 8)}`;
-  console.log("[whatsapp] placeholder dispatch", {
+  console.warn("[whatsapp] placeholder dispatch enabled", {
     kind,
     leadId: message.leadId,
     phoneNumber: message.phoneNumber,

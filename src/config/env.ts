@@ -80,7 +80,8 @@ const envSchema = z.object({
   ZOKO_APPOINTMENT_CANCEL_TEMPLATE_NAME: z.string().optional(),
   SHOPIFY_APPOINTMENTS_METAFIELD_NAMESPACE: z.string().optional(),
   SHOPIFY_APPOINTMENTS_METAFIELD_KEY: z.string().optional(),
-  ZOKO_ALLOW_INSECURE_TLS: z.string().optional()
+  ZOKO_ALLOW_INSECURE_TLS: z.string().optional(),
+  WHATSAPP_ALLOW_PLACEHOLDER_DISPATCH: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);
