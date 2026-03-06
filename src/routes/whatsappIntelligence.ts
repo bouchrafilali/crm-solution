@@ -6777,6 +6777,36 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           return "Envoi WhatsApp échoué: " + raw;
         }
 
+        async function createSuggestionFeedbackPayload(leadId, cardId, cardText) {
+          const safeLeadId = String(leadId || "").trim();
+          const safeCardId = String(cardId || "").trim();
+          const safeText = String(cardText || "").trim();
+          if (!safeLeadId || !safeCardId || !safeText) return null;
+          try {
+            const payload = await fetchJson("/api/whatsapp/suggestions/cards/feedback-draft", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                leadId: safeLeadId,
+                cardId: safeCardId,
+                cardText: safeText
+              })
+            });
+            const token = String(payload && payload.feedback_token ? payload.feedback_token : "").trim();
+            if (!token) return null;
+            return {
+              id: token,
+              source: "manual",
+              suggestion_type: safeCardId,
+              suggested_text: safeText,
+              accepted: true
+            };
+          } catch (error) {
+            console.warn("[mobile-lab] feedback draft create failed", { leadId: safeLeadId, cardId: safeCardId, error });
+            return null;
+          }
+        }
+
         function appendOptimisticOutboundMessages(leadId, lines) {
           const safeLeadId = String(leadId || "").trim();
           const payload = Array.isArray(lines) ? lines.map((line) => String(line || "").trim()).filter(Boolean) : [];
@@ -6884,6 +6914,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             setDraftMessages([]);
             optimisticIds = appendOptimisticOutboundMessages(selectedLead.id, payload);
             for (let i = 0; i < payload.length; i += 1) {
+              const feedback = sourceCardId
+                ? await createSuggestionFeedbackPayload(selectedLead.id, sourceCardId, payload[i])
+                : null;
               await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(selectedLead.id) + "/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -6892,7 +6925,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   text: payload[i],
                   provider: "manual",
                   send_whatsapp: true,
-                  message_type: "text"
+                  message_type: "text",
+                  ...(feedback ? { suggestion_feedback: feedback } : {})
                 })
               });
               await sleep(80);
@@ -7035,6 +7069,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             setStreamDraftMessagesByLead((prev) => ({ ...prev, [safeLeadId]: [] }));
             optimisticIds = appendOptimisticOutboundMessages(safeLeadId, payload);
             for (let i = 0; i < payload.length; i += 1) {
+              const feedback = sourceCardId
+                ? await createSuggestionFeedbackPayload(safeLeadId, sourceCardId, payload[i])
+                : null;
               await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(safeLeadId) + "/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -7043,7 +7080,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   text: payload[i],
                   provider: "manual",
                   send_whatsapp: true,
-                  message_type: "text"
+                  message_type: "text",
+                  ...(feedback ? { suggestion_feedback: feedback } : {})
                 })
               });
               await sleep(80);
