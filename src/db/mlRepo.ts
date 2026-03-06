@@ -322,3 +322,65 @@ export async function createMlEvent(input: {
     createdAt: row.created_at
   };
 }
+
+export async function hasMlInferenceEventForMessage(input: {
+  leadId: string;
+  messageId: string;
+  modelKey: string;
+}): Promise<boolean> {
+  const db = getPoolOrThrow();
+  const q = await db.query<{ ok: number }>(
+    `
+      select 1 as ok
+      from ml_events
+      where event_type = 'INFERENCE'
+        and lead_id = $1::uuid
+        and model_key = $2::text
+        and payload->>'message_id' = $3::text
+      order by created_at desc
+      limit 1
+    `,
+    [input.leadId, String(input.modelKey || "").trim(), String(input.messageId || "").trim()]
+  );
+  return Boolean(q.rows[0]?.ok);
+}
+
+export async function getLatestMlInferenceEventByLead(input: {
+  leadId: string;
+  modelKey: string;
+}): Promise<MlEvent | null> {
+  const db = getPoolOrThrow();
+  const q = await db.query<{
+    id: string;
+    event_type: string;
+    model_key: string | null;
+    rule_id: string | null;
+    lead_id: string | null;
+    source: string | null;
+    payload: unknown;
+    created_at: string;
+  }>(
+    `
+      select id, event_type, model_key, rule_id, lead_id, source, payload, created_at
+      from ml_events
+      where event_type = 'INFERENCE'
+        and lead_id = $1::uuid
+        and model_key = $2::text
+      order by created_at desc
+      limit 1
+    `,
+    [input.leadId, String(input.modelKey || "").trim()]
+  );
+  const row = q.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    eventType: row.event_type as MlEvent["eventType"],
+    modelKey: row.model_key,
+    ruleId: row.rule_id,
+    leadId: row.lead_id,
+    source: row.source as MlEvent["source"],
+    payload: toObject(row.payload),
+    createdAt: row.created_at
+  };
+}

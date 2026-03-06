@@ -27,7 +27,52 @@ const ALLOWED_STAGES = new Set([
   "CONVERTED",
   "LOST"
 ]);
-const ALLOWED_GOALS = new Set(["qualification", "price", "deposit", "follow_up"]);
+const LEGACY_GOALS = new Set(["qualification", "price", "deposit", "follow_up", "video", "close"]);
+const DYNAMIC_CONVERSATION_STATES = new Set([
+  "qualification_incomplete",
+  "pricing_appropriate",
+  "objection_active",
+  "hesitation_detected",
+  "urgency_detected",
+  "delivery_concern",
+  "ready_for_conversion",
+  "stalled_conversation",
+  "deposit_likely",
+  "availability_check_needed",
+  "active_purchase_window"
+]);
+const DYNAMIC_MISSING_INFORMATION = new Set([
+  "event_date",
+  "destination_country",
+  "destination_city",
+  "budget_range",
+  "product_reference",
+  "size_or_measurements"
+]);
+const DYNAMIC_CUSTOMER_SIGNALS = new Set([
+  "price_request",
+  "availability_request",
+  "delivery_question",
+  "timeline_shared",
+  "budget_shared",
+  "objection_price",
+  "objection_trust",
+  "purchase_intent",
+  "hesitation",
+  "ready_to_buy"
+]);
+const DYNAMIC_NEXT_ACTIONS = new Set([
+  "ask_one_key_question",
+  "answer_directly",
+  "reassure",
+  "propose_call",
+  "provide_contextual_price",
+  "push_softly_to_deposit",
+  "reactivate_gently",
+  "availability_request",
+  "answer_and_qualify_lightly",
+  "propose_next_step"
+]);
 
 function resolveClaudeModel(rawValue: unknown): string {
   const raw = String(rawValue || "").trim();
@@ -96,6 +141,16 @@ function hasEmoji(value: string): boolean {
   return EMOJI_REGEX.test(String(value || ""));
 }
 
+function mapLegacyGoalToAction(goal: string): string {
+  const normalized = String(goal || "").trim().toLowerCase();
+  if (normalized === "qualification") return "ask_one_key_question";
+  if (normalized === "price") return "provide_contextual_price";
+  if (normalized === "deposit") return "push_softly_to_deposit";
+  if (normalized === "video") return "propose_call";
+  if (normalized === "close") return "propose_next_step";
+  return "answer_and_qualify_lightly";
+}
+
 export function validateAdvisorPayload(rawPayload: Record<string, unknown>): Record<string, unknown> {
   const payload = toRecord(rawPayload);
   const serialized = JSON.stringify(payload);
@@ -105,6 +160,33 @@ export function validateAdvisorPayload(rawPayload: Record<string, unknown>): Rec
   const analysis = toRecord(payload.analysis);
   const stage = String(analysis.stage || "").trim().toUpperCase();
   if (!ALLOWED_STAGES.has(stage)) throw new Error("claude_validation_failed:analysis_stage_invalid");
+  const dynamicDecisionRaw = toRecord(analysis.dynamic_decision || payload.dynamic_decision);
+  const dynamicConversationState = Array.isArray(dynamicDecisionRaw.conversation_state)
+    ? dynamicDecisionRaw.conversation_state.map((x) => String(x || "").trim()).filter((x) => DYNAMIC_CONVERSATION_STATES.has(x))
+    : [];
+  const dynamicMissingInformation = Array.isArray(dynamicDecisionRaw.missing_information)
+    ? dynamicDecisionRaw.missing_information
+        .map((x) => String(x || "").trim())
+        .filter((x) => DYNAMIC_MISSING_INFORMATION.has(x))
+    : [];
+  const dynamicCustomerSignals = Array.isArray(dynamicDecisionRaw.customer_signals)
+    ? dynamicDecisionRaw.customer_signals.map((x) => String(x || "").trim()).filter((x) => DYNAMIC_CUSTOMER_SIGNALS.has(x))
+    : [];
+  const firstSuggestionGoal = Array.isArray(payload.suggestions) && payload.suggestions[0] && typeof payload.suggestions[0] === "object"
+    ? String(toRecord(payload.suggestions[0]).goal || "").trim().toLowerCase()
+    : "";
+  const dynamicNextActionRaw =
+    String(dynamicDecisionRaw.recommended_next_action || payload.recommended_next_action || "").trim().toLowerCase() ||
+    mapLegacyGoalToAction(firstSuggestionGoal);
+  const dynamicNextAction = DYNAMIC_NEXT_ACTIONS.has(dynamicNextActionRaw)
+    ? dynamicNextActionRaw
+    : "answer_and_qualify_lightly";
+  const dynamicConfidenceRaw = Number(dynamicDecisionRaw.confidence);
+  const dynamicConfidence =
+    Number.isFinite(dynamicConfidenceRaw) && dynamicConfidenceRaw >= 0 && dynamicConfidenceRaw <= 1
+      ? dynamicConfidenceRaw
+      : 0.62;
+  const dynamicReasoningShort = String(dynamicDecisionRaw.reasoning_short || "").trim();
 
   const suggestionsRaw = Array.isArray(payload.suggestions) ? payload.suggestions : [];
   if (!suggestionsRaw.length) throw new Error("claude_validation_failed:suggestions_missing");
@@ -112,8 +194,10 @@ export function validateAdvisorPayload(rawPayload: Record<string, unknown>): Rec
   const suggestions = suggestionsRaw.map((entry, index) => {
     const item = toRecord(entry);
     const id = String(item.id || `s${index + 1}`).trim() || `s${index + 1}`;
-    const goal = String(item.goal || "").trim().toLowerCase();
-    if (!ALLOWED_GOALS.has(goal)) throw new Error(`claude_validation_failed:suggestion_goal_invalid_${index + 1}`);
+    const goal = String(item.goal || dynamicNextAction || "").trim().toLowerCase();
+    if (!goal || (!LEGACY_GOALS.has(goal) && !DYNAMIC_NEXT_ACTIONS.has(goal))) {
+      throw new Error(`claude_validation_failed:suggestion_goal_invalid_${index + 1}`);
+    }
     const confidence = Number(item.confidence);
     if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
       throw new Error(`claude_validation_failed:suggestion_confidence_invalid_${index + 1}`);
@@ -140,6 +224,14 @@ export function validateAdvisorPayload(rawPayload: Record<string, unknown>): Rec
     analysis: {
       stage,
       reasoning: String(analysis.reasoning || "").trim(),
+      dynamic_decision: {
+        conversation_state: dynamicConversationState,
+        missing_information: dynamicMissingInformation,
+        customer_signals: dynamicCustomerSignals,
+        recommended_next_action: dynamicNextAction,
+        confidence: dynamicConfidence,
+        reasoning_short: dynamicReasoningShort
+      },
       missing_information: Array.isArray(analysis.missing_information)
         ? analysis.missing_information.map((x) => String(x || "").trim()).filter(Boolean)
         : [],
@@ -166,6 +258,14 @@ export function validateAdvisorPayload(rawPayload: Record<string, unknown>): Rec
         level: String(toRecord(analysis.urgency).level || "").trim().toLowerCase() || "low",
         reason: String(toRecord(analysis.urgency).reason || "").trim()
       }
+    },
+    dynamic_decision: {
+      conversation_state: dynamicConversationState,
+      missing_information: dynamicMissingInformation,
+      customer_signals: dynamicCustomerSignals,
+      recommended_next_action: dynamicNextAction,
+      confidence: dynamicConfidence,
+      reasoning_short: dynamicReasoningShort
     },
     suggestions
   };
@@ -206,11 +306,21 @@ export function buildAdvisorPrompt(
     "Do NOT output markdown.",
     "Do NOT output any free text outside JSON.",
     "Do NOT output emoji characters anywhere in JSON.",
+    "Primary principle: decide the most appropriate NEXT ACTION now from context.",
+    "Stage labels are secondary metadata for CRM/reporting only.",
     "Use this exact output schema:",
     "{",
     '  "analysis": {',
     '    "stage": "NEW | PRODUCT_INTEREST | QUALIFICATION_PENDING | QUALIFIED | PRICE_SENT | DEPOSIT_PENDING | CONFIRMED | CONVERTED | LOST",',
     '    "reasoning": "short internal reasoning",',
+    '    "dynamic_decision": {',
+    '      "conversation_state": ["qualification_incomplete | pricing_appropriate | objection_active | hesitation_detected | urgency_detected | delivery_concern | ready_for_conversion | stalled_conversation | deposit_likely | availability_check_needed | active_purchase_window"],',
+    '      "missing_information": ["event_date | destination_country | destination_city | budget_range | product_reference | size_or_measurements"],',
+    '      "customer_signals": ["price_request | availability_request | delivery_question | timeline_shared | budget_shared | objection_price | objection_trust | purchase_intent | hesitation | ready_to_buy"],',
+    '      "recommended_next_action": "ask_one_key_question | answer_directly | reassure | propose_call | provide_contextual_price | push_softly_to_deposit | reactivate_gently | availability_request | answer_and_qualify_lightly | propose_next_step",',
+    '      "confidence": 0.0,',
+    '      "reasoning_short": "short justification"',
+    "    },",
     '    "missing_information": ["event_date","destination","budget"],',
     '    "detected_signals": [{ "key": "product", "value": "..." }],',
     '    "risk_flags": [{ "level": "low|medium|high", "label": "...", "detail": "..." }],',
@@ -219,7 +329,7 @@ export function buildAdvisorPrompt(
     '  "suggestions": [',
     "    {",
     '      "id": "s1",',
-    '      "goal": "qualification | price | deposit | follow_up",',
+    '      "goal": "recommended_next_action value (preferred) OR qualification | price | deposit | follow_up",',
     '      "confidence": 0.0,',
     '      "messages": ["Message bubble 1","Message bubble 2","Message bubble 3"],',
     '      "rationale": "short internal rationale (drawer only)"',
@@ -232,8 +342,8 @@ export function buildAdvisorPrompt(
     "3) Keep each bubble short and natural (target <=120 chars when possible).",
     "4) Luxury tone: calm, precise, respectful, minimal.",
     "5) STRICT NO EMOJIS anywhere (analysis or suggestions).",
-    "6) Qualification-before-price is mandatory.",
-    "7) If event date or destination is missing, ask them first.",
+    "6) Do NOT force qualification just because some fields are missing.",
+    "7) Ask missing data only when it blocks the immediate next commercial action.",
     "8) messages[] must be ready to send as-is.",
     "9) Avoid superlatives and hype language.",
     "Return up to 3 suggestions.",

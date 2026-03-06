@@ -47,6 +47,14 @@ export type NormalizedAdvisorRun = {
   missingInfo: string[];
   riskFlags: NormalizedRiskFlag[];
   suggestions: NormalizedSuggestion[];
+  dynamicDecision?: {
+    conversationState: string[];
+    missingInformation: string[];
+    customerSignals: string[];
+    recommendedNextAction: string;
+    confidence: number;
+    reasoningShort: string;
+  };
   analysis: {
     stage: string;
     reasoning: string;
@@ -270,6 +278,16 @@ function normalizeRiskLevel(value: unknown): NormalizedRiskLevel {
 function normalizeGoal(rawGoal: unknown): string {
   const raw = String(rawGoal || "").trim().toUpperCase();
   if (!raw) return "FOLLOW_UP";
+  if (raw.includes("ASK_ONE_KEY_QUESTION")) return "QUALIFICATION";
+  if (raw.includes("ANSWER_AND_QUALIFY_LIGHTLY")) return "QUALIFICATION";
+  if (raw.includes("AVAILABILITY_REQUEST")) return "QUALIFICATION";
+  if (raw.includes("PROVIDE_CONTEXTUAL_PRICE")) return "PRICE";
+  if (raw.includes("PUSH_SOFTLY_TO_DEPOSIT")) return "DEPOSIT";
+  if (raw.includes("PROPOSE_NEXT_STEP")) return "CLOSE";
+  if (raw.includes("ANSWER_DIRECTLY")) return "FOLLOW_UP";
+  if (raw.includes("REASSURE")) return "FOLLOW_UP";
+  if (raw.includes("REACTIVATE_GENTLY")) return "FOLLOW_UP";
+  if (raw.includes("PROPOSE_CALL")) return "VIDEO";
   if (raw.includes("QUAL")) return "QUALIFICATION";
   if (raw.includes("PRICE")) return "PRICE";
   if (raw.includes("DEPOSIT")) return "DEPOSIT";
@@ -325,6 +343,11 @@ function normalizeSuggestions(response: Record<string, unknown>): NormalizedSugg
 
 function normalizeMissingInfo(response: Record<string, unknown>): string[] {
   const analysis = toRecord(response.analysis);
+  const dynamic = toRecord(analysis.dynamic_decision || response.dynamic_decision);
+  const dynamicMissing = Array.isArray(dynamic.missing_information) ? dynamic.missing_information : [];
+  if (dynamicMissing.length) {
+    return dynamicMissing.map((x) => String(x || "").trim()).filter(Boolean);
+  }
   const raw = Array.isArray(analysis.missing_information)
     ? analysis.missing_information
     : Array.isArray(response.missingInfo)
@@ -335,6 +358,28 @@ function normalizeMissingInfo(response: Record<string, unknown>): string[] {
         ? response.missing
         : [];
   return raw.map((x) => String(x || "").trim()).filter(Boolean);
+}
+
+function normalizeDynamicDecision(response: Record<string, unknown>): NormalizedAdvisorRun["dynamicDecision"] {
+  const analysis = toRecord(response.analysis);
+  const dynamic = toRecord(analysis.dynamic_decision || response.dynamic_decision);
+  const recommendedNextAction = String(dynamic.recommended_next_action || "").trim();
+  if (!recommendedNextAction) return undefined;
+  const confidence = normalizeConfidence(dynamic.confidence, 0.5);
+  return {
+    conversationState: Array.isArray(dynamic.conversation_state)
+      ? dynamic.conversation_state.map((x) => String(x || "").trim()).filter(Boolean)
+      : [],
+    missingInformation: Array.isArray(dynamic.missing_information)
+      ? dynamic.missing_information.map((x) => String(x || "").trim()).filter(Boolean)
+      : [],
+    customerSignals: Array.isArray(dynamic.customer_signals)
+      ? dynamic.customer_signals.map((x) => String(x || "").trim()).filter(Boolean)
+      : [],
+    recommendedNextAction,
+    confidence,
+    reasoningShort: String(dynamic.reasoning_short || "").trim()
+  };
 }
 
 function normalizeSignals(response: Record<string, unknown>): NormalizedSignal[] {
@@ -499,6 +544,7 @@ export function normalizeAdvisorRun(run: AiAgentRunRecord | null): NormalizedAdv
   const detectedSignals = normalizeSignals(response);
   const riskFlags = normalizeRiskFlags(response);
   const suggestions = normalizeSuggestions(response);
+  const dynamicDecision = normalizeDynamicDecision(response);
   const analysisReasoning = String(analysisObj.reasoning || "").trim();
   const analysis = {
     stage: stage.value,
@@ -523,6 +569,7 @@ export function normalizeAdvisorRun(run: AiAgentRunRecord | null): NormalizedAdv
     missingInfo,
     riskFlags,
     suggestions,
+    dynamicDecision,
     analysis,
     explain: {
       stage,

@@ -33,6 +33,16 @@ function clamp01(value: number): number {
 function normalizeGoal(input: unknown): string {
   const raw = String(input || "").trim().toUpperCase();
   if (!raw) return "FOLLOW_UP";
+  if (raw.includes("ASK_ONE_KEY_QUESTION")) return "QUALIFICATION";
+  if (raw.includes("ANSWER_AND_QUALIFY_LIGHTLY")) return "QUALIFICATION";
+  if (raw.includes("AVAILABILITY_REQUEST")) return "QUALIFICATION";
+  if (raw.includes("PROVIDE_CONTEXTUAL_PRICE")) return "PRICE";
+  if (raw.includes("PUSH_SOFTLY_TO_DEPOSIT")) return "DEPOSIT";
+  if (raw.includes("PROPOSE_NEXT_STEP")) return "CLOSE";
+  if (raw.includes("ANSWER_DIRECTLY")) return "FOLLOW_UP";
+  if (raw.includes("REASSURE")) return "FOLLOW_UP";
+  if (raw.includes("REACTIVATE_GENTLY")) return "FOLLOW_UP";
+  if (raw.includes("PROPOSE_CALL")) return "VIDEO";
   if (raw.includes("QUAL")) return "QUALIFICATION";
   if (raw.includes("PRICE")) return "PRICE";
   if (raw.includes("DEPOSIT")) return "DEPOSIT";
@@ -94,7 +104,11 @@ function parseSuggestions(response: Record<string, unknown>): LatestSuggestion[]
 
 export function normalizeAiLatestRun(run: AiAgentRunRecord): AiLatestPayload {
   const response = toRecord(run.responseJson || {});
-  const missingInfo = Array.isArray(response.missing_info)
+  const analysis = toRecord(response.analysis);
+  const dynamic = toRecord(analysis.dynamic_decision || response.dynamic_decision);
+  const missingInfo = Array.isArray(dynamic.missing_information)
+    ? dynamic.missing_information.map((x) => String(x || "").trim()).filter(Boolean)
+    : Array.isArray(response.missing_info)
     ? response.missing_info.map((x) => String(x || "").trim()).filter(Boolean)
     : Array.isArray(response.missing)
       ? response.missing.map((x) => String(x || "").trim()).filter(Boolean)

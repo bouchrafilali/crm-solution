@@ -41,6 +41,8 @@ const envSchema = z.object({
   WHATSAPP_TEAM_NUMBER: z.string().optional(),
   WHATSAPP_AI_PROMPTS_JSON: z.string().optional(),
   WHATSAPP_AI_AUTO_ANALYZE: z.string().optional(),
+  WHATSAPP_DYNAMIC_DECISION_SHADOW_ENABLED: z.string().optional(),
+  WHATSAPP_DYNAMIC_DECISION_DEBUG: z.string().optional(),
   ZOKO_API_URL: z.string().url().optional(),
   ZOKO_TEMPLATES_API_URL: z.string().url().optional(),
   ZOKO_SEND_TEMPLATE_API_URL: z.string().url().optional(),

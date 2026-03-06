@@ -9,6 +9,7 @@ import { runAuto24hFollowupRuleForLead } from "./autoFollowUpRule.js";
 import { applyDetectedPriceForLeadMessage, inferTicketValueForLead } from "./ticketValueInference.js";
 import { recomputeLeadSla } from "./slaPrioritization.js";
 import { onMessagePersisted as onMessagePersistedAdvisor } from "./onMessagePersisted.js";
+import { runDynamicDecisionShadowForMessage } from "./dynamicDecisionShadow.js";
 
 export type MessageTrackingSource =
   | "INBOUND"
@@ -97,6 +98,21 @@ export async function createWhatsAppLeadMessageWithTracking(
 
   // Non-blocking Claude advisor analysis hook (inbound + outbound).
   onMessagePersistedAdvisor(input.leadId, message.id);
+  setImmediate(() => {
+    void runDynamicDecisionShadowForMessage({
+      leadId: input.leadId,
+      messageId: message.id,
+      source: meta.source,
+      triggerSource: "message_persisted"
+    }).catch((error) => {
+      console.warn("[dynamic-decision-shadow] evaluate failed", {
+        leadId: input.leadId,
+        messageId: message.id,
+        source: meta.source,
+        error
+      });
+    });
+  });
 
   try {
     await onMessagePersisted(input.leadId, message, meta);

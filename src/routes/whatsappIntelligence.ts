@@ -99,7 +99,7 @@ import {
   markSuggestionOutcome,
   updateSuggestionReviewStatus
 } from "../db/whatsappSuggestionFeedbackRepo.js";
-import { createMlEvent } from "../db/mlRepo.js";
+import { createMlEvent, getLatestMlInferenceEventByLead } from "../db/mlRepo.js";
 import { generateAiPersonalSuggestions } from "../services/aiPersonalSuggestions.js";
 import { getLeadConversionMetricsByLeadId } from "../db/leadConversionMetricsRepo.js";
 import { listLeadPriceQuotes } from "../db/leadPriceQuotesRepo.js";
@@ -117,6 +117,10 @@ import {
 } from "../services/aiNormalize.js";
 import { runClaudeAdvisor } from "../services/claudeAdvisor.js";
 import { runOpenAiAdvisor } from "../services/openaiAdvisor.js";
+import {
+  DYNAMIC_DECISION_MODEL_KEY,
+  isDynamicDecisionDebugEnabled
+} from "../services/dynamicDecisionShadow.js";
 import {
   applyTeamPriceOverrideFromLeadOutbound,
   composeApprovedQuoteClientText,
@@ -3228,6 +3232,30 @@ whatsappRouter.get("/api/whatsapp/leads/:id/ai-latest", async (req, res) => {
   }
 });
 
+whatsappRouter.get("/api/whatsapp/leads/:id/dynamic-decision-latest", async (req, res) => {
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  if (!isDynamicDecisionDebugEnabled()) return res.status(403).json({ error: "debug_disabled" });
+  const leadId = parsedLeadId.data.id;
+  try {
+    const event = await getLatestMlInferenceEventByLead({
+      leadId,
+      modelKey: DYNAMIC_DECISION_MODEL_KEY
+    });
+    if (!event) return res.status(204).send();
+    return res.status(200).json({
+      id: event.id,
+      model_key: event.modelKey,
+      source: event.source,
+      created_at: event.createdAt,
+      payload: event.payload || {}
+    });
+  } catch (error) {
+    console.error("[whatsapp] dynamic-decision-latest failed", { leadId, error });
+    return res.status(503).json({ error: "dynamic_decision_unavailable" });
+  }
+});
+
 whatsappRouter.get("/api/ai/runs/:runId", async (req, res) => {
   const parsed = aiRunIdSchema.safeParse({ runId: req.params.runId });
   if (!parsed.success) return res.status(400).json({ error: "invalid_run_id" });
@@ -5317,6 +5345,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
     <script type="text/babel">
       const MODE = ${JSON.stringify(mode)};
       const LEAD_ID = ${JSON.stringify(leadId)};
+      const SHOW_DYNAMIC_DEBUG = ${isDynamicDecisionDebugEnabled() ? "true" : "false"};
       const MAX_LEN = 120;
       const LIVE_MODE = String(MODE) !== "mock";
       const MOBILE_DRAWER_PEEK = 0;
@@ -5415,6 +5444,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (split.length >= 2) return split.slice(0, 4);
         }
         return ["Bonjour, merci pour votre message.", "Je vous partage une proposition adaptée dans un instant."];
+      }
+
+      function normalizeBubbleSet(messages) {
+        const list = Array.isArray(messages) ? messages : [];
+        return list
+          .flatMap((text) => splitToBubbles(text))
+          .map((text) => String(text || "").trim())
+          .filter(Boolean)
+          .slice(0, 4);
       }
 
       function withNav(path) {
@@ -5520,6 +5558,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           lastAt: relativeTime((lead && lead.last_activity_at) || (lead && lead.created_at)),
           preview: clampText((lead && lead.last_message_snippet) || "Conversation WhatsApp"),
           avatar: initials(lead && lead.client),
+          aiDebug: null,
           suggestions: [],
           messages: []
         };
@@ -5577,6 +5616,50 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             messages: ensureBubbleSet(rawMessages)
           };
         });
+      }
+
+      function extractDynamicDecisionDebug(runPayload, provider) {
+        const payload = runPayload && typeof runPayload === "object" ? runPayload : null;
+        if (!payload) return null;
+        const dynamic =
+          payload.dynamicDecision && typeof payload.dynamicDecision === "object"
+            ? payload.dynamicDecision
+            : payload.dynamic_decision && typeof payload.dynamic_decision === "object"
+              ? payload.dynamic_decision
+              : payload.analysis && payload.analysis.dynamic_decision && typeof payload.analysis.dynamic_decision === "object"
+                ? payload.analysis.dynamic_decision
+                : null;
+        if (!dynamic) return null;
+        const action = String(dynamic.recommendedNextAction || dynamic.recommended_next_action || "").trim();
+        if (!action) return null;
+        const confidenceRaw = Number(dynamic.confidence);
+        const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(1, confidenceRaw)) : 0.5;
+        const states = Array.isArray(dynamic.conversationState)
+          ? dynamic.conversationState
+          : Array.isArray(dynamic.conversation_state)
+            ? dynamic.conversation_state
+            : [];
+        const missing = Array.isArray(dynamic.missingInformation)
+          ? dynamic.missingInformation
+          : Array.isArray(dynamic.missing_information)
+            ? dynamic.missing_information
+            : [];
+        const signals = Array.isArray(dynamic.customerSignals)
+          ? dynamic.customerSignals
+          : Array.isArray(dynamic.customer_signals)
+            ? dynamic.customer_signals
+            : [];
+        return {
+          action,
+          confidence,
+          states: states.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 8),
+          missing: missing.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 8),
+          signals: signals.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 8),
+          reasoning: String(dynamic.reasoningShort || dynamic.reasoning_short || "").trim(),
+          provider: String(provider || payload.model || "").toUpperCase(),
+          runId: String(payload.runId || payload.run_id || "").trim(),
+          at: String(payload.createdAt || payload.created_at || "").trim()
+        };
       }
 
       function App() {
@@ -5751,7 +5834,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               return mapped.map((lead) => {
                 const old = prevMap.get(String(lead.id));
                 return old
-                  ? { ...lead, messages: Array.isArray(old.messages) ? old.messages : [], suggestions: Array.isArray(old.suggestions) ? old.suggestions : [] }
+                  ? {
+                      ...lead,
+                      aiDebug: old.aiDebug || null,
+                      messages: Array.isArray(old.messages) ? old.messages : [],
+                      suggestions: Array.isArray(old.suggestions) ? old.suggestions : []
+                    }
                   : lead;
               });
             });
@@ -5792,12 +5880,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!leadId || !isUuidValue(leadId)) return;
           if (!LIVE_MODE) return;
           setLoadingSuggestions(true);
-          const applySuggestions = (cards) => {
+          const applySuggestions = (cards, runPayload) => {
+            const dynamicDebug = extractDynamicDecisionDebug(runPayload, aiProvider);
             setLeads((prev) =>
               prev.map((lead) => {
                 if (String(lead.id) !== String(leadId)) return lead;
                 const fallback = fallbackSuggestionsFromMessages(Array.isArray(lead.messages) ? lead.messages : []);
-                return { ...lead, suggestions: Array.isArray(cards) && cards.length ? cards : fallback };
+                return {
+                  ...lead,
+                  aiDebug: dynamicDebug || lead.aiDebug || null,
+                  suggestions: Array.isArray(cards) && cards.length ? cards : fallback
+                };
               })
             );
           };
@@ -5820,9 +5913,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               });
             }
             const mapped = mapAiSuggestions(runPayload, aiProvider);
-            applySuggestions(mapped);
+            applySuggestions(mapped, runPayload);
           } catch (error) {
-            applySuggestions([]);
+            applySuggestions([], null);
             console.error("[mobile-lab] load suggestions failed", { leadId, error });
           } finally {
             setLoadingSuggestions(false);
@@ -5925,7 +6018,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }, [mobileBackSwipeOffset, mobileUiState.view]);
 
         function selectedMessagesForCard(card) {
-          const list = ensureBubbleSet(card && card.messages);
+          const list = normalizeBubbleSet(card && card.messages);
           const selectedMap = cardBubbleSelection && cardBubbleSelection[card && card.id] ? cardBubbleSelection[card.id] : {};
           return list.filter((_, index) => Boolean(selectedMap[index]));
         }
@@ -5955,7 +6048,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function toggleCardBubble(card, index) {
-          const list = ensureBubbleSet(card && card.messages);
+          const list = normalizeBubbleSet(card && card.messages);
           setCardBubbleSelection((prev) => {
             const current = { ...(prev && prev[card.id] ? prev[card.id] : {}) };
             if (current[index]) delete current[index];
@@ -5981,7 +6074,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           }
           setSending(true);
           try {
-            const payload = ensureBubbleSet(payloadRaw);
+            const payload = normalizeBubbleSet(payloadRaw);
+            if (!payload.length) {
+              setErrorText("Aucune bulle valide à envoyer.");
+              return;
+            }
             if (!LIVE_MODE) {
               setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
               return;
@@ -6009,10 +6106,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   const nextSuggestions = (Array.isArray(lead.suggestions) ? lead.suggestions : [])
                     .map((card) => {
                       if (String(card.id) !== String(sourceCardId)) return card;
-                      const remaining = ensureBubbleSet(card.messages).filter((line) => !sent.has(String(line || "").trim()));
+                      const remaining = normalizeBubbleSet(card.messages).filter((line) => !sent.has(String(line || "").trim()));
                       return { ...card, messages: remaining };
                     })
-                    .filter((card) => ensureBubbleSet(card.messages).length > 0);
+                    .filter((card) => normalizeBubbleSet(card.messages).length > 0);
                   return { ...lead, suggestions: nextSuggestions };
                 })
               );
@@ -6226,7 +6323,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             <div className="card-zap">⚡</div>
                           </div>
                           <div className="snips">
-                            {ensureBubbleSet(card.messages).map((msg, i) => (
+                            {normalizeBubbleSet(card.messages).map((msg, i) => (
                               <div
                                 key={i}
                                 className={"snip " + (isCardBubbleSelected(card, i) ? "selected" : "")}
@@ -6361,6 +6458,27 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   <span>✦ Suggestions 2–4 messages · ≤120 caractères</span>
                   <span>{LIVE_MODE ? "Live API" : "Mock mode"}</span>
                 </div>
+                {SHOW_DYNAMIC_DEBUG && selectedLead && selectedLead.aiDebug ? (
+                  <div
+                    style={{
+                      marginTop: "8px",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(113, 145, 196, .34)",
+                      background: "rgba(8, 16, 33, .55)",
+                      padding: "8px 10px",
+                      fontSize: "11px",
+                      color: "rgba(212,225,255,.9)"
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: "4px", color: "rgba(148, 229, 255, .96)" }}>
+                      Dynamic Decision · {selectedLead.aiDebug.provider || "AI"}
+                    </div>
+                    <div>Action: <strong>{selectedLead.aiDebug.action}</strong> · Conf {Math.round(Number(selectedLead.aiDebug.confidence || 0) * 100)}%</div>
+                    {selectedLead.aiDebug.states && selectedLead.aiDebug.states.length ? <div>State: {selectedLead.aiDebug.states.join(", ")}</div> : null}
+                    {selectedLead.aiDebug.missing && selectedLead.aiDebug.missing.length ? <div>Missing: {selectedLead.aiDebug.missing.join(", ")}</div> : null}
+                    {selectedLead.aiDebug.signals && selectedLead.aiDebug.signals.length ? <div>Signals: {selectedLead.aiDebug.signals.join(", ")}</div> : null}
+                  </div>
+                ) : null}
               </div>
             )
           });
@@ -6499,7 +6617,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                         <div className="card-zap">⚡</div>
                                       </div>
                                       <div className="snips">
-                                        {ensureBubbleSet(card.messages).map((msg, i) => (
+                                        {normalizeBubbleSet(card.messages).map((msg, i) => (
                                           <div
                                             key={i}
                                             className={"snip " + (isCardBubbleSelected(card, i) ? "selected" : "")}
@@ -6679,7 +6797,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                         <div className="card-zap">⚡</div>
                                       </div>
                                       <div className="snips">
-                                        {ensureBubbleSet(card.messages).map((msg, i) => (
+                                        {normalizeBubbleSet(card.messages).map((msg, i) => (
                                           <div
                                             key={i}
                                             className={"snip " + (isCardBubbleSelected(card, i) ? "selected" : "")}
