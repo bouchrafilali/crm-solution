@@ -5279,6 +5279,13 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         background: rgba(7,12,22,.72); border: 1px solid rgba(131,153,187,.45);
         border-radius: 999px; padding: 7px 10px;
       }
+      .logic-link {
+        position: fixed; top: 8px; right: 8px; z-index: 12;
+        color: #d9e7fb; text-decoration: none; font-size: 12px;
+        background: linear-gradient(135deg, rgba(20, 34, 60, .82), rgba(16, 25, 45, .74));
+        border: 1px solid rgba(131,153,187,.45);
+        border-radius: 999px; padding: 7px 10px;
+      }
       @media (max-width: 768px) {
         .mode-switch {
           top: auto;
@@ -5305,6 +5312,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
   </head>
   <body>
     <a class="lab-link" href="/admin/whatsapp-intelligence${navSuffix}">← Back</a>
+    <a class="logic-link" href="/whatsapp-intelligence/agent-logic${navSuffix}">Agent Logic</a>
     <div id="root"></div>
     <script type="text/babel">
       const MODE = ${JSON.stringify(mode)};
@@ -6762,6 +6770,352 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 </html>`;
 
   res.status(200).type("html").send(html);
+});
+
+whatsappRouter.get("/whatsapp-intelligence/agent-logic", (req, res) => {
+  const navParams = new URLSearchParams();
+  const host = typeof req.query.host === "string" ? req.query.host.trim() : "";
+  const shop = typeof req.query.shop === "string" ? req.query.shop.trim() : "";
+  const embedded = typeof req.query.embedded === "string" ? req.query.embedded.trim() : "";
+  if (host) navParams.set("host", host);
+  if (shop) navParams.set("shop", shop);
+  if (embedded) navParams.set("embedded", embedded);
+  const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
+
+  const html = `<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>WhatsApp Agent Logic</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #ecf2ff;
+        background:
+          radial-gradient(46% 36% at 50% -2%, rgba(128, 137, 255, .38), rgba(6,10,22,0) 72%),
+          radial-gradient(34% 40% at 84% 20%, rgba(148, 72, 255, .20), rgba(6,10,22,0) 70%),
+          radial-gradient(38% 44% at 12% 70%, rgba(56, 193, 255, .16), rgba(6,10,22,0) 72%),
+          #050816;
+      }
+      .top-link {
+        position: fixed; top: 10px; z-index: 20;
+        color: #d9e7fb; text-decoration: none; font-size: 12px;
+        border-radius: 999px; padding: 7px 10px;
+        border: 1px solid rgba(131,153,187,.45);
+        background: rgba(7,12,22,.72);
+      }
+      .top-link.back { left: 10px; }
+      .top-link.lab { right: 10px; }
+      .page {
+        width: min(1500px, 100%);
+        margin: 0 auto;
+        padding: 68px 18px 26px;
+        display: grid;
+        gap: 16px;
+      }
+      .hero {
+        border-radius: 26px;
+        border: 1px solid rgba(164, 191, 234, .22);
+        background:
+          radial-gradient(88% 120% at 8% 0%, rgba(109, 220, 255, .18), rgba(10,16,34,0) 70%),
+          radial-gradient(80% 112% at 88% 12%, rgba(157, 95, 255, .16), rgba(10,16,34,0) 72%),
+          rgba(10, 16, 34, .72);
+        box-shadow: 0 22px 56px rgba(0,0,0,.42), 0 0 0 1px rgba(183, 214, 255, .07) inset;
+        backdrop-filter: blur(16px);
+        padding: 18px;
+      }
+      .kicker { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: rgba(206, 226, 250, .76); }
+      h1 { margin: 8px 0 6px; font-size: clamp(24px, 2.4vw, 36px); letter-spacing: -.02em; }
+      .sub { color: rgba(215, 227, 246, .78); max-width: 900px; line-height: 1.45; font-size: 14px; }
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 330px;
+        gap: 16px;
+      }
+      .board {
+        border-radius: 24px;
+        border: 1px solid rgba(154, 186, 231, .2);
+        background: rgba(8, 14, 30, .72);
+        box-shadow: 0 18px 42px rgba(0,0,0,.36), 0 0 0 1px rgba(184, 212, 248, .06) inset;
+        backdrop-filter: blur(14px);
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      }
+      .lane-title {
+        font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+        color: rgba(181, 205, 238, .78);
+        margin-bottom: 8px;
+      }
+      .lane {
+        border-radius: 18px;
+        border: 1px solid rgba(140, 175, 223, .18);
+        background: linear-gradient(180deg, rgba(18,30,53,.68), rgba(11,20,38,.7));
+        padding: 11px;
+      }
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .node {
+        border-radius: 14px;
+        border: 1px solid rgba(160, 194, 238, .22);
+        background:
+          radial-gradient(120% 120% at 0% 0%, rgba(84, 180, 255, .14), rgba(0,0,0,0) 58%),
+          rgba(20, 34, 58, .66);
+        padding: 10px;
+      }
+      .node h3 { margin: 0; font-size: 13px; }
+      .node p { margin: 6px 0 0; color: rgba(208, 223, 246, .84); font-size: 12px; line-height: 1.4; }
+      .node .fn { margin-top: 7px; font-size: 11px; color: rgba(160, 215, 255, .92); word-break: break-word; }
+      .arrow {
+        margin: 4px 0 0;
+        text-align: center;
+        color: rgba(136, 224, 255, .9);
+        font-size: 12px;
+      }
+      .side {
+        border-radius: 24px;
+        border: 1px solid rgba(154, 186, 231, .2);
+        background: rgba(8, 14, 30, .72);
+        box-shadow: 0 18px 42px rgba(0,0,0,.36), 0 0 0 1px rgba(184, 212, 248, .06) inset;
+        backdrop-filter: blur(14px);
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+      .panel h4 { margin: 0 0 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: rgba(190, 214, 245, .88); }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip {
+        border-radius: 999px; border: 1px solid rgba(165, 196, 238, .25);
+        background: rgba(34,54,89,.58); padding: 5px 8px; font-size: 11px; color: #e8f2ff;
+      }
+      ul { margin: 0; padding-left: 18px; color: rgba(215, 229, 248, .86); font-size: 12px; line-height: 1.45; }
+      .note { color: rgba(255, 200, 160, .9); font-size: 12px; }
+      @media (max-width: 1080px) { .grid { grid-template-columns: 1fr; } }
+      @media (max-width: 760px) {
+        .page { padding: 62px 10px 18px; }
+        .flow { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="top-link back" href="/whatsapp-intelligence/mobile-lab${navSuffix}">← Mobile Lab</a>
+    <a class="top-link lab" href="/admin/whatsapp-intelligence${navSuffix}">Intelligence Hub</a>
+    <main class="page">
+      <section class="hero">
+        <div class="kicker">WhatsApp Intelligence · Agent Brain (As-Is)</div>
+        <h1>Current Reply Suggestion Logic</h1>
+        <p class="sub">
+          Diagramme basé sur les flux actuellement codés: inbound webhook/API, analyse conversation, détection stage/intents/signaux, génération suggestions, actions UI (insert/send) et persistance feedback.
+          Aucun redesign logique n’a été inventé ici; les points incertains sont marqués.
+        </p>
+      </section>
+
+      <section class="grid">
+        <div class="board">
+          <div class="lane">
+            <div class="lane-title">Inputs</div>
+            <div class="flow">
+              <div class="node">
+                <h3>Inbound WhatsApp</h3>
+                <p>Webhook provider + sync history alimentent conversations/messages.</p>
+                <div class="fn">zokoWebhook.ts · zokoConversationSync.ts</div>
+              </div>
+              <div class="node">
+                <h3>Manager / UI Actions</h3>
+                <p>Outbound manuel, send approved quote, retry/regenerate advisor.</p>
+                <div class="fn">/api/whatsapp/leads/:id/messages · .../ai-retry · .../ai-regenerate</div>
+              </div>
+              <div class="node">
+                <h3>Lead Context</h3>
+                <p>Lead facts + recent messages + settings/rules/templates.</p>
+                <div class="fn">getWhatsAppLeadById · listRecentWhatsAppLeadMessages · whatsappIntelligenceSettingsRepo</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="arrow">▼ Analysis</div>
+          <div class="lane">
+            <div class="lane-title">Analysis</div>
+            <div class="flow">
+              <div class="node">
+                <h3>Signal & Fact Extraction</h3>
+                <p>Event date, destination, message intents/signaux depuis conversation.</p>
+                <div class="fn">applyInboundSignalExtraction · detectSignalsFromMessages · whatsappLeadSignals.ts</div>
+              </div>
+              <div class="node">
+                <h3>Stage Progression</h3>
+                <p>Events détectés puis progression stage auto (si autorisé).</p>
+                <div class="fn">detectConversationEvents · applyStageProgression</div>
+              </div>
+              <div class="node">
+                <h3>Qualification</h3>
+                <p>Tags/intent level/recommended stage calculés et persistés.</p>
+                <div class="fn">computeRuleQualification · updateLeadQualification</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="arrow">▼ Decision</div>
+          <div class="lane">
+            <div class="lane-title">Decision</div>
+            <div class="flow">
+              <div class="node">
+                <h3>Rules-First Strategy</h3>
+                <p>Applique stage rules + qualification gating + silent 48h checks.</p>
+                <div class="fn">suggestReplyRulesFirst · applyStageRules · isPriceSilent48h</div>
+              </div>
+              <div class="node">
+                <h3>Provider Selection</h3>
+                <p>Advisor provider choisi via endpoint/body (claude ou gpt).</p>
+                <div class="fn">runAdvisorByProvider → runClaudeAdvisor / runOpenAiAdvisor</div>
+              </div>
+              <div class="node">
+                <h3>Template Resolution</h3>
+                <p>Templates par stage/lang/country group avec fallback global.</p>
+                <div class="fn">listReplyTemplates · listStageRules</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="arrow">▼ Generation</div>
+          <div class="lane">
+            <div class="lane-title">Generation</div>
+            <div class="flow">
+              <div class="node">
+                <h3>Advisor Run Output</h3>
+                <p>Run normalisé pour UI (ai-latest / ai-flow-latest).</p>
+                <div class="fn">getLatestAiAgentRunByLead · normalizeAdvisorRun</div>
+              </div>
+              <div class="node">
+                <h3>Personal Suggestions</h3>
+                <p>OpenAI + fallback déterministe avec guardrails stage/prix.</p>
+                <div class="fn">generatePersonalSuggestions · aiPersonalSuggestions.ts</div>
+              </div>
+              <div class="node">
+                <h3>UI Card Mapping</h3>
+                <p>Sortie convertie en cartes 2–4 messages (mobile-lab & console).</p>
+                <div class="fn">mapAiSuggestions · fallbackSuggestionsFromMessages</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="arrow">▼ UI Actions</div>
+          <div class="lane">
+            <div class="lane-title">UI Actions</div>
+            <div class="flow">
+              <div class="node">
+                <h3>Insert</h3>
+                <p>Sélection bulles suggestions dans composer/draft sequence.</p>
+                <div class="fn">toggleCardBubble · draftMessages</div>
+              </div>
+              <div class="node">
+                <h3>Send</h3>
+                <p>POST message outbound, dispatch provider, update thread UI.</p>
+                <div class="fn">sendMessages · /api/whatsapp/leads/:id/messages</div>
+              </div>
+              <div class="node">
+                <h3>Manual Send</h3>
+                <p>Texte opérateur via composer mobile-lab.</p>
+                <div class="fn">sendManualMessage</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="arrow">▼ Persistence / Feedback</div>
+          <div class="lane">
+            <div class="lane-title">Persistence & Feedback</div>
+            <div class="flow">
+              <div class="node">
+                <h3>Message Persisted Hook</h3>
+                <p>Chaque message persiste + tracking + hook advisor async.</p>
+                <div class="fn">createWhatsAppLeadMessageWithTracking · onMessagePersisted</div>
+              </div>
+              <div class="node">
+                <h3>Suggestion Feedback</h3>
+                <p>Draft feedback token, attach final message, mark suggestion used.</p>
+                <div class="fn">createSuggestionFeedbackDraft · attachFinalMessageToSuggestion · logSuggestionUsed</div>
+              </div>
+              <div class="node">
+                <h3>Post-Process Updates</h3>
+                <p>Recompute signals/stage/qualification après outbound/inbound.</p>
+                <div class="fn">postProcessAfterOutboundMessage · updateLeadQualification</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <section class="panel">
+            <h4>Source Files</h4>
+            <ul>
+              <li>src/routes/whatsappIntelligence.ts</li>
+              <li>src/routes/zokoWebhook.ts</li>
+              <li>src/services/whatsappSuggestEngine.ts</li>
+              <li>src/services/aiPersonalSuggestions.ts</li>
+              <li>src/services/conversationStageProgression.ts</li>
+              <li>src/services/whatsappLeadSignals.ts</li>
+              <li>src/services/openaiAdvisor.ts · src/services/claudeAdvisor.ts</li>
+              <li>src/services/mlMessageTracking.ts · src/services/onMessagePersisted.ts</li>
+              <li>src/db/whatsappIntelligenceSettingsRepo.ts</li>
+            </ul>
+          </section>
+
+          <section class="panel">
+            <h4>Key Functions</h4>
+            <div class="chips">
+              <span class="chip">suggestReplyRulesFirst</span>
+              <span class="chip">applyStageProgression</span>
+              <span class="chip">detectSignalsFromMessages</span>
+              <span class="chip">runAdvisorByProvider</span>
+              <span class="chip">normalizeAdvisorRun</span>
+              <span class="chip">createWhatsAppLeadMessageWithTracking</span>
+              <span class="chip">createSuggestionFeedbackDraft</span>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h4>Current Providers</h4>
+            <div class="chips">
+              <span class="chip">Claude Advisor</span>
+              <span class="chip">GPT Advisor</span>
+              <span class="chip">OpenAI (personal suggestions)</span>
+              <span class="chip">Fallback deterministic</span>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h4>Limitations / Unknowns</h4>
+            <ul>
+              <li>Certains chemins UI utilisent rules-first; d’autres utilisent advisor run normalisé (fusion partielle).</li>
+              <li>Card mapping UI combine runs API + fallback locale selon disponibilité.</li>
+              <li>Comportement exact multi-provider selon env/settings peut varier par endpoint.</li>
+            </ul>
+            <p class="note">Notes marquées ici sont observées/inférées depuis le code actuel, sans redesign.</p>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>`;
+
+  res.status(200).type("html").send(html);
+});
+
+whatsappRouter.get("/whatsapp-intelligence/mobile-lab/agent-logic", (req, res) => {
+  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(`/whatsapp-intelligence/agent-logic${query}`);
+});
+
+whatsappRouter.get("/admin/whatsapp-intelligence/agent-logic", (req, res) => {
+  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(`/whatsapp-intelligence/agent-logic${query}`);
 });
 
 whatsappRouter.get("/admin/whatsapp-intelligence/mobile-lab", (req, res) => {
