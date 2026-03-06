@@ -4786,7 +4786,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         display: flex;
         flex-direction: column;
         min-height: 0;
-        padding-top: 14px;
+        padding-top: 56px;
         background: linear-gradient(180deg, rgba(18, 30, 51, .46), rgba(12, 21, 38, .38));
       }
       .desk-col.center .cards {
@@ -4795,7 +4795,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         gap: 10px;
         overflow-x: auto;
         overflow-y: hidden;
-        margin-top: 14px;
+        margin-top: 24px;
         padding: 8px 6px 12px;
         align-items: flex-start;
       }
