@@ -5605,7 +5605,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function onMobileDrawerPointerDown(event) {
-          if (event && event.preventDefault) event.preventDefault();
           const x = Number(event && event.clientX) || 0;
           mobileDrawerDragRef.current = {
             active: true,
@@ -5624,7 +5623,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const closed = mobileDrawerClosedRef.current;
           const moved = mobileDrawerDragRef.current.moved;
           if (!moved) {
-            setMobileDrawerOffset(current > closed * 0.5 ? 0 : closed);
+            setMobileDrawerOffset(current <= closed * 0.5 ? 0 : closed);
             return;
           }
           setMobileDrawerOffset(current < closed * 0.55 ? 0 : closed);
@@ -6273,6 +6272,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                   <div
                                     className="mobile-ai-drawer"
                                     ref={mobileDrawerRef}
+                                    onPointerDown={onMobileDrawerPointerDown}
                                     style={{
                                       transform: "translateX(" + mobileDrawerOffset + "px)",
                                       transition: mobileDrawerDragging ? "none" : "transform .32s cubic-bezier(.22,.74,.22,1)"
