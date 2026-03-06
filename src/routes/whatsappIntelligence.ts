@@ -4620,7 +4620,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .mode-switch {
         position: fixed;
-        top: 8px;
+        top: 120px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 13;
@@ -5283,7 +5283,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       const LEAD_ID = ${JSON.stringify(leadId)};
       const MAX_LEN = 120;
       const LIVE_MODE = String(MODE) !== "mock";
-      const MOBILE_DRAWER_PEEK = 34;
+      const MOBILE_DRAWER_PEEK = 0;
       const MOBILE_DRAWER_FALLBACK_WIDTH = 340;
       const MOBILE_DRAWER_FALLBACK_CLOSED = MOBILE_DRAWER_FALLBACK_WIDTH - MOBILE_DRAWER_PEEK;
 
