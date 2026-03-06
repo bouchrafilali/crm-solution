@@ -5778,6 +5778,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }, []);
 
         React.useEffect(() => {
+          if (mobileScreen !== "conversation") return;
+          const raf = window.requestAnimationFrame(() => {
+            refreshMobileDrawerBounds();
+            setMobileDrawerOffset(mobileDrawerClosedRef.current);
+          });
+          return () => window.cancelAnimationFrame(raf);
+        }, [mobileScreen, viewMode]);
+
+        React.useEffect(() => {
           function onMove(event) {
             if (mobileBackSwipeRef.current.active) {
               const x = Number(event && event.clientX) || 0;
