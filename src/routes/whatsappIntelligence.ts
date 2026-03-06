@@ -5087,7 +5087,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         position: absolute;
         top: 8px;
         right: 0;
-        bottom: 8px;
+        height: 70%;
         width: calc(100% - 8px);
         border-radius: 24px 0 0 24px;
         border: 1px solid rgba(170, 212, 255, .28);
