@@ -5699,7 +5699,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           startX: 0,
           startOffset: MOBILE_DRAWER_FALLBACK_CLOSED
         });
-        const [viewMode, setViewMode] = React.useState("all");
+        function viewModeFromWidth(width) {
+          const safeWidth = Number(width) || 0;
+          if (safeWidth < 760) return "mobile";
+          if (safeWidth < 1180) return "tablet";
+          return "desktop";
+        }
+
+        const [viewMode, setViewMode] = React.useState(() => viewModeFromWidth(window.innerWidth));
+        const [viewModeLocked, setViewModeLocked] = React.useState(false);
 
         const deviceOrder = React.useMemo(() => ["mobile", "tablet", "desktop"], []);
         const visibleDevices = viewMode === "all" ? deviceOrder : [viewMode];
@@ -5798,6 +5806,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         React.useEffect(() => {
           setMobileUiState((prev) => ({ ...prev, insertedSequence: Array.isArray(draftMessages) ? draftMessages : [] }));
         }, [draftMessages]);
+
+        React.useEffect(() => {
+          if (viewModeLocked) return;
+          const onResize = () => setViewMode(viewModeFromWidth(window.innerWidth));
+          onResize();
+          window.addEventListener("resize", onResize);
+          return () => window.removeEventListener("resize", onResize);
+        }, [viewModeLocked]);
 
         const filteredLeads = React.useMemo(() => {
           return leads.filter((lead) => {
@@ -6510,7 +6526,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 <button
                   key={item.id}
                   className={viewMode === item.id ? "active" : ""}
-                  onClick={() => setViewMode(item.id)}
+                  onClick={() => {
+                    setViewModeLocked(true);
+                    setViewMode(item.id);
+                  }}
                 >
                   {item.label}
                 </button>

@@ -27,9 +27,29 @@ app.use((req, res, next) => {
   next();
 });
 
+function isShopifyLaunch(req: express.Request): boolean {
+  const hasHost = typeof req.query.host === "string" && req.query.host.trim().length > 0;
+  const hasShop = typeof req.query.shop === "string" && req.query.shop.trim().length > 0;
+  const embedded = typeof req.query.embedded === "string" ? req.query.embedded.trim().toLowerCase() : "";
+  return hasHost || hasShop || embedded === "1" || embedded === "true";
+}
+
 app.get("/", (req, res) => {
   const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  if (isShopifyLaunch(req)) {
+    res.redirect(`/whatsapp-intelligence/mobile-lab${query}`);
+    return;
+  }
   res.redirect(`/admin${query}`);
+});
+
+app.get("/admin", (req, res, next) => {
+  if (!isShopifyLaunch(req)) {
+    next();
+    return;
+  }
+  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(`/whatsapp-intelligence/mobile-lab${query}`);
 });
 
 app.get(["/spline", "/admin/spline"], (_req, res) => {
