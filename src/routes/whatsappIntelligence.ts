@@ -5926,7 +5926,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 body: JSON.stringify({
                   direction: "OUT",
                   text: payload[i],
-                  provider: "system",
+                  provider: "manual",
+                  send_whatsapp: true,
                   message_type: "text"
                 })
               });
