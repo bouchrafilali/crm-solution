@@ -4592,6 +4592,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         padding: 64px 14px 14px;
         overflow-x: hidden;
         overflow-y: auto;
+        background:
+          radial-gradient(80% 52% at 50% -8%, rgba(76, 130, 255, .22) 0%, rgba(8, 12, 24, 0) 60%),
+          radial-gradient(34% 40% at 10% 32%, rgba(45, 212, 255, .13) 0%, rgba(8, 12, 24, 0) 72%),
+          radial-gradient(34% 36% at 90% 70%, rgba(177, 95, 255, .10) 0%, rgba(8, 12, 24, 0) 72%);
       }
       .preview-grid {
         width: min(1500px, 100%);
@@ -4663,6 +4667,29 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .shell.desktop {
         max-width: 1452px;
         border-radius: 2rem;
+        background:
+          linear-gradient(180deg, rgba(16, 24, 44, .72) 0%, rgba(11, 18, 34, .8) 100%);
+        border-color: rgba(168, 208, 255, .2);
+        box-shadow:
+          0 36px 100px rgba(0,0,0,.58),
+          0 0 0 1px rgba(162, 211, 255, .10) inset;
+      }
+      .shell.desktop::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(48% 32% at 20% 10%, rgba(61, 216, 255, .16) 0%, rgba(0,0,0,0) 72%),
+          radial-gradient(46% 34% at 88% 86%, rgba(153, 102, 255, .14) 0%, rgba(0,0,0,0) 72%);
+        filter: blur(8px);
+      }
+      .shell.desktop::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 16%, transparent 82%, rgba(255,255,255,.04));
       }
       .app-desktop {
         position: relative;
@@ -4676,20 +4703,37 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         min-height: 0;
         display: flex;
         flex-direction: column;
+        margin: 10px 0;
+        border-radius: 22px;
+        overflow: hidden;
+        border: 1px solid rgba(170, 209, 255, .16);
+        box-shadow:
+          0 20px 45px rgba(0,0,0,.32),
+          inset 0 1px 0 rgba(255,255,255,.06);
+        backdrop-filter: blur(16px);
       }
       .desk-col.left {
-        border-right: 1px solid rgba(255,255,255,.09);
-        background: linear-gradient(180deg, rgba(11,18,34,.84), rgba(8,13,25,.72));
+        margin-left: 10px;
+        background:
+          radial-gradient(120% 90% at 18% -10%, rgba(62, 205, 255, .11) 0%, rgba(8,12,24,0) 68%),
+          linear-gradient(180deg, rgba(13,21,38,.78), rgba(9,14,27,.72));
       }
       .desk-col.center {
-        border-right: 1px solid rgba(255,255,255,.08);
-        background: linear-gradient(180deg, rgba(12,19,33,.82), rgba(9,14,27,.75));
+        margin-left: 10px;
+        background:
+          radial-gradient(120% 90% at 46% -16%, rgba(87, 145, 255, .14) 0%, rgba(8,12,24,0) 66%),
+          linear-gradient(180deg, rgba(14,23,42,.78), rgba(9,15,28,.72));
       }
       .desk-col.right {
-        background: linear-gradient(180deg, rgba(13,21,38,.88), rgba(10,16,30,.78));
+        margin-left: 10px;
+        margin-right: 10px;
+        background:
+          radial-gradient(120% 95% at 92% -12%, rgba(145, 101, 255, .13) 0%, rgba(8,12,24,0) 68%),
+          linear-gradient(180deg, rgba(14,24,43,.8), rgba(10,16,30,.74));
       }
       .desk-col.left .section-head {
-        border-bottom: 1px solid rgba(255,255,255,.09);
+        border-bottom: 1px solid rgba(167, 204, 248, .15);
+        background: linear-gradient(180deg, rgba(23, 35, 58, .55), rgba(13, 22, 40, .38));
       }
       .desk-col.left .lead-list {
         flex: 1;
@@ -4704,6 +4748,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         flex-direction: column;
         min-height: 0;
         padding-top: 14px;
+        background: linear-gradient(180deg, rgba(18, 30, 51, .46), rgba(12, 21, 38, .38));
       }
       .desk-col.center .cards {
         display: flex;
@@ -4714,6 +4759,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         margin-top: 14px;
         padding-bottom: 2px;
       }
+      .desk-col.center .card {
+        border: 1px solid rgba(173, 214, 255, .2);
+        background: linear-gradient(180deg, rgba(26,40,66,.78), rgba(18,31,52,.74));
+        box-shadow:
+          0 18px 32px rgba(0,0,0,.38),
+          0 0 0 1px rgba(176, 221, 255, .08) inset;
+      }
+      .desk-col.center .card .card-zap {
+        border-color: rgba(146, 233, 255, .3);
+        background: rgba(61, 212, 255, .14);
+        box-shadow: 0 0 18px rgba(95, 219, 255, .16);
+      }
       .chat-panel {
         flex: 1;
         min-height: 0;
@@ -4722,8 +4779,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .chat-panel-head {
         padding: 14px 12px 10px;
-        border-bottom: 1px solid rgba(255,255,255,.1);
-        background: rgba(0,0,0,.14);
+        border-bottom: 1px solid rgba(170, 208, 249, .16);
+        background: linear-gradient(180deg, rgba(25, 38, 61, .58), rgba(14, 23, 39, .42));
         backdrop-filter: blur(14px);
       }
       .chat-panel-title {
@@ -4738,9 +4795,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .chat-panel-foot {
         padding: 10px;
-        border-top: 1px solid rgba(255,255,255,.1);
-        background: rgba(0,0,0,.18);
+        border-top: 1px solid rgba(170, 208, 249, .14);
+        background: linear-gradient(180deg, rgba(18, 29, 47, .62), rgba(12, 22, 38, .54));
         backdrop-filter: blur(16px);
+      }
+      .desk-col.right .chat-messages {
+        background:
+          radial-gradient(120% 90% at 50% -18%, rgba(76, 147, 255, .14) 0%, rgba(0,0,0,0) 60%),
+          linear-gradient(180deg, rgba(11, 18, 33, .7), rgba(10, 16, 30, .64));
       }
       .chat-panel-foot .draft-stack {
         max-height: 130px;
@@ -4754,7 +4816,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .preview-grid.all .shell.desktop { max-width: 700px; }
       .preview-grid.all .shell.desktop .app-desktop { grid-template-columns: 1fr; }
       .preview-grid.all .shell.desktop .desk-col.left,
-      .preview-grid.all .shell.desktop .desk-col.center { border-right: 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+      .preview-grid.all .shell.desktop .desk-col.center {
+        border-right: 0;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+        margin: 8px;
+      }
       .glow { position: absolute; inset: 0; pointer-events: none; }
       .glow .a { position: absolute; top: -64px; left: 34px; width: 180px; height: 180px; border-radius: 999px; background: rgba(34,211,238,.15); filter: blur(42px); }
       .glow .b { position: absolute; top: 190px; right: -28px; width: 210px; height: 210px; border-radius: 999px; background: rgba(217,70,239,.12); filter: blur(50px); }
