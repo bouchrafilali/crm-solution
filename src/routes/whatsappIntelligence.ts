@@ -5083,6 +5083,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         overflow-x: auto;
         overflow-y: hidden;
       }
+      .mobile-ai-cards .card {
+        min-width: 305px;
+        max-width: 305px;
+      }
       .mobile-ai-handle {
         position: absolute;
         left: -28px;
