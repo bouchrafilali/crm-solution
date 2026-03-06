@@ -5301,6 +5301,85 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         margin-top: 7px; display: flex; justify-content: space-between; gap: 8px;
         font-size: 11px; color: rgba(255,255,255,.36); padding: 0 2px;
       }
+      .stream-shell {
+        width: min(1600px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: 14px;
+      }
+      .stream-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 16px;
+        border: 1px solid rgba(161, 201, 255, .28);
+        background: linear-gradient(135deg, rgba(12, 23, 42, .82), rgba(10, 18, 33, .72));
+        box-shadow: 0 14px 32px rgba(0,0,0,.28);
+      }
+      .stream-title {
+        font-size: 13px;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: rgba(223, 239, 255, .86);
+      }
+      .stream-sub {
+        font-size: 12px;
+        color: rgba(195, 217, 247, .7);
+      }
+      .stream-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        gap: 14px;
+        align-items: start;
+      }
+      .stream-window {
+        position: relative;
+        transition: transform .42s cubic-bezier(.22,.74,.22,1), opacity .42s ease, filter .42s ease;
+        will-change: transform, opacity, filter;
+      }
+      .stream-window.exiting {
+        animation: streamExit .52s cubic-bezier(.2,.7,.2,1) forwards;
+      }
+      @keyframes streamExit {
+        0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); filter: blur(0); }
+        100% { opacity: 0; transform: translateY(-18px) rotate(-2.2deg) scale(.96); filter: blur(4px); }
+      }
+      .stream-focus-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        padding: 16px;
+        background:
+          radial-gradient(80% 60% at 50% 10%, rgba(68, 148, 255, .26), rgba(6, 10, 20, .9) 60%),
+          rgba(5, 8, 16, .86);
+        backdrop-filter: blur(12px);
+      }
+      .stream-focus-shell {
+        width: min(540px, calc(100vw - 28px));
+        height: min(940px, calc(100dvh - 36px));
+        margin: 0 auto;
+      }
+      .stream-focus-close {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 38px;
+        height: 38px;
+        border-radius: 14px;
+        border: 1px solid rgba(166, 212, 255, .35);
+        background: rgba(16, 28, 49, .7);
+        color: #edf7ff;
+        cursor: pointer;
+      }
+      .stream-empty {
+        border-radius: 18px;
+        border: 1px solid rgba(160, 204, 255, .24);
+        background: rgba(10, 18, 32, .6);
+        padding: 18px;
+        color: rgba(217, 234, 255, .85);
+      }
       .lab-link {
         position: fixed; top: 8px; left: 8px; z-index: 12;
         color: #d9e7fb; text-decoration: none; font-size: 12px;
@@ -5334,6 +5413,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         .device-label { display: none; }
         .shell {
           border-radius: 0; max-width: 100%; height: 100dvh; max-height: 100dvh; border: none;
+        }
+        .stream-shell { width: 100%; }
+        .stream-grid { grid-template-columns: 1fr; }
+        .stream-head { margin: 0 8px; }
+        .stream-focus-layer { padding: 0; }
+        .stream-focus-shell {
+          width: 100vw;
+          height: 100dvh;
         }
       }
     </style>
@@ -5558,10 +5645,31 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           lastAt: relativeTime((lead && lead.last_activity_at) || (lead && lead.created_at)),
           preview: clampText((lead && lead.last_message_snippet) || "Conversation WhatsApp"),
           avatar: initials(lead && lead.client),
+          waitingFor: String((lead && lead.waiting_for) || ""),
+          lastActivityAt: String((lead && lead.last_activity_at) || ""),
+          createdAt: String((lead && lead.created_at) || ""),
+          risk: lead && lead.risk ? lead.risk : null,
           aiDebug: null,
           suggestions: [],
           messages: []
         };
+      }
+
+      function leadNeedsAttention(lead) {
+        if (!lead) return false;
+        const unreadInbound = Number(lead.unread || 0) > 0;
+        const waitingForUs = String(lead.waitingFor || "").toUpperCase() === "WAITING_FOR_US";
+        const risk = lead.risk && typeof lead.risk === "object" ? lead.risk : null;
+        const stalledByRisk = Boolean(risk && (risk.at_risk || risk.is_at_risk));
+        const stalledByDelay = Number(risk && risk.hours_since_last_activity) >= Math.max(24, Number(risk && risk.threshold_hours) || 24);
+        return unreadInbound || waitingForUs || stalledByRisk || stalledByDelay;
+      }
+
+      function leadAttentionAge(lead) {
+        if (!lead) return Number.MAX_SAFE_INTEGER;
+        const fallback = Date.now();
+        const ts = Date.parse(String(lead.lastActivityAt || lead.createdAt || ""));
+        return Number.isFinite(ts) ? ts : fallback;
       }
 
       function mapMessagesFromApi(items) {
@@ -5708,6 +5816,13 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
         const [viewMode, setViewMode] = React.useState(() => viewModeFromWidth(window.innerWidth));
         const [viewModeLocked, setViewModeLocked] = React.useState(false);
+        const [streamSkippedLeadIds, setStreamSkippedLeadIds] = React.useState([]);
+        const [streamExitingLeadIds, setStreamExitingLeadIds] = React.useState([]);
+        const [streamFocusedLeadId, setStreamFocusedLeadId] = React.useState("");
+        const [streamCardBubbleSelection, setStreamCardBubbleSelection] = React.useState({});
+        const [streamDraftMessagesByLead, setStreamDraftMessagesByLead] = React.useState({});
+        const [streamSendingLeadId, setStreamSendingLeadId] = React.useState("");
+        const [streamManualTextByLead, setStreamManualTextByLead] = React.useState({});
 
         const deviceOrder = React.useMemo(() => ["mobile", "tablet", "desktop"], []);
         const visibleDevices = viewMode === "all" ? deviceOrder : [viewMode];
@@ -5831,6 +5946,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           });
         }, [leads, mobileUiState.filter, mobileUiState.query]);
 
+        const streamAttentionLeads = React.useMemo(() => {
+          return leads
+            .filter((lead) => leadNeedsAttention(lead) && !streamSkippedLeadIds.includes(String(lead.id)))
+            .sort((a, b) => leadAttentionAge(a) - leadAttentionAge(b));
+        }, [leads, streamSkippedLeadIds]);
+
         const patchLead = React.useCallback((leadId, patch) => {
           setLeads((prev) => prev.map((lead) => (String(lead.id) === String(leadId) ? { ...lead, ...patch } : lead)));
         }, []);
@@ -5942,6 +6063,20 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!LIVE_MODE) return;
           void loadLeads();
         }, [loadLeads]);
+
+        React.useEffect(() => {
+          if (viewMode !== "stream") return;
+          const targets = streamAttentionLeads.slice(0, 8);
+          targets.forEach((lead) => {
+            if (!lead || !isUuidValue(lead.id)) return;
+            if (!Array.isArray(lead.messages) || !lead.messages.length) {
+              void loadMessages(lead.id);
+            }
+            if (!Array.isArray(lead.suggestions) || !lead.suggestions.length) {
+              void loadSuggestions(lead.id, false);
+            }
+          });
+        }, [viewMode, streamAttentionLeads, loadMessages, loadSuggestions]);
 
         React.useEffect(() => {
           if (!selectedLeadId) return;
@@ -6176,6 +6311,177 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           } finally {
             setSending(false);
           }
+        }
+
+        function streamDraftForLead(leadId) {
+          return Array.isArray(streamDraftMessagesByLead[String(leadId)]) ? streamDraftMessagesByLead[String(leadId)] : [];
+        }
+
+        function streamManualForLead(leadId) {
+          return String(streamManualTextByLead[String(leadId)] || "");
+        }
+
+        function selectedStreamMessagesForCard(leadId, card) {
+          const list = normalizeBubbleSet(card && card.messages);
+          const byLead = streamCardBubbleSelection[String(leadId)] || {};
+          const selectedMap = byLead[card && card.id] || {};
+          return list.filter((_, index) => Boolean(selectedMap[index]));
+        }
+
+        function isStreamCardBubbleSelected(leadId, card, index) {
+          const byLead = streamCardBubbleSelection[String(leadId)] || {};
+          const selectedMap = byLead[card && card.id] || {};
+          return Boolean(selectedMap[index]);
+        }
+
+        function toggleStreamCardBubble(leadId, card, index) {
+          const safeLeadId = String(leadId || "");
+          const safeCardId = String(card && card.id ? card.id : "");
+          if (!safeLeadId || !safeCardId) return;
+          const list = normalizeBubbleSet(card && card.messages);
+          setStreamCardBubbleSelection((prev) => {
+            const prevLead = prev && prev[safeLeadId] ? prev[safeLeadId] : {};
+            const current = { ...(prevLead[safeCardId] || {}) };
+            if (current[index]) delete current[index];
+            else current[index] = true;
+            const nextLead = { ...prevLead };
+            if (Object.keys(current).length) nextLead[safeCardId] = current;
+            else delete nextLead[safeCardId];
+            const next = { ...(prev || {}) };
+            next[safeLeadId] = nextLead;
+            const selected = list.filter((_, i) => Boolean(current[i]));
+            setStreamDraftMessagesByLead((draftPrev) => ({ ...draftPrev, [safeLeadId]: selected }));
+            return next;
+          });
+        }
+
+        function insertStreamMessages(leadId, messages) {
+          const safeLeadId = String(leadId || "");
+          const payload = normalizeBubbleSet(messages);
+          setStreamDraftMessagesByLead((prev) => ({ ...prev, [safeLeadId]: payload }));
+        }
+
+        async function sendStreamMessages(leadId, customMessages, sourceCardId) {
+          const safeLeadId = String(leadId || "");
+          const lead = leads.find((item) => String(item.id) === safeLeadId);
+          if (!lead) return;
+          const payloadRaw = Array.isArray(customMessages) ? customMessages : streamDraftForLead(safeLeadId);
+          if (!payloadRaw.length || streamSendingLeadId) return;
+          if (String(lead.channelType || "").toUpperCase() === "SHARED") {
+            setErrorText("Numéro partagé (SHARED): envoi WhatsApp désactivé pour ce lead.");
+            return;
+          }
+          setStreamSendingLeadId(safeLeadId);
+          try {
+            const payload = normalizeBubbleSet(payloadRaw);
+            if (!payload.length) return;
+            if (!LIVE_MODE) {
+              setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
+              return;
+            }
+            for (let i = 0; i < payload.length; i += 1) {
+              await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(safeLeadId) + "/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  direction: "OUT",
+                  text: payload[i],
+                  provider: "manual",
+                  send_whatsapp: true,
+                  message_type: "text"
+                })
+              });
+              await sleep(80);
+            }
+            setStreamDraftMessagesByLead((prev) => ({ ...prev, [safeLeadId]: [] }));
+            if (sourceCardId) {
+              const sent = new Set(payload.map((line) => String(line || "").trim()).filter(Boolean));
+              setLeads((prev) =>
+                prev.map((item) => {
+                  if (String(item.id) !== safeLeadId) return item;
+                  const nextSuggestions = (Array.isArray(item.suggestions) ? item.suggestions : [])
+                    .map((card) => {
+                      if (String(card.id) !== String(sourceCardId)) return card;
+                      const remaining = normalizeBubbleSet(card.messages).filter((line) => !sent.has(String(line || "").trim()));
+                      return { ...card, messages: remaining };
+                    })
+                    .filter((card) => normalizeBubbleSet(card.messages).length > 0);
+                  return { ...item, suggestions: nextSuggestions };
+                })
+              );
+              setStreamCardBubbleSelection((prev) => {
+                const next = { ...(prev || {}) };
+                const byLead = { ...(next[safeLeadId] || {}) };
+                delete byLead[String(sourceCardId)];
+                next[safeLeadId] = byLead;
+                return next;
+              });
+            }
+            await Promise.all([loadMessages(safeLeadId), loadLeads()]);
+          } catch (error) {
+            setErrorText(sendErrorMessage(error));
+            console.error("[mobile-lab] stream send failed", { leadId: safeLeadId, error });
+          } finally {
+            setStreamSendingLeadId("");
+          }
+        }
+
+        async function sendStreamManualMessage(leadId) {
+          const safeLeadId = String(leadId || "");
+          const lead = leads.find((item) => String(item.id) === safeLeadId);
+          const text = streamManualForLead(safeLeadId).trim();
+          if (!lead || !text || streamSendingLeadId) return;
+          if (String(lead.channelType || "").toUpperCase() === "SHARED") {
+            setErrorText("Numéro partagé (SHARED): envoi WhatsApp désactivé pour ce lead.");
+            return;
+          }
+          setStreamSendingLeadId(safeLeadId);
+          try {
+            if (!LIVE_MODE) {
+              setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
+              return;
+            }
+            await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(safeLeadId) + "/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                direction: "OUT",
+                text,
+                provider: "manual",
+                send_whatsapp: true,
+                message_type: "text"
+              })
+            });
+            setStreamManualTextByLead((prev) => ({ ...prev, [safeLeadId]: "" }));
+            await Promise.all([loadMessages(safeLeadId), loadLeads()]);
+          } catch (error) {
+            setErrorText(sendErrorMessage(error));
+            console.error("[mobile-lab] stream manual send failed", { leadId: safeLeadId, error });
+          } finally {
+            setStreamSendingLeadId("");
+          }
+        }
+
+        function skipStreamLead(leadId) {
+          const safeLeadId = String(leadId || "");
+          if (!safeLeadId) return;
+          setStreamExitingLeadIds((prev) => (prev.includes(safeLeadId) ? prev : [...prev, safeLeadId]));
+          window.setTimeout(() => {
+            setStreamSkippedLeadIds((prev) => (prev.includes(safeLeadId) ? prev : [...prev, safeLeadId]));
+            setStreamExitingLeadIds((prev) => prev.filter((id) => id !== safeLeadId));
+          }, 520);
+        }
+
+        function openStreamFocus(leadId) {
+          const safeLeadId = String(leadId || "");
+          if (!safeLeadId) return;
+          setSelectedLeadId(safeLeadId);
+          setMobileUiState((prev) => ({ ...prev, view: "conversation", selectedLeadId: safeLeadId }));
+          setStreamFocusedLeadId(safeLeadId);
+        }
+
+        function closeStreamFocus() {
+          setStreamFocusedLeadId("");
         }
 
         function renderMobileShell({ paneClass, onPointerDown, header, content, bottomBar }) {
@@ -6519,10 +6825,227 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           );
         }
 
+        function renderOperatorStreamWindow(lead) {
+          const safeLeadId = String(lead && lead.id ? lead.id : "");
+          const isExiting = streamExitingLeadIds.includes(safeLeadId);
+          const streamDraft = streamDraftForLead(safeLeadId);
+          const streamManualText = streamManualForLead(safeLeadId);
+          const sendingThisLead = streamSendingLeadId === safeLeadId;
+          const messages = Array.isArray(lead && lead.messages) ? lead.messages : [];
+          const suggestions = Array.isArray(lead && lead.suggestions) ? lead.suggestions : [];
+          return (
+            <div
+              key={safeLeadId}
+              className={"stream-window " + (isExiting ? "exiting" : "")}
+              onClick={() => openStreamFocus(safeLeadId)}
+            >
+              <div className="shell mobile" style={{ maxWidth: "430px", height: "820px" }}>
+                <div className="app" style={{ height: "100%" }}>
+                  <div className="section-head">
+                    <div className="head-row">
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="kicker">Operator Stream · Needs Attention</div>
+                        <div className="title" style={{ fontSize: "22px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {lead ? lead.name : "Conversation"}
+                        </div>
+                        <div className="mobile-conversation-sub">
+                          {(lead && (lead.stageLabel || lead.stage)) || "Thread"} · {(lead && lead.lastAt) || "Now"}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!lead) return;
+                          void loadSuggestions(lead.id, true);
+                        }}
+                      >
+                        {loadingSuggestions && String(selectedLeadId) === safeLeadId ? "…" : "✦"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="chat-messages" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+                    {messages.length ? messages.map((message) => {
+                      const own = message.from === "brand";
+                      return (
+                        <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
+                          <div className={"bubble " + (own ? "brand" : "client")}>
+                            <div className="text">{clampText(message.text)}</div>
+                            <div className="meta">
+                              <span>{message.time}</span>
+                              {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }) : <div className="preview">Chargement messages...</div>}
+                  </div>
+
+                  <div className="mobile-ai-cards" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+                    {suggestions.length
+                      ? suggestions.map((card) => {
+                        const selectedForCard = selectedStreamMessagesForCard(safeLeadId, card);
+                        return (
+                          <div key={card.id} className="card">
+                            <div className="card-top">
+                              <div>
+                                <div className="card-title">{card.title}</div>
+                                <div className="card-tag">{card.tag}</div>
+                              </div>
+                              <div className="card-zap">⚡</div>
+                            </div>
+                            <div className="snips">
+                              {normalizeBubbleSet(card.messages).map((msg, i) => (
+                                <div
+                                  key={i}
+                                  className={"snip " + (isStreamCardBubbleSelected(safeLeadId, card, i) ? "selected" : "")}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleStreamCardBubble(safeLeadId, card, i);
+                                  }}
+                                >
+                                  {clampText(msg)}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="card-actions">
+                              <button
+                                className="btn insert"
+                                disabled={!selectedForCard.length}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  insertStreamMessages(safeLeadId, selectedForCard);
+                                }}
+                              >
+                                Insert
+                              </button>
+                              <button
+                                className="btn send"
+                                disabled={sendingThisLead || !selectedForCard.length}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void sendStreamMessages(safeLeadId, selectedForCard, card.id);
+                                }}
+                              >
+                                Send
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                      : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
+                  </div>
+
+                  <div className="composer">
+                    {streamDraft.length ? (
+                      <div className="draft-stack">
+                        {streamDraft.map((msg, i) => <div key={i} className="draft-bubble">{clampText(msg)}</div>)}
+                      </div>
+                    ) : null}
+                    <div className="composer-row">
+                      <button
+                        className="mini-btn"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setStreamDraftMessagesByLead((prev) => ({ ...prev, [safeLeadId]: [] }));
+                        }}
+                      >
+                        ＋
+                      </button>
+                      <input
+                        className="composer-pill"
+                        value={streamManualText}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(e) => {
+                          const next = String(e.target.value || "");
+                          setStreamManualTextByLead((prev) => ({ ...prev, [safeLeadId]: next }));
+                        }}
+                        placeholder={streamDraft.length ? String(streamDraft.length) + " messages prêts à être envoyés" : "Écrire un message..."}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (String(streamManualText || "").trim()) {
+                              void sendStreamManualMessage(safeLeadId);
+                            } else {
+                              void sendStreamMessages(safeLeadId);
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        className="send-fab"
+                        disabled={sendingThisLead || (!String(streamManualText || "").trim() && !streamDraft.length)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (String(streamManualText || "").trim()) {
+                            void sendStreamManualMessage(safeLeadId);
+                          } else {
+                            void sendStreamMessages(safeLeadId);
+                          }
+                        }}
+                      >
+                        ➤
+                      </button>
+                    </div>
+                    <div className="card-actions" style={{ marginTop: "8px" }}>
+                      <button
+                        className="btn send"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          skipStreamLead(safeLeadId);
+                        }}
+                      >
+                        Skip
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        function renderOperatorStreamMode() {
+          const visibleLeads = streamAttentionLeads.slice(0, 9);
+          return (
+            <div className="stream-shell">
+              <div className="stream-head">
+                <div>
+                  <div className="stream-title">Operator Stream Mode</div>
+                  <div className="stream-sub">
+                    Conversations nécessitant attention: {streamAttentionLeads.length}
+                  </div>
+                </div>
+              </div>
+              {visibleLeads.length ? (
+                <div className="stream-grid">
+                  {visibleLeads.map((lead) => renderOperatorStreamWindow(lead))}
+                </div>
+              ) : (
+                <div className="stream-empty">Aucune conversation en attente pour le moment.</div>
+              )}
+
+              {streamFocusedLeadId ? (
+                <div className="stream-focus-layer">
+                  <button className="stream-focus-close" onClick={closeStreamFocus}>✕</button>
+                  <div className="stream-focus-shell">
+                    <div className="shell mobile" style={{ maxWidth: "100%", height: "100%" }}>
+                      {renderMobileExperience("mobile")}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+
         return (
           <div className="page">
             <div className="mode-switch">
-              {[{ id: "all", label: "All" }, { id: "mobile", label: "Mobile" }, { id: "tablet", label: "Tablet" }, { id: "desktop", label: "Desktop" }].map((item) => (
+              {[{ id: "stream", label: "Stream" }, { id: "all", label: "All" }, { id: "mobile", label: "Mobile" }, { id: "tablet", label: "Tablet" }, { id: "desktop", label: "Desktop" }].map((item) => (
                 <button
                   key={item.id}
                   className={viewMode === item.id ? "active" : ""}
@@ -6536,13 +7059,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               ))}
             </div>
 
-            <div className={"preview-grid " + (viewMode === "all" ? "all" : "single")}>
-              {visibleDevices.map((device) => (
-                <div key={device} className="device-wrap">
-                  {viewMode === "all" ? <div className="device-label">{deviceLabel(device)}</div> : null}
-                  <div className={"shell " + device}>
-                    <div className="glow"><div className="a" /><div className="b" /><div className="c" /><div className="d" /></div>
-                    {device === "desktop" ? (
+            {viewMode === "stream" ? (
+              renderOperatorStreamMode()
+            ) : (
+              <div className={"preview-grid " + (viewMode === "all" ? "all" : "single")}>
+                {visibleDevices.map((device) => (
+                  <div key={device} className="device-wrap">
+                    {viewMode === "all" ? <div className="device-label">{deviceLabel(device)}</div> : null}
+                    <div className={"shell " + device}>
+                      <div className="glow"><div className="a" /><div className="b" /><div className="c" /><div className="d" /></div>
+                      {device === "desktop" ? (
                       <div className="app-desktop">
                         <div className="desk-col left">
                           <div className="section-head">
@@ -6892,11 +7418,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                           </div>
                         </div>
                       )
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       }
