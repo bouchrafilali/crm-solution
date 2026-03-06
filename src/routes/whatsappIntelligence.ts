@@ -5937,41 +5937,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           try {
             const payload = ensureBubbleSet(payloadRaw);
             if (!LIVE_MODE) {
-              patchLead(selectedLead.id, {
-                preview: payload[payload.length - 1] || selectedLead.preview,
-                lastAt: formatTime(new Date().toISOString()),
-                messages: (selectedLead.messages || []).concat(
-                  payload.map((msg, i) => ({
-                    id: "draft-" + Date.now() + "-" + i,
-                    from: "brand",
-                    text: clampText(msg),
-                    time: "Now",
-                    status: "sent"
-                  }))
-                )
-              });
-              setDraftMessages([]);
-              if (sourceCardId) {
-                const sent = new Set(payload.map((line) => String(line || "").trim()).filter(Boolean));
-                setLeads((prev) =>
-                  prev.map((lead) => {
-                    if (String(lead.id) !== String(selectedLead.id)) return lead;
-                    const nextSuggestions = (Array.isArray(lead.suggestions) ? lead.suggestions : [])
-                      .map((card) => {
-                        if (String(card.id) !== String(sourceCardId)) return card;
-                        const remaining = ensureBubbleSet(card.messages).filter((line) => !sent.has(String(line || "").trim()));
-                        return { ...card, messages: remaining };
-                      })
-                      .filter((card) => ensureBubbleSet(card.messages).length > 0);
-                    return { ...lead, suggestions: nextSuggestions };
-                  })
-                );
-                setCardBubbleSelection((prev) => {
-                  const next = { ...(prev || {}) };
-                  delete next[sourceCardId];
-                  return next;
-                });
-              }
+              setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
               return;
             }
             for (let i = 0; i < payload.length; i += 1) {
@@ -6025,20 +5991,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setSending(true);
           try {
             if (!LIVE_MODE) {
-              patchLead(selectedLead.id, {
-                preview: text,
-                lastAt: formatTime(new Date().toISOString()),
-                messages: (selectedLead.messages || []).concat([
-                  {
-                    id: "manual-" + Date.now(),
-                    from: "brand",
-                    text: clampText(text),
-                    time: formatTime(new Date().toISOString()),
-                    status: "sent"
-                  }
-                ])
-              });
-              setMobileManualText("");
+              setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
               return;
             }
             await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(selectedLead.id) + "/messages", {
