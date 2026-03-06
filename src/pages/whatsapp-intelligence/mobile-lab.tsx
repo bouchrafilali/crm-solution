@@ -68,34 +68,10 @@ export default function WhatsAppIntelligenceMobileLabPage() {
           fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
         }}
       >
-        Loading mobile lab…
+        Loading mobile lab...
       </div>
     );
   }
 
-  return (
-    <>
-      <div style={{ position: "fixed", top: 8, left: 8, zIndex: 20 }}>
-        <a
-          href="/admin/whatsapp-intelligence"
-          style={{
-            display: "inline-block",
-            fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-            fontSize: "12px",
-            color: "#e8f5ff",
-            background: "linear-gradient(180deg, rgba(20,36,60,.82) 0%, rgba(14,26,44,.75) 100%)",
-            textDecoration: "none",
-            border: "1px solid rgba(173, 209, 246, 0.35)",
-            borderRadius: "999px",
-            padding: "7px 11px",
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)"
-          }}
-        >
-          Back to WhatsApp Intelligence
-        </a>
-      </div>
-      <WhatsAppMobileLab thread={thread} mode={mode} />
-    </>
-  );
+  return <WhatsAppMobileLab thread={thread} mode={mode} />;
 }
