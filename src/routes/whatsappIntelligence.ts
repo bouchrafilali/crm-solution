@@ -5587,6 +5587,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const mobileDrawerOffsetRef = React.useRef(MOBILE_DRAWER_FALLBACK_CLOSED);
         const mobileDrawerClosedRef = React.useRef(MOBILE_DRAWER_FALLBACK_CLOSED);
         const mobileDrawerRef = React.useRef(null);
+        const mobileChatScrollRef = React.useRef(null);
         const mobileBackSwipeRef = React.useRef({ active: false, startX: 0 });
         const mobileDrawerDragRef = React.useRef({
           active: false,
@@ -5824,6 +5825,19 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const isOpen = mobileDrawerOffset < mobileDrawerClosedRef.current * 0.5;
           setMobileUiState((prev) => (prev.aiDrawerOpen === isOpen ? prev : { ...prev, aiDrawerOpen: isOpen }));
         }, [mobileDrawerOffset]);
+
+        React.useEffect(() => {
+          if (!mobileUiState.aiDrawerOpen) return;
+          const node = mobileChatScrollRef.current;
+          if (!node || !node.scrollTo) return;
+          const raf = window.requestAnimationFrame(() => {
+            node.scrollTo({
+              top: node.scrollHeight,
+              behavior: "smooth"
+            });
+          });
+          return () => window.cancelAnimationFrame(raf);
+        }, [mobileUiState.aiDrawerOpen, selectedLeadId, selectedLead && selectedLead.messages ? selectedLead.messages.length : 0]);
 
         React.useEffect(() => {
           if (mobileUiState.view === "inbox") {
@@ -6229,6 +6243,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function MobileConversationView() {
+          const drawerOpenProgress = Math.max(
+            0,
+            Math.min(1, 1 - (mobileDrawerOffset / Math.max(1, mobileDrawerClosedRef.current)))
+          );
+          const conversationLift = Math.round(84 * drawerOpenProgress);
           return (
             <div className="mobile-pane mobile-conversation-pane" onPointerDown={onMobileConversationPointerDown}>
               <div className="mobile-conversation-head">
@@ -6241,7 +6260,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
               <div className="mobile-chat-stage">
                 <div className="chat-messages mobile-chat-messages">
-                  <div className="chat-scroll-list">
+                  <div
+                    ref={mobileChatScrollRef}
+                    className="chat-scroll-list"
+                    style={{
+                      transform: "translateY(-" + conversationLift + "px)",
+                      paddingBottom: (12 + conversationLift) + "px",
+                      transition: mobileDrawerDragging ? "none" : "transform .26s cubic-bezier(.22,.74,.22,1), padding-bottom .26s cubic-bezier(.22,.74,.22,1)"
+                    }}
+                  >
                     {errorText ? <div className="preview">{errorText}</div> : null}
                     {loadingMessages ? <div className="preview">Chargement messages...</div> : null}
                     {selectedLead && Array.isArray(selectedLead.messages) && selectedLead.messages.map((message) => {
