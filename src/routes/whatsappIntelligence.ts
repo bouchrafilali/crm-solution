@@ -5054,6 +5054,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         touch-action: none;
         cursor: grab;
       }
+      .mobile-ai-edge-grab {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 34px;
+        touch-action: none;
+        cursor: ew-resize;
+        background: linear-gradient(90deg, rgba(116, 184, 255, .12), rgba(0,0,0,0));
+      }
       .mobile-ai-dragzone span {
         width: 44px;
         height: 4px;
@@ -5494,6 +5504,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function onMobileDrawerPointerDown(event) {
+          if (event && event.preventDefault) event.preventDefault();
           const x = Number(event && event.clientX) || 0;
           mobileDrawerDragRef.current = {
             active: true,
@@ -5502,17 +5513,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             startOffset: mobileDrawerOffsetRef.current
           };
           setMobileDrawerDragging(true);
-          if (event.currentTarget && event.currentTarget.setPointerCapture) {
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }
-        }
-
-        function onMobileDrawerPointerMove(event) {
-          if (!mobileDrawerDragRef.current.active) return;
-          const x = Number(event && event.clientX) || 0;
-          const delta = x - mobileDrawerDragRef.current.startX;
-          if (Math.abs(delta) > 4) mobileDrawerDragRef.current.moved = true;
-          setMobileDrawerOffset(clampDrawerOffset(mobileDrawerDragRef.current.startOffset + delta));
         }
 
         function onMobileDrawerPointerEnd() {
@@ -5526,6 +5526,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             return;
           }
           setMobileDrawerOffset(current < MOBILE_DRAWER_CLOSED * 0.55 ? 0 : MOBILE_DRAWER_CLOSED);
+        }
+
+        function toggleMobileDrawer() {
+          setMobileDrawerOffset((current) => (current > MOBILE_DRAWER_CLOSED * 0.5 ? 0 : MOBILE_DRAWER_CLOSED));
         }
 
         const selectedLead = React.useMemo(
@@ -5653,6 +5657,28 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;
         }, [mobileDrawerOffset]);
+
+        React.useEffect(() => {
+          function onMove(event) {
+            if (!mobileDrawerDragRef.current.active) return;
+            const x = Number(event && event.clientX) || 0;
+            const delta = x - mobileDrawerDragRef.current.startX;
+            if (Math.abs(delta) > 4) mobileDrawerDragRef.current.moved = true;
+            setMobileDrawerOffset(clampDrawerOffset(mobileDrawerDragRef.current.startOffset + delta));
+          }
+          function onUp() {
+            if (!mobileDrawerDragRef.current.active) return;
+            onMobileDrawerPointerEnd();
+          }
+          window.addEventListener("pointermove", onMove);
+          window.addEventListener("pointerup", onUp);
+          window.addEventListener("pointercancel", onUp);
+          return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+          };
+        }, []);
 
         function insertSuggestion(messages) {
           setDraftMessages(ensureBubbleSet(messages));
@@ -5966,25 +5992,25 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               >
                                 <button
                                   type="button"
-                                  className="mobile-ai-handle"
-                                  onPointerDown={onMobileDrawerPointerDown}
-                                  onPointerMove={onMobileDrawerPointerMove}
-                                  onPointerUp={onMobileDrawerPointerEnd}
-                                  onPointerCancel={onMobileDrawerPointerEnd}
-                                  aria-label="Toggle AI drawer"
-                                >
-                                  <span className="mobile-ai-handle-dot" />
-                                  <span className="mobile-ai-handle-label">AI</span>
-                                </button>
-                                <div
-                                  className="mobile-ai-dragzone"
-                                  onPointerDown={onMobileDrawerPointerDown}
-                                  onPointerMove={onMobileDrawerPointerMove}
-                                  onPointerUp={onMobileDrawerPointerEnd}
-                                  onPointerCancel={onMobileDrawerPointerEnd}
-                                >
-                                  <span />
-                                </div>
+                                className="mobile-ai-handle"
+                                onClick={toggleMobileDrawer}
+                                onPointerDown={onMobileDrawerPointerDown}
+                                aria-label="Toggle AI drawer"
+                              >
+                                <span className="mobile-ai-handle-dot" />
+                                <span className="mobile-ai-handle-label">AI</span>
+                              </button>
+                              <div
+                                className="mobile-ai-edge-grab"
+                                onClick={toggleMobileDrawer}
+                                onPointerDown={onMobileDrawerPointerDown}
+                              />
+                              <div
+                                className="mobile-ai-dragzone"
+                                onPointerDown={onMobileDrawerPointerDown}
+                              >
+                                <span />
+                              </div>
                                 <div className="mobile-ai-head">
                                   <div className="chat-head">
                                     <div>
