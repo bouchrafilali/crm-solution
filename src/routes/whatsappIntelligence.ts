@@ -4669,7 +4669,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         z-index: 3;
         height: 100%;
         display: grid;
-        grid-template-columns: 330px 1fr 370px;
+        grid-template-columns: 280px 560px minmax(320px, 1fr);
         gap: 0;
       }
       .desk-col {
@@ -4705,15 +4705,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         min-height: 0;
       }
       .desk-col.center .cards {
-        flex-wrap: wrap;
-        overflow-y: auto;
-        overflow-x: hidden;
-        align-content: flex-start;
-        padding-right: 2px;
-      }
-      .desk-col.center .card {
-        min-width: calc(50% - 6px);
-        max-width: calc(50% - 6px);
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 2px;
       }
       .chat-panel {
         flex: 1;
