@@ -5043,6 +5043,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         display: flex;
         flex-direction: column;
       }
+      .mobile-shell-content {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
       .mobile-inbox-list {
         flex: 1;
         height: auto;
@@ -5050,16 +5056,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .mobile-conversation-pane {
         position: relative;
-        background: linear-gradient(180deg, rgba(11,18,33,.7), rgba(9,14,27,.75));
-      }
-      .mobile-conversation-head {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(170, 207, 249, .14);
-        background: linear-gradient(180deg, rgba(23, 36, 58, .52), rgba(14, 24, 41, .4));
-        backdrop-filter: blur(12px);
       }
       .mobile-back-btn {
         width: 34px;
@@ -5072,8 +5068,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         cursor: pointer;
       }
       .mobile-conversation-title {
-        font-size: 16px;
-        font-weight: 700;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -.02em;
         color: #f2f7ff;
         white-space: nowrap;
         overflow: hidden;
@@ -6060,10 +6057,21 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           }
         }
 
-        function renderMobileInboxView(device) {
+        function renderMobileShell({ paneClass, onPointerDown, header, content, bottomBar }) {
           return (
-            <div className="mobile-pane">
-              <div className="section-head">
+            <div className={"mobile-pane " + String(paneClass || "")} onPointerDown={onPointerDown || undefined}>
+              <div className="section-head">{header}</div>
+              <div className="mobile-shell-content">{content}</div>
+              {bottomBar || null}
+            </div>
+          );
+        }
+
+        function renderMobileInboxView(device) {
+          return renderMobileShell({
+            paneClass: "",
+            header: (
+              <>
                 <div className="head-row">
                   <div>
                     <div className="kicker">WhatsApp Intelligence · Mobile</div>
@@ -6100,8 +6108,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     </button>
                   ))}
                 </div>
-              </div>
-
+              </>
+            ),
+            content: (
               <div className="lead-list mobile-inbox-list">
                 {loadingLeads ? <div className="preview">Chargement conversations...</div> : null}
                 {mobileFilteredLeads.map((lead) => {
@@ -6127,8 +6136,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   );
                 })}
               </div>
-            </div>
-          );
+            ),
+            bottomBar: null
+          });
         }
 
         function renderMobileAiDrawer() {
@@ -6246,16 +6256,20 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             Math.min(1, 1 - (mobileDrawerOffset / Math.max(1, mobileDrawerClosedRef.current)))
           );
           const conversationLift = Math.round(84 * drawerOpenProgress);
-          return (
-            <div className="mobile-pane mobile-conversation-pane" onPointerDown={onMobileConversationPointerDown}>
-              <div className="mobile-conversation-head">
+          return renderMobileShell({
+            paneClass: "mobile-conversation-pane",
+            onPointerDown: onMobileConversationPointerDown,
+            header: (
+              <div className="head-row">
                 <button type="button" className="mobile-back-btn" onClick={closeMobileConversation}>←</button>
                 <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="kicker">WhatsApp Intelligence · Mobile</div>
                   <div className="mobile-conversation-title">{selectedLead ? selectedLead.name : "Conversation"}</div>
                   <div className="mobile-conversation-sub">{selectedLead ? (selectedLead.stageLabel || selectedLead.stage) : "Thread WhatsApp"}</div>
                 </div>
               </div>
-
+            ),
+            content: (
               <div className="mobile-chat-stage">
                 <div className="chat-messages mobile-chat-messages">
                   <div
@@ -6287,7 +6301,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   {renderMobileAiDrawer()}
                 </div>
               </div>
-
+            ),
+            bottomBar: (
               <div className="composer">
                 <div className="stats">
                   <div className="stat"><div className="k">AI</div><div className="v">{selectedLead ? selectedLead.suggestions.length : 0} cartes</div></div>
@@ -6339,8 +6354,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   <span>{LIVE_MODE ? "Live API" : "Mock mode"}</span>
                 </div>
               </div>
-            </div>
-          );
+            )
+          });
         }
 
         function renderMobileExperience(device) {
