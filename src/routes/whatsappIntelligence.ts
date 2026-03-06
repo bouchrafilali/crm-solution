@@ -12984,8 +12984,9 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         body: JSON.stringify({
           direction: "OUT",
           text: value,
-          provider: "system",
-          message_type: "text"
+          provider: "manual",
+          message_type: "text",
+          send_whatsapp: true
         })
       });
       pendingSuggestionFeedback = null;
