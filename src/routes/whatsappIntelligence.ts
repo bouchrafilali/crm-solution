@@ -4588,10 +4588,60 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       #root { min-height: 100dvh; }
       .page {
         min-height: 100dvh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 14px;
+        display: block;
+        padding: 64px 14px 14px;
+        overflow-x: hidden;
+        overflow-y: auto;
+      }
+      .preview-grid {
+        width: min(1500px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: 14px;
+      }
+      .preview-grid.all {
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        align-items: start;
+      }
+      .preview-grid.single {
+        grid-template-columns: 1fr;
+        justify-items: center;
+      }
+      .device-wrap { display: grid; gap: 8px; justify-items: center; }
+      .device-label {
+        font-size: 11px;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+        color: rgba(219, 234, 254, .78);
+      }
+      .mode-switch {
+        position: fixed;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 13;
+        display: inline-flex;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(131,153,187,.45);
+        background: rgba(7,12,22,.76);
+        backdrop-filter: blur(12px);
+      }
+      .mode-switch button {
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.06);
+        color: rgba(234, 245, 255, .9);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .mode-switch button.active {
+        background: linear-gradient(135deg, rgba(103,232,249,.92) 0%, rgba(96,165,250,.9) 100%);
+        color: #0f172a;
+        border-color: rgba(207,250,254,.75);
+        font-weight: 700;
       }
       .shell {
         position: relative;
@@ -4606,6 +4656,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         box-shadow: 0 26px 90px rgba(0,0,0,.5);
         backdrop-filter: blur(18px);
       }
+      .shell.tablet {
+        max-width: 860px;
+        border-radius: 2.2rem;
+      }
+      .shell.desktop {
+        max-width: 1180px;
+        border-radius: 2rem;
+      }
+      .preview-grid.all .shell.mobile { max-width: 390px; }
+      .preview-grid.all .shell.tablet { max-width: 540px; }
+      .preview-grid.all .shell.desktop { max-width: 700px; }
       .glow { position: absolute; inset: 0; pointer-events: none; }
       .glow .a { position: absolute; top: -64px; left: 34px; width: 180px; height: 180px; border-radius: 999px; background: rgba(34,211,238,.15); filter: blur(42px); }
       .glow .b { position: absolute; top: 190px; right: -28px; width: 210px; height: 210px; border-radius: 999px; background: rgba(217,70,239,.12); filter: blur(50px); }
@@ -4803,7 +4864,21 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         border-radius: 999px; padding: 7px 10px;
       }
       @media (max-width: 768px) {
-        .page { padding: 0; }
+        .mode-switch {
+          left: auto;
+          right: 8px;
+          transform: none;
+          max-width: calc(100vw - 72px);
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+        .mode-switch button {
+          padding: 8px 10px;
+          font-size: 11px;
+        }
+        .page { padding: 56px 0 0; }
+        .preview-grid { width: 100%; }
+        .device-label { display: none; }
         .shell {
           border-radius: 0; max-width: 100%; height: 100dvh; max-height: 100dvh; border: none;
         }
@@ -5077,6 +5152,22 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
         const [aiProvider, setAiProvider] = React.useState("claude");
         const [errorText, setErrorText] = React.useState("");
+        const [viewMode, setViewMode] = React.useState("all");
+
+        const deviceOrder = React.useMemo(() => ["mobile", "tablet", "desktop"], []);
+        const visibleDevices = viewMode === "all" ? deviceOrder : [viewMode];
+
+        function deviceLabel(device) {
+          if (device === "mobile") return "Mobile";
+          if (device === "tablet") return "Tablet / iPad";
+          return "Desktop";
+        }
+
+        function titleForDevice(device) {
+          if (device === "mobile") return "Mobile Inbox";
+          if (device === "tablet") return "Tablet Workspace";
+          return "Operator Workspace";
+        }
 
         const selectedLead = React.useMemo(
           () => leads.find((lead) => String(lead.id) === String(selectedLeadId)) || leads[0] || null,
@@ -5251,155 +5342,174 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
         return (
           <div className="page">
-            <div className="shell">
-              <div className="glow"><div className="a" /><div className="b" /><div className="c" /><div className="d" /></div>
-              <div className="app">
-                <div className="section-head">
-                  <div className="head-row">
-                    <div>
-                      <div className="kicker">WhatsApp Intelligence</div>
-                      <div className="title">Mobile Inbox</div>
-                    </div>
-                    <div className="spark">✦</div>
-                  </div>
+            <div className="mode-switch">
+              {[{ id: "all", label: "All" }, { id: "mobile", label: "Mobile" }, { id: "tablet", label: "Tablet" }, { id: "desktop", label: "Desktop" }].map((item) => (
+                <button
+                  key={item.id}
+                  className={viewMode === item.id ? "active" : ""}
+                  onClick={() => setViewMode(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
 
-                  <div className="search-wrap">
-                    <span className="search-icon">⌕</span>
-                    <input value={query} onChange={(e) => setQuery(e.target.value)} className="search" placeholder="Rechercher une conversation" />
-                  </div>
-
-                  <div className="filters">
-                    {["All", "High", "Medium", "Low"].map((item) => (
-                      <button key={item} onClick={() => setFilter(item)} className={"pill " + (filter === item ? "active" : "")}>
-                        {item === "All" ? "☰ " : ""}{item}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="lead-list">
-                  {loadingLeads ? <div className="preview">Chargement conversations...</div> : null}
-                  {filteredLeads.map((lead) => {
-                    const active = String(lead.id) === String(selectedLeadId);
-                    return (
-                      <button key={lead.id} onClick={() => setSelectedLeadId(String(lead.id))} className={"lead-item " + (active ? "active" : "")}>
-                        <div className="lead-row">
-                          <div className="avatar">{lead.avatar}</div>
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div className="name-line">
-                              <span className="name">{lead.name}</span>
-                              <span className="at">{lead.lastAt}</span>
-                            </div>
-                            <div className="preview">{lead.preview}</div>
-                            <div className="lead-meta">
-                              <span className={"badge " + urgencyClass[lead.urgency]}>{lead.urgency}</span>
-                              <span className={"stage " + stageClass[lead.stage]}>{lead.stageLabel || lead.stage}</span>
-                              {lead.unread > 0 ? <span className="unread">{lead.unread}</span> : null}
-                            </div>
+            <div className={"preview-grid " + (viewMode === "all" ? "all" : "single")}>
+              {visibleDevices.map((device) => (
+                <div key={device} className="device-wrap">
+                  {viewMode === "all" ? <div className="device-label">{deviceLabel(device)}</div> : null}
+                  <div className={"shell " + device}>
+                    <div className="glow"><div className="a" /><div className="b" /><div className="c" /><div className="d" /></div>
+                    <div className="app">
+                      <div className="section-head">
+                        <div className="head-row">
+                          <div>
+                            <div className="kicker">WhatsApp Intelligence · {deviceLabel(device)}</div>
+                            <div className="title">{titleForDevice(device)}</div>
                           </div>
+                          <div className="spark">✦</div>
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
 
-                <div className="suggestion-wrap">
-                  <div className="chat-head">
-                    <div>
-                      <div className="n">{selectedLead ? selectedLead.name : "Lead"}</div>
-                      <div className="sub">WhatsApp API · Suggestions {String(aiProvider).toUpperCase()} · {String(MODE).toUpperCase()}</div>
-                    </div>
-                    <button
-                      className="icon-btn"
-                      onClick={() => {
-                        if (!selectedLead) return;
-                        void loadSuggestions(selectedLead.id, true);
-                      }}
-                    >
-                      {loadingSuggestions ? "…" : "✦"}
-                    </button>
-                  </div>
-                  <div className="filters" style={{ marginBottom: "8px" }}>
-                    {["claude", "gpt"].map((provider) => (
-                      <button
-                        key={provider}
-                        className={"pill " + (aiProvider === provider ? "active" : "")}
-                        onClick={() => setAiProvider(provider)}
-                      >
-                        {provider.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="cards">
-                    {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
-                      ? selectedLead.suggestions.map((card) => (
-                        <div key={card.id} className="card">
-                          <div className="card-top">
-                            <div>
-                              <div className="card-title">{card.title}</div>
-                              <div className="card-tag">{card.tag}</div>
-                            </div>
-                            <div className="card-zap">⚡</div>
-                          </div>
-                          <div className="snips">
-                            {ensureBubbleSet(card.messages).map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
-                          </div>
-                          <div className="card-actions">
-                            <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
-                            <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
-                          </div>
+                        <div className="search-wrap">
+                          <span className="search-icon">⌕</span>
+                          <input value={query} onChange={(e) => setQuery(e.target.value)} className="search" placeholder="Rechercher une conversation" />
                         </div>
-                      ))
-                      : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
-                  </div>
-                </div>
 
-                <div className="chat-messages">
-                  {errorText ? <div className="preview">{errorText}</div> : null}
-                  {loadingMessages ? <div className="preview">Chargement messages...</div> : null}
-                  {selectedLead && Array.isArray(selectedLead.messages) && selectedLead.messages.map((message) => {
-                    const own = message.from === "brand";
-                    return (
-                      <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
-                        <div className={"bubble " + (own ? "brand" : "client")}>
-                          <div className="text">{clampText(message.text)}</div>
-                          <div className="meta">
-                            <span>{message.time}</span>
-                            {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
-                          </div>
+                        <div className="filters">
+                          {["All", "High", "Medium", "Low"].map((item) => (
+                            <button key={item} onClick={() => setFilter(item)} className={"pill " + (filter === item ? "active" : "")}>
+                              {item === "All" ? "☰ " : ""}{item}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
 
-                <div className="composer">
-                  <div className="stats">
-                    <div className="stat"><div className="k">AI</div><div className="v">{selectedLead ? selectedLead.suggestions.length : 0} cartes</div></div>
-                    <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead ? (selectedLead.stageLabel || selectedLead.stage) : "-"}</div></div>
-                    <div className="stat"><div className="k">Provider</div><div className="v">{String(aiProvider).toUpperCase()}</div></div>
-                  </div>
+                      <div className="lead-list">
+                        {loadingLeads ? <div className="preview">Chargement conversations...</div> : null}
+                        {filteredLeads.map((lead) => {
+                          const active = String(lead.id) === String(selectedLeadId);
+                          return (
+                            <button key={lead.id} onClick={() => setSelectedLeadId(String(lead.id))} className={"lead-item " + (active ? "active" : "")}>
+                              <div className="lead-row">
+                                <div className="avatar">{lead.avatar}</div>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div className="name-line">
+                                    <span className="name">{lead.name}</span>
+                                    <span className="at">{lead.lastAt}</span>
+                                  </div>
+                                  <div className="preview">{lead.preview}</div>
+                                  <div className="lead-meta">
+                                    <span className={"badge " + urgencyClass[lead.urgency]}>{lead.urgency}</span>
+                                    <span className={"stage " + stageClass[lead.stage]}>{lead.stageLabel || lead.stage}</span>
+                                    {lead.unread > 0 ? <span className="unread">{lead.unread}</span> : null}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
 
-                  {draftMessages.length ? (
-                    <div className="draft-stack">
-                      {draftMessages.map((msg, i) => <div key={i} className="draft-bubble">{clampText(msg)}</div>)}
+                      <div className="suggestion-wrap">
+                        <div className="chat-head">
+                          <div>
+                            <div className="n">{selectedLead ? selectedLead.name : "Lead"}</div>
+                            <div className="sub">WhatsApp API · Suggestions {String(aiProvider).toUpperCase()} · {String(MODE).toUpperCase()}</div>
+                          </div>
+                          <button
+                            className="icon-btn"
+                            onClick={() => {
+                              if (!selectedLead) return;
+                              void loadSuggestions(selectedLead.id, true);
+                            }}
+                          >
+                            {loadingSuggestions ? "…" : "✦"}
+                          </button>
+                        </div>
+                        <div className="filters" style={{ marginBottom: "8px" }}>
+                          {["claude", "gpt"].map((provider) => (
+                            <button
+                              key={provider}
+                              className={"pill " + (aiProvider === provider ? "active" : "")}
+                              onClick={() => setAiProvider(provider)}
+                            >
+                              {provider.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="cards">
+                          {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
+                            ? selectedLead.suggestions.map((card) => (
+                              <div key={card.id} className="card">
+                                <div className="card-top">
+                                  <div>
+                                    <div className="card-title">{card.title}</div>
+                                    <div className="card-tag">{card.tag}</div>
+                                  </div>
+                                  <div className="card-zap">⚡</div>
+                                </div>
+                                <div className="snips">
+                                  {ensureBubbleSet(card.messages).map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
+                                </div>
+                                <div className="card-actions">
+                                  <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
+                                  <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
+                                </div>
+                              </div>
+                            ))
+                            : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
+                        </div>
+                      </div>
+
+                      <div className="chat-messages">
+                        {errorText ? <div className="preview">{errorText}</div> : null}
+                        {loadingMessages ? <div className="preview">Chargement messages...</div> : null}
+                        {selectedLead && Array.isArray(selectedLead.messages) && selectedLead.messages.map((message) => {
+                          const own = message.from === "brand";
+                          return (
+                            <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
+                              <div className={"bubble " + (own ? "brand" : "client")}>
+                                <div className="text">{clampText(message.text)}</div>
+                                <div className="meta">
+                                  <span>{message.time}</span>
+                                  {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="composer">
+                        <div className="stats">
+                          <div className="stat"><div className="k">AI</div><div className="v">{selectedLead ? selectedLead.suggestions.length : 0} cartes</div></div>
+                          <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead ? (selectedLead.stageLabel || selectedLead.stage) : "-"}</div></div>
+                          <div className="stat"><div className="k">Provider</div><div className="v">{String(aiProvider).toUpperCase()}</div></div>
+                        </div>
+
+                        {draftMessages.length ? (
+                          <div className="draft-stack">
+                            {draftMessages.map((msg, i) => <div key={i} className="draft-bubble">{clampText(msg)}</div>)}
+                          </div>
+                        ) : null}
+
+                        <div className="composer-row">
+                          <button className="mini-btn" onClick={() => setDraftMessages([])}>＋</button>
+                          <div className="composer-pill">
+                            {draftMessages.length ? String(draftMessages.length) + " messages prêts à être envoyés" : "Sélectionner une suggestion AI..."}
+                          </div>
+                          <button className="send-fab" disabled={sending} onClick={() => { void sendMessages(); }}>➤</button>
+                        </div>
+
+                        <div className="hint">
+                          <span>✦ Suggestions 2–4 messages · ≤120 caractères</span>
+                          <span>{LIVE_MODE ? "Live API" : "Mock mode"}</span>
+                        </div>
+                      </div>
                     </div>
-                  ) : null}
-
-                  <div className="composer-row">
-                    <button className="mini-btn" onClick={() => setDraftMessages([])}>＋</button>
-                    <div className="composer-pill">
-                      {draftMessages.length ? String(draftMessages.length) + " messages prêts à être envoyés" : "Sélectionner une suggestion AI..."}
-                    </div>
-                    <button className="send-fab" disabled={sending} onClick={() => { void sendMessages(); }}>➤</button>
-                  </div>
-
-                  <div className="hint">
-                    <span>✦ Suggestions 2–4 messages · ≤120 caractères</span>
-                    <span>{LIVE_MODE ? "Live API" : "Mock mode"}</span>
                   </div>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
         );
