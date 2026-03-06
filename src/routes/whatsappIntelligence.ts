@@ -4609,7 +4609,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="shopify-api-key" content="${env.SHOPIFY_API_KEY}" />
     <title>WhatsApp Mobile Lab</title>
+    <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -5614,6 +5616,24 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
     <a class="logic-link" href="/whatsapp-intelligence/agent-logic${navSuffix}">Agent Logic</a>
     <div id="root"></div>
     <script type="text/babel">
+      try {
+        const appBridgeKey = document.querySelector('meta[name="shopify-api-key"]');
+        const hostParam = new URLSearchParams(window.location.search).get("host") || undefined;
+        if (
+          window.shopify &&
+          appBridgeKey &&
+          appBridgeKey.content &&
+          typeof window.shopify.createApp === "function"
+        ) {
+          window.shopify.createApp({
+            apiKey: appBridgeKey.content,
+            host: hostParam
+          });
+        }
+      } catch (error) {
+        console.warn("[mobile-lab] App Bridge init skipped:", error);
+      }
+
       const MODE = ${JSON.stringify(mode)};
       const LEAD_ID = ${JSON.stringify(leadId)};
       const SHOW_DYNAMIC_DEBUG = ${isDynamicDecisionDebugEnabled() ? "true" : "false"};
