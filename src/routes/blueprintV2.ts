@@ -1,88 +1,159 @@
 import { Router } from "express";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { env } from "../config/env.js";
-import { getDbPool } from "../db/client.js";
+import { isDbEnabled, withDbClient } from "../db/db.js";
 
 export const blueprintV2Router = Router();
+const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
+
+function firstExistingPath(candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function buildFallbackBlueprint() {
+  return {
+    metadata: {
+      projectName: "Shopify Business App",
+      generatedDate: new Date().toISOString().slice(0, 10),
+      totalRoutes: 0,
+      totalModules: 3,
+      totalServices: 0,
+      totalDatabases: 0
+    },
+    nodes: [
+      {
+        id: "whatsapp_intelligence",
+        label: "WhatsApp Intelligence",
+        type: "module",
+        color: "#2eb67d",
+        description: "Lead management and conversation automation"
+      },
+      {
+        id: "orders",
+        label: "Orders & Invoicing",
+        type: "module",
+        color: "#ecb22e",
+        description: "Orders, quotes and invoicing"
+      },
+      {
+        id: "appointments",
+        label: "Appointments",
+        type: "module",
+        color: "#e01e5a",
+        description: "Scheduling and reminders"
+      }
+    ],
+    edges: []
+  };
+}
 
 // ── Live metrics from the database ──────────────────────────────────────────
 
 type LiveMetrics = Record<string, Record<string, number>>;
 
 async function getLiveBlueprintMetrics(): Promise<LiveMetrics> {
-  const db = getDbPool();
-  if (!db) return {};
+  if (!isDbEnabled()) return {};
 
   try {
-    const [leadsRes, apptRes, ordersRes] = await Promise.all([
-      db.query<{
-        active_leads: string;
-        pending_qualification: string;
-        deposit_pending: string;
-        avg_response_time: string | null;
-      }>(`
-        SELECT
-          COUNT(*)                          FILTER (WHERE stage NOT IN ('CONVERTED','LOST'))       AS active_leads,
-          COUNT(*)                          FILTER (WHERE stage = 'QUALIFICATION_PENDING')         AS pending_qualification,
-          COUNT(*)                          FILTER (WHERE stage = 'DEPOSIT_PENDING')               AS deposit_pending,
-          ROUND(AVG(first_response_time_minutes)
-                FILTER (WHERE first_response_time_minutes IS NOT NULL)::numeric, 1)               AS avg_response_time
-        FROM whatsapp_leads
-      `),
-      db.query<{
-        today_appointments: string;
-        upcoming_week: string;
-      }>(`
-        SELECT
-          COUNT(*) FILTER (WHERE DATE(appointment_at) = CURRENT_DATE   AND status != 'cancelled') AS today_appointments,
-          COUNT(*) FILTER (WHERE appointment_at >= NOW()
-                             AND appointment_at <  NOW() + INTERVAL '7 days'
-                             AND status != 'cancelled')                                            AS upcoming_week
-        FROM appointments
-      `),
-      db.query<{
-        pending_orders: string;
-        outstanding_count: string;
-      }>(`
-        SELECT
-          COUNT(*) FILTER (WHERE financial_status = 'pending')                                    AS pending_orders,
-          COUNT(*) FILTER (WHERE outstanding_amount > 0
-                             AND financial_status NOT IN ('refunded','voided'))                   AS outstanding_count
-        FROM orders
-      `)
-    ]);
+    const row = await withDbClient(async (client) => {
+      await client.query("begin");
+      try {
+        // Keep blueprint responsive even when DB is slow.
+        await client.query("set local statement_timeout = '1500ms'");
+        const res = await client.query<{
+          active_leads: string;
+          pending_qualification: string;
+          deposit_pending: string;
+          avg_response_time: string | null;
+          today_appointments: string;
+          upcoming_week: string;
+          pending_orders: string;
+          outstanding_count: string;
+        }>(`
+          SELECT
+            (SELECT COUNT(*) FILTER (WHERE stage NOT IN ('CONVERTED','LOST'))::text FROM whatsapp_leads) AS active_leads,
+            (SELECT COUNT(*) FILTER (WHERE stage = 'QUALIFICATION_PENDING')::text FROM whatsapp_leads) AS pending_qualification,
+            (SELECT COUNT(*) FILTER (WHERE stage = 'DEPOSIT_PENDING')::text FROM whatsapp_leads) AS deposit_pending,
+            (
+              SELECT ROUND(
+                AVG(first_response_time_minutes) FILTER (WHERE first_response_time_minutes IS NOT NULL)::numeric,
+                1
+              )::text
+              FROM whatsapp_leads
+            ) AS avg_response_time,
+            (
+              SELECT COUNT(*) FILTER (
+                WHERE DATE(appointment_at) = CURRENT_DATE AND status != 'cancelled'
+              )::text
+              FROM appointments
+            ) AS today_appointments,
+            (
+              SELECT COUNT(*) FILTER (
+                WHERE appointment_at >= NOW()
+                  AND appointment_at < NOW() + INTERVAL '7 days'
+                  AND status != 'cancelled'
+              )::text
+              FROM appointments
+            ) AS upcoming_week,
+            (
+              SELECT COUNT(*) FILTER (WHERE financial_status = 'pending')::text
+              FROM orders
+            ) AS pending_orders,
+            (
+              SELECT COUNT(*) FILTER (
+                WHERE outstanding_amount > 0
+                  AND financial_status NOT IN ('refunded','voided')
+              )::text
+              FROM orders
+            ) AS outstanding_count
+        `);
+        await client.query("commit");
+        return res.rows[0] ?? null;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      }
+    });
 
-    const l = leadsRes.rows[0] ?? {};
-    const a = apptRes.rows[0] ?? {};
-    const o = ordersRes.rows[0] ?? {};
+    if (!row) return {};
 
     return {
       whatsapp_intelligence: {
-        activeLeads:          parseInt(l.active_leads          ?? "0"),
-        pendingQualification: parseInt(l.pending_qualification ?? "0"),
-        depositPending:       parseInt(l.deposit_pending       ?? "0"),
-        avgResponseTime:      parseFloat(l.avg_response_time  ?? "0")
+        activeLeads: parseInt(row.active_leads ?? "0", 10),
+        pendingQualification: parseInt(row.pending_qualification ?? "0", 10),
+        depositPending: parseInt(row.deposit_pending ?? "0", 10),
+        avgResponseTime: parseFloat(row.avg_response_time ?? "0")
       },
       appointments: {
-        todayAppointments: parseInt(a.today_appointments ?? "0"),
-        upcomingWeek:      parseInt(a.upcoming_week      ?? "0")
+        todayAppointments: parseInt(row.today_appointments ?? "0", 10),
+        upcomingWeek: parseInt(row.upcoming_week ?? "0", 10)
       },
       orders: {
-        pendingOrders:    parseInt(o.pending_orders    ?? "0"),
-        outstandingCount: parseInt(o.outstanding_count ?? "0")
+        pendingOrders: parseInt(row.pending_orders ?? "0", 10),
+        outstandingCount: parseInt(row.outstanding_count ?? "0", 10)
       }
     };
-  } catch {
+  } catch (error) {
+    console.warn("[blueprint] Live metrics unavailable, fallback to static view", error);
     return {};
   }
 }
 
 blueprintV2Router.get("/api/blueprint", async (_req, res) => {
   try {
-    const blueprintPath = join(process.cwd(), "system-blueprint.json");
-    const blueprintData = readFileSync(blueprintPath, "utf-8");
-    const blueprint = JSON.parse(blueprintData);
+    const blueprintPath = firstExistingPath([
+      join(process.cwd(), "system-blueprint.json"),
+      resolve(CURRENT_DIR, "../../system-blueprint.json"),
+      resolve(CURRENT_DIR, "../system-blueprint.json")
+    ]);
+    const blueprint = blueprintPath
+      ? JSON.parse(readFileSync(blueprintPath, "utf-8"))
+      : buildFallbackBlueprint();
 
     const liveMetrics = await getLiveBlueprintMetrics();
 
@@ -171,17 +242,59 @@ function getNodeImportance(node: any): "core" | "secondary" {
 
 
 blueprintV2Router.get("/blueprint", (_req, res) => {
-  const stylesPath = join(process.cwd(), "frontend/blueprint-v2/styles.css");
-  const appPath = join(process.cwd(), "frontend/blueprint-v2/app.js");
+  const stylesPath = firstExistingPath([
+    join(process.cwd(), "frontend/blueprint-v2/styles.css"),
+    resolve(CURRENT_DIR, "../../frontend/blueprint-v2/styles.css"),
+    resolve(CURRENT_DIR, "../frontend/blueprint-v2/styles.css")
+  ]);
+  const appPath = firstExistingPath([
+    join(process.cwd(), "frontend/blueprint-v2/app.js"),
+    resolve(CURRENT_DIR, "../../frontend/blueprint-v2/app.js"),
+    resolve(CURRENT_DIR, "../frontend/blueprint-v2/app.js")
+  ]);
   
   let styles = "";
   let appScript = "";
+  let assetsLoaded = true;
   
   try {
+    if (!stylesPath || !appPath) {
+      assetsLoaded = false;
+      throw new Error("Blueprint frontend assets not found");
+    }
     styles = readFileSync(stylesPath, "utf-8");
     appScript = readFileSync(appPath, "utf-8");
   } catch (error) {
     console.error("[blueprint] Failed to load assets", error);
+    assetsLoaded = false;
+    styles = `
+      body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#0b1220; color:#e5e7eb; }
+      .wrap { max-width: 960px; margin: 40px auto; padding: 0 16px; }
+      .title { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+      .muted { color: #9ca3af; margin-bottom: 18px; }
+      .card { background:#111827; border:1px solid #1f2937; border-radius:12px; padding:14px; margin-bottom:12px; }
+      .node-title { font-weight:600; margin-bottom:6px; }
+      .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#1f2937; color:#d1d5db; font-size:12px; }
+      .err { color:#fca5a5; margin-bottom:12px; }
+    `;
+    appScript = `
+      async function run() {
+        const root = document.getElementById("root");
+        if (!root) return;
+        try {
+          const res = await fetch("/api/blueprint");
+          if (!res.ok) throw new Error("API failed: " + res.status);
+          const data = await res.json();
+          const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+          root.innerHTML = '<div class="wrap"><div class="title">System Blueprint</div><div class="muted">Fallback mode (frontend assets missing in deployment)</div>' +
+            nodes.map(n => '<div class="card"><div class="node-title">' + (n.label || n.id || "Node") + '</div><span class="badge">' + (n.type || "module") + '</span><div class="muted" style="margin-top:8px">' + (n.description || "") + '</div></div>').join("") +
+            '</div>';
+        } catch (e) {
+          root.innerHTML = '<div class="wrap"><div class="title">System Blueprint</div><div class="err">Unable to load blueprint: ' + (e && e.message ? e.message : "unknown error") + '</div></div>';
+        }
+      }
+      run();
+    `;
   }
   
   const html = `<!doctype html>
@@ -195,10 +308,17 @@ blueprintV2Router.get("/blueprint", (_req, res) => {
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/reactflow@11.10.4/dist/umd/index.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reactflow@11.10.4/dist/style.css" />
+    <script>
+      window.addEventListener("error", function(e) {
+        const root = document.getElementById("root");
+        if (!root) return;
+        root.innerHTML = '<div style="padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111">Blueprint runtime error: ' + (e.message || "Unknown error") + '</div>';
+      });
+    </script>
     <style>${styles}</style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">${assetsLoaded ? "" : `<div style="padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111">Blueprint assets missing in deployment. Verify files under <code>frontend/blueprint-v2</code>.</div>`}</div>
     <script type="text/babel">${appScript}</script>
   </body>
 </html>`;

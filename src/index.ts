@@ -1,6 +1,6 @@
 import express from "express";
 import { env } from "./config/env.js";
-import { initDb, isDbEnabled } from "./db/client.js";
+import { connectDbWithRetry, initDb, isDbEnabled } from "./db/db.js";
 import { listPersistedOrderPayloads } from "./db/ordersRepo.js";
 import { adminRouter, startAppointmentsReminderWorker } from "./routes/admin.js";
 import { healthRouter } from "./routes/health.js";
@@ -251,16 +251,10 @@ async function loadRecentOrdersFromDBIntoMemory(): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   if (isDbEnabled()) {
-    try {
-      await initDb();
-      console.log("Postgres initialized");
-      await loadRecentOrdersFromDBIntoMemory();
-    } catch (error) {
-      console.warn(
-        "Postgres unavailable at startup. App will run in degraded mode (DB features disabled).",
-        error
-      );
-    }
+    await connectDbWithRetry(10);
+    await initDb();
+    console.log("Postgres initialized");
+    await loadRecentOrdersFromDBIntoMemory();
   }
 
   app.listen(env.PORT, () => {

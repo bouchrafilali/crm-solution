@@ -3091,7 +3091,7 @@ whatsappRouter.get("/api/whatsapp/leads/:id/messages", async (req, res) => {
   try {
     const [items, quotes] = await Promise.all([
       listWhatsAppLeadMessages(leadId, { limit: parsed.data.limit ?? 50, order: "asc" }),
-      listLeadPriceQuotes(leadId, 3)
+      listLeadPriceQuotes(leadId, 50)
     ]);
     return res.status(200).json({
       items: items.map((item) => ({
@@ -4319,6 +4319,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
       <a href="/admin/spline${navSuffix}">Spline</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence WhatsApp</a>
       <a href="/whatsapp-intelligence/workflow${navSuffix}">Manager Approval Flow</a>
+      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
       <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
       <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
       <a class="current" href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages WhatsApp Intelligence</a>
@@ -4549,6 +4550,214 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
   </script>
 </body>
 </html>`);
+});
+
+whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
+  const navParams = new URLSearchParams();
+  const host = typeof req.query.host === "string" ? req.query.host.trim() : "";
+  const shop = typeof req.query.shop === "string" ? req.query.shop.trim() : "";
+  const embedded = typeof req.query.embedded === "string" ? req.query.embedded.trim() : "";
+  if (host) navParams.set("host", host);
+  if (shop) navParams.set("shop", shop);
+  if (embedded) navParams.set("embedded", embedded);
+  const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
+
+  const modeRaw = typeof req.query.mode === "string" ? req.query.mode.trim().toLowerCase() : "";
+  const mode = modeRaw === "live" ? "live" : "mock";
+  const leadId = typeof req.query.leadId === "string" ? req.query.leadId.trim().slice(0, 120) : "";
+
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>WhatsApp Mobile Lab</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; min-height: 100%; background: #070c16; color: #e8f1ff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      #root { min-height: 100dvh; }
+      .lab-page { min-height: 100dvh; display: flex; justify-content: center; align-items: center; padding: 10px; background:
+        radial-gradient(1000px 500px at 20% -10%, rgba(58, 134, 255, 0.22), transparent 50%),
+        radial-gradient(900px 400px at 80% -10%, rgba(0, 214, 143, 0.12), transparent 45%),
+        linear-gradient(180deg, #091224 0%, #0b1321 100%);
+      }
+      .mobile-shell { width: 100%; max-width: 430px; height: 100dvh; max-height: 920px; border-radius: 24px; overflow: hidden; border: 1px solid #1d2b46; background: #0f182a; box-shadow: 0 26px 80px rgba(0,0,0,.46); display: grid; grid-template-rows: 58px 1fr auto auto; }
+      .topbar { background: #132139; border-bottom: 1px solid #223757; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; }
+      .lead { display: grid; }
+      .lead .name { font-size: 14px; font-weight: 700; color: #f2f7ff; }
+      .lead .meta { font-size: 11px; color: #98b2d3; }
+      .top-actions { display: flex; gap: 6px; }
+      .chip { border: 1px solid #31527f; border-radius: 999px; padding: 3px 8px; font-size: 11px; color: #d3e4fb; }
+      .chat { overflow-y: auto; padding: 10px; background: radial-gradient(120% 100% at 50% 0%, #11203a 0%, #0b1425 68%); }
+      .row { display: flex; margin-bottom: 8px; }
+      .row.in { justify-content: flex-start; }
+      .row.out { justify-content: flex-end; }
+      .bubble { max-width: 84%; border-radius: 14px; padding: 8px 10px; line-height: 1.34; font-size: 13px; animation: bubbleIn .2s ease-out; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+      .bubble.in { background: #1b2b46; color: #e7f0ff; }
+      .bubble.out { background: #2382f7; color: #fff; }
+      .time { margin-top: 3px; font-size: 10px; opacity: .78; text-align: right; }
+      @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+      .sugg-wrap { border-top: 1px solid #223757; background: #0f1c31; padding: 10px 8px 8px; }
+      .sugg-title { font-size: 11px; color: #a8c0df; margin: 0 0 8px 4px; }
+      .sugg-row { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 3px; }
+      .card { min-width: 84%; scroll-snap-align: start; border-radius: 14px; border: 1px solid #244064; background: #152843; padding: 10px; transition: border-color .2s ease; }
+      .card.active { border-color: #4aa5ff; box-shadow: 0 0 0 1px #4aa5ff inset; }
+      .card h4 { margin: 0 0 4px; font-size: 13px; color: #f0f7ff; }
+      .card p { margin: 0 0 8px; font-size: 11px; color: #9eb9d8; }
+      .msg-preview { font-size: 11px; color: #dceafb; background: #1b3352; border-radius: 8px; padding: 6px; margin-bottom: 4px; }
+      .card-actions { display: flex; gap: 8px; margin-top: 8px; }
+      .btn { flex: 1; border: none; border-radius: 9px; padding: 8px 10px; font-size: 12px; cursor: pointer; }
+      .btn.secondary { border: 1px solid #34557f; background: transparent; color: #dceafb; }
+      .btn.primary { background: #2b8eff; color: #fff; font-weight: 700; }
+      .composer { border-top: 1px solid #223757; padding: 10px; background: #122039; position: sticky; bottom: 0; }
+      .composer .label { font-size: 11px; color: #9ab5d5; margin-bottom: 6px; }
+      .draft { border: 1px solid #2a4368; border-radius: 10px; background: #0f1c31; min-height: 42px; max-height: 108px; overflow-y: auto; padding: 6px; margin-bottom: 8px; }
+      .draft-item { font-size: 12px; color: #dbeafc; margin-bottom: 4px; }
+      .draft-empty { font-size: 12px; color: #718fb2; }
+      .send-full { width: 100%; border: none; border-radius: 10px; padding: 10px 12px; background: #2b8eff; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+      .lab-link { position: fixed; top: 8px; left: 8px; z-index: 20; color: #d9e7fb; text-decoration: none; font-size: 12px; background: rgba(7,12,22,0.72); border: 1px solid rgba(131, 153, 187, 0.45); border-radius: 8px; padding: 6px 8px; }
+      @media (max-width: 768px) {
+        .lab-page { padding: 0; }
+        .mobile-shell { border-radius: 0; max-width: 100%; max-height: 100dvh; border: none; box-shadow: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="lab-link" href="/admin/whatsapp-intelligence${navSuffix}">← Back</a>
+    <div id="root"></div>
+    <script type="text/babel">
+      const MODE = ${JSON.stringify(mode)};
+      const LEAD_ID = ${JSON.stringify(leadId)};
+      const MAX_LEN = 120;
+
+      function clampText(v) {
+        const t = String(v || "").replace(/\\s+/g, " ").trim();
+        if (t.length <= MAX_LEN) return t;
+        return t.slice(0, MAX_LEN - 1).trimEnd() + "…";
+      }
+
+      function nowIso() { return new Date().toISOString(); }
+
+      function toTime(iso) {
+        const d = new Date(String(iso || ""));
+        if (Number.isNaN(d.getTime())) return "--:--";
+        return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      }
+
+      function buildMockThread() {
+        return {
+          id: LEAD_ID || "lead_mobile_lab_001",
+          name: "Sara El Idrissi",
+          stage: "QUALIFIED",
+          urgency: "High",
+          messages: [
+            { id: "m1", from: "client", text: "Bonjour, je suis intéressée par le kaftan vert Swarovski. Disponible fin du mois ?", time: nowIso() },
+            { id: "m2", from: "brand", text: "Bonjour Sara, oui disponible. Je peux confirmer prix et délai selon votre date.", time: nowIso() },
+            { id: "m3", from: "client", text: "Parfait, mariage le 28. Quel est le prix et le délai ?", time: nowIso() }
+          ],
+          suggestions: [
+            { id: "s1", title: "Prix + délai", rationale: "Réponse premium directe.", messages: ["Parfait pour le 28. Le prix est de 4 300 USD pour ce modèle.", "Le délai de confection est de 2 à 3 semaines selon finitions.", "Je peux réserver votre créneau atelier aujourd'hui."] },
+            { id: "s2", title: "Qualification finale", rationale: "Valider les infos clés avant confirmation.", messages: ["Merci. Je vous confirme tout de suite.", "Pouvez-vous partager votre taille et votre ville de livraison ?", "Dès réception, j'envoie la confirmation complète."] },
+            { id: "s3", title: "Conversion douce", rationale: "Ton luxe discret, CTA clair.", messages: ["Très bon timing pour votre date.", "Je peux finaliser votre pièce et bloquer l'atelier maintenant.", "Souhaitez-vous que je prépare l'étape de validation ?"] }
+          ]
+        };
+      }
+
+      function App() {
+        const thread = React.useMemo(() => buildMockThread(), []);
+        const [chat, setChat] = React.useState(thread.messages || []);
+        const [activeId, setActiveId] = React.useState("");
+        const [draft, setDraft] = React.useState([]);
+        const [sending, setSending] = React.useState(false);
+
+        async function sendSequence(seq) {
+          if (!Array.isArray(seq) || seq.length < 2 || sending) return;
+          setSending(true);
+          try {
+            for (let i = 0; i < seq.length; i += 1) {
+              const line = clampText(seq[i]);
+              if (!line) continue;
+              await new Promise((resolve) => setTimeout(resolve, 360 + i * 120));
+              setChat((prev) => prev.concat({ id: "out_" + Date.now() + "_" + i, from: "brand", text: line, time: nowIso() }));
+            }
+            setDraft([]);
+            setActiveId("");
+          } finally {
+            setSending(false);
+          }
+        }
+
+        return (
+          <div className="lab-page">
+            <div className="mobile-shell">
+              <div className="topbar">
+                <div className="lead">
+                  <span className="name">{thread.name}</span>
+                  <span className="meta">{thread.stage} · {thread.urgency} · {String(MODE).toUpperCase()}</span>
+                </div>
+                <div className="top-actions">
+                  <span className="chip">leadId: {thread.id}</span>
+                </div>
+              </div>
+
+              <div className="chat">
+                {chat.map((m) => (
+                  <div key={m.id} className={"row " + (m.from === "brand" ? "out" : "in")}>
+                    <div className={"bubble " + (m.from === "brand" ? "out" : "in")}>
+                      <div>{clampText(m.text)}</div>
+                      <div className="time">{toTime(m.time)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="sugg-wrap">
+                <div className="sugg-title">AI Suggestions (2-4 messages)</div>
+                <div className="sugg-row">
+                  {(thread.suggestions || []).map((s) => (
+                    <div key={s.id} className={"card " + (s.id === activeId ? "active" : "")}>
+                      <h4>{s.title}</h4>
+                      <p>{s.rationale}</p>
+                      {(s.messages || []).slice(0, 4).map((x, i) => (
+                        <div key={s.id + "_" + i} className="msg-preview">{i + 1}. {clampText(x)}</div>
+                      ))}
+                      <div className="card-actions">
+                        <button className="btn secondary" disabled={sending} onClick={() => { setDraft((s.messages || []).slice(0,4)); setActiveId(s.id); }}>Insert</button>
+                        <button className="btn primary" disabled={sending} onClick={() => { setActiveId(s.id); sendSequence((s.messages || []).slice(0,4)); }}>{sending && activeId === s.id ? "Sending…" : "Send"}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="composer">
+                <div className="label">Insert + Send sequence</div>
+                <div className="draft">
+                  {draft.length ? draft.map((line, idx) => <div key={"d_" + idx} className="draft-item">{idx + 1}. {clampText(line)}</div>) : <div className="draft-empty">No inserted sequence</div>}
+                </div>
+                <button className="send-full" disabled={sending || draft.length < 2} onClick={() => sendSequence(draft)}>
+                  {sending ? "Sending sequence…" : "Send inserted sequence"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>`;
+
+  res.status(200).type("html").send(html);
+});
+
+whatsappRouter.get("/admin/whatsapp-intelligence/mobile-lab", (req, res) => {
+  const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+  res.redirect(`/whatsapp-intelligence/mobile-lab${query}`);
 });
 
 whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
@@ -6046,6 +6255,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">Intelligence WhatsApp</a>
         <a href="/whatsapp/priority-inbox${navSuffix}">📥 Priority Inbox</a>
         <a href="/whatsapp-intelligence/workflow${navSuffix}">Manager Approval Flow</a>
+        <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
         <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
         <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
       </nav>
@@ -7502,7 +7712,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
     }
 
     function renderLeadQuotesSection(lead) {
-      const quotes = Array.isArray(leadQuotes) ? leadQuotes.slice(0, 3) : [];
+      const quotes = Array.isArray(leadQuotes) ? leadQuotes.slice(0, 12) : [];
       const estimated = fmtTicketValue(lead && lead.ticket_value, lead && lead.ticket_currency);
       if (!quotes.length) {
         return (
@@ -7928,6 +8138,47 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
       }
     }
 
+    function detectPricesByProductFromStoredQuotes(lead) {
+      try {
+        const handles = handlesForLead(lead);
+        if (!handles.length || !Array.isArray(leadQuotes) || !leadQuotes.length) return {};
+        const known = new Set(handles);
+        const byHandle = {};
+        const sortedQuotes = leadQuotes
+          .slice()
+          .sort((a, b) => {
+            const at = new Date(String(a && a.created_at ? a.created_at : "")).getTime();
+            const bt = new Date(String(b && b.created_at ? b.created_at : "")).getTime();
+            if (Number.isFinite(bt) && Number.isFinite(at)) return bt - at;
+            return 0;
+          });
+
+        sortedQuotes.forEach((quote) => {
+          const handle = String(quote && quote.product_handle ? quote.product_handle : "").trim().toLowerCase();
+          if (!handle || !known.has(handle)) return;
+          if (byHandle[handle]) return;
+          const formatted = String(quote && quote.formatted ? quote.formatted : "").trim();
+          const fallbackAmount = Number(quote && quote.amount ? quote.amount : 0);
+          const currency = String(quote && quote.currency ? quote.currency : "").trim().toUpperCase();
+          const priceText = formatted || (Number.isFinite(fallbackAmount) && fallbackAmount > 0
+            ? (currency === "USD"
+              ? "$" + new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(fallbackAmount))
+              : currency === "EUR"
+                ? new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(fallbackAmount)).replace(/\u202f/g, " ") + "€"
+                : new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(fallbackAmount)).replace(/\u202f/g, " ") + " MAD")
+            : "");
+          if (!priceText) return;
+          byHandle[handle] = {
+            price_text: priceText,
+            source_message_id: String(quote && quote.message_id ? quote.message_id : "").trim() || null
+          };
+        });
+        return byHandle;
+      } catch {
+        return {};
+      }
+    }
+
     function detectPricesByProductFromConversation(lead) {
       try {
         const handles = handlesForLead(lead);
@@ -7945,16 +8196,19 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
           }
           const prices = extractPriceCandidates(text);
           if (!prices.length) return;
-          const candidate = prices[0];
+          const pickForIndex = (idx) => prices[Math.min(Math.max(0, idx), prices.length - 1)];
           const targets = activeHandles.length ? activeHandles : (allKnownFromConversation.length ? allKnownFromConversation : handles);
-          targets.forEach((handle) => {
+          targets.forEach((handle, idx) => {
+            const candidate = pickForIndex(idx);
+            if (!candidate) return;
             byHandle[handle] = {
               price_text: String(candidate.price_text || "").trim(),
               source_message_id: String(msg && msg.id ? msg.id : "").trim() || null
             };
           });
         });
-        return byHandle;
+        const persisted = detectPricesByProductFromStoredQuotes(lead);
+        return Object.assign({}, byHandle, persisted);
       } catch {
         return {};
       }
@@ -13896,6 +14150,7 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
       <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence WhatsApp</a>
       <a href="/whatsapp/priority-inbox${navSuffix}">Priority Inbox</a>
       <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
+      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
       <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
       <a class="current" href="/whatsapp-intelligence/workflow${navSuffix}">Manager Approval Flow</a>
     </nav>
