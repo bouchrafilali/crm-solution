@@ -5085,7 +5085,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .mobile-ai-drawer {
         position: absolute;
-        top: 8px;
+        top: 120px;
         right: 0;
         height: 70%;
         width: calc(100% - 8px);
@@ -5946,13 +5946,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
                         <div className="desk-col center">
                           <div className="suggestion-wrap">
-                            <div className="chat-head">
-                              <div>
-                                <div className="n">{selectedLead ? selectedLead.name : "Lead"}</div>
-                                <div className="sub">WhatsApp API · Suggestions {String(aiProvider).toUpperCase()} · {String(MODE).toUpperCase()}</div>
-                              </div>
-                              <button
-                                className="icon-btn"
+                                    <div className="chat-head">
+                                      <div>
+                                        <div className="n">{selectedLead ? selectedLead.name : "Lead"}</div>
+                                      </div>
+                                      <button
+                                        className="icon-btn"
                                 onClick={() => {
                                   if (!selectedLead) return;
                                   void loadSuggestions(selectedLead.id, true);
