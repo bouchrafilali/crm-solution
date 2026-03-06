@@ -5139,13 +5139,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         min-height: 0;
         padding: 10px;
         display: flex;
+        align-items: flex-start;
         gap: 10px;
         overflow-x: auto;
         overflow-y: hidden;
       }
       .shell.mobile .mobile-ai-cards .card {
-        min-width: 305px;
-        max-width: 305px;
+        min-width: 270px;
+        max-width: 270px;
+        min-height: 0;
+        height: auto;
       }
       .shell.tablet .card,
       .shell.desktop .card {
