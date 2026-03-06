@@ -4620,7 +4620,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .mode-switch {
         position: fixed;
-        top: 170px;
+        top: auto;
+        bottom: 18px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 13;
@@ -5264,7 +5265,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       @media (max-width: 768px) {
         .mode-switch {
-          top: 190px;
+          top: auto;
+          bottom: 14px;
           left: auto;
           right: 8px;
           transform: none;
