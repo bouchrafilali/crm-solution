@@ -5249,6 +5249,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.07);
         padding: 11px 12px; font-size: 13px; color: rgba(255,255,255,.42);
       }
+      input.composer-pill {
+        min-height: 44px;
+        color: rgba(242, 247, 255, .92);
+        outline: none;
+      }
+      input.composer-pill::placeholder {
+        color: rgba(255,255,255,.42);
+      }
       .send-fab {
         width: 44px; height: 44px; border-radius: 14px;
         border: 1px solid rgba(207,250,254,.35);
@@ -5562,6 +5570,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
         const [aiProvider, setAiProvider] = React.useState("claude");
         const [errorText, setErrorText] = React.useState("");
+        const [mobileManualText, setMobileManualText] = React.useState("");
         const [cardBubbleSelection, setCardBubbleSelection] = React.useState({});
         const [mobileUiState, setMobileUiState] = React.useState({
           view: "inbox",
@@ -5996,6 +6005,49 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           }
         }
 
+        async function sendManualMessage() {
+          const text = String(mobileManualText || "").trim();
+          if (!text || sending || !selectedLead) return;
+          setSending(true);
+          try {
+            if (!LIVE_MODE) {
+              patchLead(selectedLead.id, {
+                preview: text,
+                lastAt: formatTime(new Date().toISOString()),
+                messages: (selectedLead.messages || []).concat([
+                  {
+                    id: "manual-" + Date.now(),
+                    from: "brand",
+                    text: clampText(text),
+                    time: formatTime(new Date().toISOString()),
+                    status: "sent"
+                  }
+                ])
+              });
+              setMobileManualText("");
+              return;
+            }
+            await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(selectedLead.id) + "/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                direction: "OUT",
+                text,
+                provider: "manual",
+                send_whatsapp: true,
+                message_type: "text"
+              })
+            });
+            setMobileManualText("");
+            await Promise.all([loadMessages(selectedLead.id), loadLeads()]);
+          } catch (error) {
+            setErrorText("Envoi manuel impossible via WhatsApp API.");
+            console.error("[mobile-lab] manual send failed", error);
+          } finally {
+            setSending(false);
+          }
+        }
+
         function MobileInboxView({ device }) {
           return (
             <div className="mobile-pane">
@@ -6226,10 +6278,35 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
                 <div className="composer-row">
                   <button className="mini-btn" onClick={() => setDraftMessages([])}>＋</button>
-                  <div className="composer-pill">
-                    {draftMessages.length ? String(draftMessages.length) + " messages prêts à être envoyés" : "Sélectionner une suggestion AI..."}
-                  </div>
-                  <button className="send-fab" disabled={sending} onClick={() => { void sendMessages(); }}>➤</button>
+                  <input
+                    className="composer-pill"
+                    value={mobileManualText}
+                    onChange={(e) => setMobileManualText(String(e.target.value || ""))}
+                    placeholder={draftMessages.length ? String(draftMessages.length) + " messages prêts à être envoyés" : "Écrire un message..."}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (String(mobileManualText || "").trim()) {
+                          void sendManualMessage();
+                        } else {
+                          void sendMessages();
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    className="send-fab"
+                    disabled={sending || (!String(mobileManualText || "").trim() && !draftMessages.length)}
+                    onClick={() => {
+                      if (String(mobileManualText || "").trim()) {
+                        void sendManualMessage();
+                      } else {
+                        void sendMessages();
+                      }
+                    }}
+                  >
+                    ➤
+                  </button>
                 </div>
 
                 <div className="hint">
