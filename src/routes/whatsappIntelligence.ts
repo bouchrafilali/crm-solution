@@ -5056,6 +5056,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .btn.send { background: rgba(255,255,255,.06); color: #fff; }
       .chat-messages {
         flex: 1; overflow-y: auto; padding: 12px; display: grid; gap: 10px;
+        min-height: 0;
       }
       .mobile-nav-shell {
         overflow: hidden;
@@ -5537,6 +5538,26 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         position: relative;
         transition: transform .42s cubic-bezier(.22,.74,.22,1), opacity .42s ease, filter .42s ease;
         will-change: transform, opacity, filter;
+      }
+      .stream-window .app {
+        min-height: 0;
+      }
+      .stream-window .chat-messages {
+        flex: 1 1 auto;
+        min-height: 140px;
+      }
+      .stream-window .stream-ai-cards {
+        flex: 0 0 auto;
+        min-height: 170px;
+        max-height: 300px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+      }
+      .stream-window .composer {
+        position: relative;
+        z-index: 2;
+        background: linear-gradient(180deg, rgba(13, 21, 38, .88), rgba(10, 16, 30, .94));
       }
       .stream-window.exiting {
         animation: streamExit .52s cubic-bezier(.2,.7,.2,1) forwards;
@@ -6755,6 +6776,73 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           return "Envoi WhatsApp échoué: " + raw;
         }
 
+        function appendOptimisticOutboundMessages(leadId, lines) {
+          const safeLeadId = String(leadId || "").trim();
+          const payload = Array.isArray(lines) ? lines.map((line) => String(line || "").trim()).filter(Boolean) : [];
+          if (!safeLeadId || !payload.length) return [];
+          const base = Date.now();
+          const tempMessages = payload.map((line, idx) => {
+            const createdAt = new Date(base + idx).toISOString();
+            return {
+              id: "tmp-" + safeLeadId + "-" + String(base + idx),
+              from: "brand",
+              text: line,
+              time: formatTime(createdAt),
+              status: "sent",
+              createdAt,
+              kind: "text",
+              messageType: "text",
+              mediaUrl: "",
+              thumbnailUrl: "",
+              caption: "",
+              mimeType: "",
+              fileName: "",
+              fileSize: 0,
+              durationSec: 0,
+              linkPreview: null,
+              replyTo: null,
+              reactions: [],
+              eventName: "",
+              metadata: { optimistic: true }
+            };
+          });
+          setLeads((prev) =>
+            prev.map((lead) => {
+              if (String(lead.id) !== safeLeadId) return lead;
+              const existing = Array.isArray(lead.messages) ? lead.messages : [];
+              const nextMessages = [...existing, ...tempMessages];
+              const last = nextMessages.length ? nextMessages[nextMessages.length - 1] : null;
+              return {
+                ...lead,
+                messages: nextMessages,
+                preview: last ? clampText(last.text) : lead.preview,
+                lastAt: last ? String(last.time || lead.lastAt || "") : lead.lastAt
+              };
+            })
+          );
+          return tempMessages.map((m) => m.id);
+        }
+
+        function removeOptimisticOutboundMessages(leadId, tempIds) {
+          const safeLeadId = String(leadId || "").trim();
+          const setIds = new Set((Array.isArray(tempIds) ? tempIds : []).map((id) => String(id || "").trim()).filter(Boolean));
+          if (!safeLeadId || !setIds.size) return;
+          setLeads((prev) =>
+            prev.map((lead) => {
+              if (String(lead.id) !== safeLeadId) return lead;
+              const existing = Array.isArray(lead.messages) ? lead.messages : [];
+              const nextMessages = existing.filter((message) => !setIds.has(String(message && message.id ? message.id : "")));
+              const last = nextMessages.length ? nextMessages[nextMessages.length - 1] : null;
+              return {
+                ...lead,
+                messages: nextMessages,
+                preview: last ? clampText(last.text) : lead.preview,
+                lastAt: last ? String(last.time || lead.lastAt || "") : lead.lastAt
+              };
+            })
+          );
+        }
+
         function toggleCardBubble(card, index) {
           const list = normalizeBubbleSet(card && card.messages);
           setCardBubbleSelection((prev) => {
@@ -6781,6 +6869,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             return;
           }
           setSending(true);
+          let optimisticIds = [];
           try {
             const payload = normalizeBubbleSet(payloadRaw);
             if (!payload.length) {
@@ -6791,6 +6880,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
               return;
             }
+            setDraftMessages([]);
+            optimisticIds = appendOptimisticOutboundMessages(selectedLead.id, payload);
             for (let i = 0; i < payload.length; i += 1) {
               await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(selectedLead.id) + "/messages", {
                 method: "POST",
@@ -6805,7 +6896,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               });
               await sleep(80);
             }
-            setDraftMessages([]);
             if (sourceCardId) {
               const sent = new Set(payload.map((line) => String(line || "").trim()).filter(Boolean));
               setLeads((prev) =>
@@ -6829,6 +6919,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             }
             await Promise.all([loadMessages(selectedLead.id), loadLeads()]);
           } catch (error) {
+            removeOptimisticOutboundMessages(selectedLead.id, optimisticIds);
             setErrorText(sendErrorMessage(error));
             console.error("[mobile-lab] send failed", error);
           } finally {
@@ -6844,11 +6935,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             return;
           }
           setSending(true);
+          let optimisticIds = [];
           try {
             if (!LIVE_MODE) {
               setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
               return;
             }
+            setMobileManualText("");
+            optimisticIds = appendOptimisticOutboundMessages(selectedLead.id, [text]);
             await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(selectedLead.id) + "/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -6860,9 +6954,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 message_type: "text"
               })
             });
-            setMobileManualText("");
             await Promise.all([loadMessages(selectedLead.id), loadLeads()]);
           } catch (error) {
+            removeOptimisticOutboundMessages(selectedLead.id, optimisticIds);
             setErrorText(sendErrorMessage(error));
             console.error("[mobile-lab] manual send failed", error);
           } finally {
@@ -6929,6 +7023,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             return;
           }
           setStreamSendingLeadId(safeLeadId);
+          let optimisticIds = [];
           try {
             const payload = normalizeBubbleSet(payloadRaw);
             if (!payload.length) return;
@@ -6936,6 +7031,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
               return;
             }
+            setStreamDraftMessagesByLead((prev) => ({ ...prev, [safeLeadId]: [] }));
+            optimisticIds = appendOptimisticOutboundMessages(safeLeadId, payload);
             for (let i = 0; i < payload.length; i += 1) {
               await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(safeLeadId) + "/messages", {
                 method: "POST",
@@ -6950,7 +7047,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               });
               await sleep(80);
             }
-            setStreamDraftMessagesByLead((prev) => ({ ...prev, [safeLeadId]: [] }));
             if (sourceCardId) {
               const sent = new Set(payload.map((line) => String(line || "").trim()).filter(Boolean));
               setLeads((prev) =>
@@ -6976,6 +7072,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             }
             await Promise.all([loadMessages(safeLeadId), loadLeads()]);
           } catch (error) {
+            removeOptimisticOutboundMessages(safeLeadId, optimisticIds);
             setErrorText(sendErrorMessage(error));
             console.error("[mobile-lab] stream send failed", { leadId: safeLeadId, error });
           } finally {
@@ -6993,11 +7090,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             return;
           }
           setStreamSendingLeadId(safeLeadId);
+          let optimisticIds = [];
           try {
             if (!LIVE_MODE) {
               setErrorText("Mock mode actif: envoi WhatsApp réel désactivé.");
               return;
             }
+            setStreamManualTextByLead((prev) => ({ ...prev, [safeLeadId]: "" }));
+            optimisticIds = appendOptimisticOutboundMessages(safeLeadId, [text]);
             await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(safeLeadId) + "/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -7009,9 +7109,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 message_type: "text"
               })
             });
-            setStreamManualTextByLead((prev) => ({ ...prev, [safeLeadId]: "" }));
             await Promise.all([loadMessages(safeLeadId), loadLeads()]);
           } catch (error) {
+            removeOptimisticOutboundMessages(safeLeadId, optimisticIds);
             setErrorText(sendErrorMessage(error));
             console.error("[mobile-lab] stream manual send failed", { leadId: safeLeadId, error });
           } finally {
@@ -7378,7 +7478,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const streamManualText = streamManualForLead(safeLeadId);
           const sendingThisLead = streamSendingLeadId === safeLeadId;
           const messages = Array.isArray(lead && lead.messages) ? lead.messages : [];
-          const suggestions = Array.isArray(lead && lead.suggestions) ? lead.suggestions : [];
+          const suggestions = Array.isArray(lead && lead.suggestions) ? lead.suggestions.slice(0, 2) : [];
           return (
             <div
               key={safeLeadId}
