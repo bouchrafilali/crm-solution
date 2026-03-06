@@ -5167,7 +5167,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .mobile-ai-handle {
         position: absolute;
-        left: -28px;
+        left: 0;
         top: 50%;
         transform: translateY(-50%);
         width: 28px;
@@ -5198,29 +5198,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         letter-spacing: .08em;
         writing-mode: vertical-rl;
         transform: rotate(180deg);
-      }
-      .mobile-ai-launcher {
-        position: absolute;
-        right: 0;
-        top: 58%;
-        transform: translateY(-50%);
-        width: 28px;
-        height: 96px;
-        border-radius: 16px 0 0 16px;
-        border: 1px solid rgba(172, 214, 255, .34);
-        border-right: 0;
-        background: linear-gradient(180deg, rgba(24,39,66,.92), rgba(15,27,49,.9));
-        color: rgba(209, 234, 255, .88);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 8px 0;
-        touch-action: none;
-        cursor: grab;
-        box-shadow: -10px 12px 24px rgba(0,0,0,.35);
-        z-index: 11;
       }
       .msg-row { display: flex; }
       .msg-row.client { justify-content: flex-start; }
@@ -6259,19 +6236,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                       );
                                     })}
                                   </div>
-
-                                  {mobileDrawerOffset > mobileDrawerClosedRef.current * 0.9 ? (
-                                    <button
-                                      type="button"
-                                      className="mobile-ai-launcher"
-                                      onClick={toggleMobileDrawer}
-                                      onPointerDown={onMobileDrawerPointerDown}
-                                      aria-label="Open AI drawer"
-                                    >
-                                      <span className="mobile-ai-handle-dot" />
-                                      <span className="mobile-ai-handle-label">AI</span>
-                                    </button>
-                                  ) : null}
 
                                   <div
                                     className="mobile-ai-drawer"
