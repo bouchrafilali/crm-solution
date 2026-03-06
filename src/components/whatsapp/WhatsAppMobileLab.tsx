@@ -365,10 +365,11 @@ const styles: Record<string, CSSProperties> = {
       "radial-gradient(120% 70% at 50% -10%, rgba(61,147,255,.28) 0%, rgba(10,16,31,0) 58%), linear-gradient(180deg, #050912 0%, #080f1d 45%, #070b14 100%)",
     display: "flex",
     justifyContent: "center",
-    alignItems: "stretch",
+    alignItems: "flex-start",
     padding: "14px",
     position: "relative",
-    overflow: "hidden"
+    overflowX: "hidden",
+    overflowY: "auto"
   },
   bgGlowTop: {
     position: "absolute",
