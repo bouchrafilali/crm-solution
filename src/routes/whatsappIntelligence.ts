@@ -5489,11 +5489,13 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
       function mapLeadFromApi(lead) {
         const stageRaw = String((lead && lead.stage) || "QUALIFICATION");
+        const channelType = String((lead && (lead.channel_type || lead.channelType)) || "API").toUpperCase();
         return {
           id: String((lead && lead.id) || ""),
           name: String((lead && lead.client) || "Client"),
           stage: stageForUi(stageRaw),
           stageLabel: stageRaw,
+          channelType,
           urgency: urgencyForUi(lead && lead.urgency),
           unread: Math.max(0, Number((lead && (lead.unread_count ?? lead.unread)) || 0)),
           lastAt: relativeTime((lead && lead.last_activity_at) || (lead && lead.created_at)),
@@ -5912,6 +5914,26 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           return Boolean(cardBubbleSelection && cardBubbleSelection[card && card.id] && cardBubbleSelection[card.id][index]);
         }
 
+        function sendErrorMessage(error) {
+          const raw = String(error && error.message ? error.message : error || "").trim();
+          if (!raw) return "Envoi impossible via WhatsApp API.";
+          if (raw.includes("shared_channel_analysis_only_no_send")) {
+            return "Numéro partagé (SHARED): envoi WhatsApp désactivé pour ce lead.";
+          }
+          if (raw.includes("whatsapp_send_failed")) {
+            return "WhatsApp provider a rejeté l'envoi. Vérifiez la configuration du canal.";
+          }
+          try {
+            const parsed = JSON.parse(raw);
+            const code = String(parsed && parsed.error ? parsed.error : "");
+            if (code === "shared_channel_analysis_only_no_send") {
+              return "Numéro partagé (SHARED): envoi WhatsApp désactivé pour ce lead.";
+            }
+            if (code) return "Envoi WhatsApp échoué: " + code;
+          } catch {}
+          return "Envoi WhatsApp échoué: " + raw;
+        }
+
         function toggleCardBubble(card, index) {
           const list = ensureBubbleSet(card && card.messages);
           setCardBubbleSelection((prev) => {
@@ -5933,6 +5955,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const hasCustomMessages = Array.isArray(customMessages);
           const payloadRaw = hasCustomMessages ? customMessages : draftMessages;
           if (!payloadRaw.length || sending || !selectedLead) return;
+          if (String(selectedLead.channelType || "").toUpperCase() === "SHARED") {
+            setErrorText("Numéro partagé (SHARED): envoi WhatsApp désactivé pour ce lead.");
+            return;
+          }
           setSending(true);
           try {
             const payload = ensureBubbleSet(payloadRaw);
@@ -5978,7 +6004,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             }
             await Promise.all([loadMessages(selectedLead.id), loadLeads()]);
           } catch (error) {
-            setErrorText("Envoi impossible via WhatsApp API.");
+            setErrorText(sendErrorMessage(error));
             console.error("[mobile-lab] send failed", error);
           } finally {
             setSending(false);
@@ -5988,6 +6014,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         async function sendManualMessage() {
           const text = String(mobileManualText || "").trim();
           if (!text || sending || !selectedLead) return;
+          if (String(selectedLead.channelType || "").toUpperCase() === "SHARED") {
+            setErrorText("Numéro partagé (SHARED): envoi WhatsApp désactivé pour ce lead.");
+            return;
+          }
           setSending(true);
           try {
             if (!LIVE_MODE) {
@@ -6008,7 +6038,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             setMobileManualText("");
             await Promise.all([loadMessages(selectedLead.id), loadLeads()]);
           } catch (error) {
-            setErrorText("Envoi manuel impossible via WhatsApp API.");
+            setErrorText(sendErrorMessage(error));
             console.error("[mobile-lab] manual send failed", error);
           } finally {
             setSending(false);
