@@ -4996,8 +4996,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         border-radius: 14px; border: 1px solid rgba(255,255,255,.08);
         background: rgba(255,255,255,.08);
         padding: 8px 9px; font-size: 12px; color: rgba(255,255,255,.8); line-height: 1.4;
+        cursor: pointer;
+      }
+      .snip.selected {
+        border-color: rgba(159, 221, 255, .58);
+        background: linear-gradient(180deg, rgba(56, 182, 255, .2), rgba(41, 133, 255, .16));
+        color: #ecf7ff;
+        box-shadow: 0 0 0 1px rgba(124, 208, 255, .34) inset;
       }
       .card-actions { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .card-actions .btn:only-child { grid-column: 1 / -1; }
       .btn {
         height: 36px; border-radius: 14px; cursor: pointer; font-size: 12px;
         border: 1px solid rgba(255,255,255,.12);
@@ -5570,6 +5578,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
         const [aiProvider, setAiProvider] = React.useState("claude");
         const [errorText, setErrorText] = React.useState("");
+        const [cardBubbleSelection, setCardBubbleSelection] = React.useState({});
         const [mobileScreen, setMobileScreen] = React.useState("inbox");
         const [mobileBackSwipeOffset, setMobileBackSwipeOffset] = React.useState(0);
         const [mobileBackSwiping, setMobileBackSwiping] = React.useState(false);
@@ -5672,6 +5681,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           () => leads.find((lead) => String(lead.id) === String(selectedLeadId)) || leads[0] || null,
           [leads, selectedLeadId]
         );
+
+        React.useEffect(() => {
+          setDraftMessages([]);
+          setCardBubbleSelection({});
+        }, [selectedLeadId]);
 
         const filteredLeads = React.useMemo(() => {
           return leads.filter((lead) => {
@@ -5848,15 +5862,39 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           };
         }, [mobileBackSwipeOffset, mobileScreen]);
 
-        function insertSuggestion(messages) {
-          setDraftMessages(ensureBubbleSet(messages));
+        function selectedMessagesForCard(card) {
+          const list = ensureBubbleSet(card && card.messages);
+          const selectedMap = cardBubbleSelection && cardBubbleSelection[card && card.id] ? cardBubbleSelection[card.id] : {};
+          return list.filter((_, index) => Boolean(selectedMap[index]));
         }
 
-        async function sendMessages() {
-          if (!draftMessages.length || sending || !selectedLead) return;
+        function isCardBubbleSelected(card, index) {
+          return Boolean(cardBubbleSelection && cardBubbleSelection[card && card.id] && cardBubbleSelection[card.id][index]);
+        }
+
+        function toggleCardBubble(card, index) {
+          const list = ensureBubbleSet(card && card.messages);
+          setCardBubbleSelection((prev) => {
+            const current = { ...(prev && prev[card.id] ? prev[card.id] : {}) };
+            if (current[index]) delete current[index];
+            else current[index] = true;
+
+            const next = { ...(prev || {}) };
+            if (Object.keys(current).length) next[card.id] = current;
+            else delete next[card.id];
+
+            const selected = list.filter((_, i) => Boolean(current[i]));
+            setDraftMessages(selected);
+            return next;
+          });
+        }
+
+        async function sendMessages(customMessages, sourceCardId) {
+          const payloadRaw = Array.isArray(customMessages) && customMessages.length ? customMessages : draftMessages;
+          if (!payloadRaw.length || sending || !selectedLead) return;
           setSending(true);
           try {
-            const payload = ensureBubbleSet(draftMessages);
+            const payload = ensureBubbleSet(payloadRaw);
             if (!LIVE_MODE) {
               patchLead(selectedLead.id, {
                 preview: payload[payload.length - 1] || selectedLead.preview,
@@ -5872,6 +5910,27 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 )
               });
               setDraftMessages([]);
+              if (sourceCardId) {
+                const sent = new Set(payload.map((line) => String(line || "").trim()).filter(Boolean));
+                setLeads((prev) =>
+                  prev.map((lead) => {
+                    if (String(lead.id) !== String(selectedLead.id)) return lead;
+                    const nextSuggestions = (Array.isArray(lead.suggestions) ? lead.suggestions : [])
+                      .map((card) => {
+                        if (String(card.id) !== String(sourceCardId)) return card;
+                        const remaining = ensureBubbleSet(card.messages).filter((line) => !sent.has(String(line || "").trim()));
+                        return { ...card, messages: remaining };
+                      })
+                      .filter((card) => ensureBubbleSet(card.messages).length > 0);
+                    return { ...lead, suggestions: nextSuggestions };
+                  })
+                );
+                setCardBubbleSelection((prev) => {
+                  const next = { ...(prev || {}) };
+                  delete next[sourceCardId];
+                  return next;
+                });
+              }
               return;
             }
             for (let i = 0; i < payload.length; i += 1) {
@@ -5888,6 +5947,27 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               await sleep(80);
             }
             setDraftMessages([]);
+            if (sourceCardId) {
+              const sent = new Set(payload.map((line) => String(line || "").trim()).filter(Boolean));
+              setLeads((prev) =>
+                prev.map((lead) => {
+                  if (String(lead.id) !== String(selectedLead.id)) return lead;
+                  const nextSuggestions = (Array.isArray(lead.suggestions) ? lead.suggestions : [])
+                    .map((card) => {
+                      if (String(card.id) !== String(sourceCardId)) return card;
+                      const remaining = ensureBubbleSet(card.messages).filter((line) => !sent.has(String(line || "").trim()));
+                      return { ...card, messages: remaining };
+                    })
+                    .filter((card) => ensureBubbleSet(card.messages).length > 0);
+                  return { ...lead, suggestions: nextSuggestions };
+                })
+              );
+              setCardBubbleSelection((prev) => {
+                const next = { ...(prev || {}) };
+                delete next[sourceCardId];
+                return next;
+              });
+            }
             await Promise.all([loadMessages(selectedLead.id), loadLeads()]);
           } catch (error) {
             setErrorText("Envoi impossible via WhatsApp API.");
@@ -5999,24 +6079,34 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             </div>
                             <div className="cards">
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
-                                ? selectedLead.suggestions.map((card) => (
-                                  <div key={card.id} className="card">
-                                    <div className="card-top">
-                                      <div>
-                                        <div className="card-title">{card.title}</div>
-                                        <div className="card-tag">{card.tag}</div>
+                                ? selectedLead.suggestions.map((card) => {
+                                  const selectedForCard = selectedMessagesForCard(card);
+                                  return (
+                                    <div key={card.id} className="card">
+                                      <div className="card-top">
+                                        <div>
+                                          <div className="card-title">{card.title}</div>
+                                          <div className="card-tag">{card.tag}</div>
+                                        </div>
+                                        <div className="card-zap">⚡</div>
                                       </div>
-                                      <div className="card-zap">⚡</div>
+                                      <div className="snips">
+                                        {ensureBubbleSet(card.messages).map((msg, i) => (
+                                          <div
+                                            key={i}
+                                            className={"snip " + (isCardBubbleSelected(card, i) ? "selected" : "")}
+                                            onClick={() => toggleCardBubble(card, i)}
+                                          >
+                                            {clampText(msg)}
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="card-actions">
+                                        <button className="btn send" disabled={sending || !selectedForCard.length} onClick={() => { void sendMessages(selectedForCard, card.id); }}>Envoyer</button>
+                                      </div>
                                     </div>
-                                    <div className="snips">
-                                      {ensureBubbleSet(card.messages).map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
-                                    </div>
-                                    <div className="card-actions">
-                                      <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
-                                      <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
-                                    </div>
-                                  </div>
-                                ))
+                                  );
+                                })
                                 : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
                             </div>
                           </div>
@@ -6234,24 +6324,34 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     </div>
                                     <div className="mobile-ai-cards">
                                       {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
-                                        ? selectedLead.suggestions.map((card) => (
-                                          <div key={card.id} className="card">
-                                            <div className="card-top">
-                                              <div>
-                                                <div className="card-title">{card.title}</div>
-                                                <div className="card-tag">{card.tag}</div>
+                                        ? selectedLead.suggestions.map((card) => {
+                                          const selectedForCard = selectedMessagesForCard(card);
+                                          return (
+                                            <div key={card.id} className="card">
+                                              <div className="card-top">
+                                                <div>
+                                                  <div className="card-title">{card.title}</div>
+                                                  <div className="card-tag">{card.tag}</div>
+                                                </div>
+                                                <div className="card-zap">⚡</div>
                                               </div>
-                                              <div className="card-zap">⚡</div>
+                                              <div className="snips">
+                                                {ensureBubbleSet(card.messages).map((msg, i) => (
+                                                  <div
+                                                    key={i}
+                                                    className={"snip " + (isCardBubbleSelected(card, i) ? "selected" : "")}
+                                                    onClick={() => toggleCardBubble(card, i)}
+                                                  >
+                                                    {clampText(msg)}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              <div className="card-actions">
+                                                <button className="btn send" disabled={sending || !selectedForCard.length} onClick={() => { void sendMessages(selectedForCard, card.id); }}>Envoyer</button>
+                                              </div>
                                             </div>
-                                            <div className="snips">
-                                              {ensureBubbleSet(card.messages).map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
-                                            </div>
-                                            <div className="card-actions">
-                                              <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
-                                              <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
-                                            </div>
-                                          </div>
-                                        ))
+                                          );
+                                        })
                                         : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
                                     </div>
                                   </div>
@@ -6367,24 +6467,34 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             </div>
                             <div className="cards">
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
-                                ? selectedLead.suggestions.map((card) => (
-                                  <div key={card.id} className="card">
-                                    <div className="card-top">
-                                      <div>
-                                        <div className="card-title">{card.title}</div>
-                                        <div className="card-tag">{card.tag}</div>
+                                ? selectedLead.suggestions.map((card) => {
+                                  const selectedForCard = selectedMessagesForCard(card);
+                                  return (
+                                    <div key={card.id} className="card">
+                                      <div className="card-top">
+                                        <div>
+                                          <div className="card-title">{card.title}</div>
+                                          <div className="card-tag">{card.tag}</div>
+                                        </div>
+                                        <div className="card-zap">⚡</div>
                                       </div>
-                                      <div className="card-zap">⚡</div>
+                                      <div className="snips">
+                                        {ensureBubbleSet(card.messages).map((msg, i) => (
+                                          <div
+                                            key={i}
+                                            className={"snip " + (isCardBubbleSelected(card, i) ? "selected" : "")}
+                                            onClick={() => toggleCardBubble(card, i)}
+                                          >
+                                            {clampText(msg)}
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="card-actions">
+                                        <button className="btn send" disabled={sending || !selectedForCard.length} onClick={() => { void sendMessages(selectedForCard, card.id); }}>Envoyer</button>
+                                      </div>
                                     </div>
-                                    <div className="snips">
-                                      {ensureBubbleSet(card.messages).map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
-                                    </div>
-                                    <div className="card-actions">
-                                      <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
-                                      <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
-                                    </div>
-                                  </div>
-                                ))
+                                  );
+                                })
                                 : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
                             </div>
                           </div>
