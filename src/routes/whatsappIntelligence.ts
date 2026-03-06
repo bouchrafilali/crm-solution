@@ -6262,7 +6262,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     <div className="mobile-ai-head">
                                     <div className="chat-head">
                                       <div>
-                                        <div className="n">{selectedLead ? selectedLead.name : "Lead"}</div>
+                                        <div className="n">AI Suggestions</div>
                                       </div>
                                       <button
                                         className="icon-btn"
