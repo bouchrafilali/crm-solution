@@ -5628,6 +5628,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setSelectedLeadId(String(leadId));
           setMobileScreen("conversation");
           setMobileBackSwipeOffset(0);
+          setMobileDrawerOffset(mobileDrawerClosedRef.current);
         }
 
         function closeMobileConversation() {
