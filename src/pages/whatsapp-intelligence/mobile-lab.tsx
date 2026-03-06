@@ -43,7 +43,15 @@ export default function WhatsAppIntelligenceMobileLabPage() {
 
   if (error) {
     return (
-      <div style={{ padding: "24px", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+      <div
+        style={{
+          minHeight: "100dvh",
+          background: "linear-gradient(180deg, #050912 0%, #0a1220 100%)",
+          color: "#dbeafe",
+          padding: "24px",
+          fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        }}
+      >
         Mobile Lab error: {error}
       </div>
     );
@@ -51,7 +59,15 @@ export default function WhatsAppIntelligenceMobileLabPage() {
 
   if (!thread) {
     return (
-      <div style={{ padding: "24px", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+      <div
+        style={{
+          minHeight: "100dvh",
+          background: "linear-gradient(180deg, #050912 0%, #0a1220 100%)",
+          color: "#dbeafe",
+          padding: "24px",
+          fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        }}
+      >
         Loading mobile lab…
       </div>
     );
@@ -66,12 +82,14 @@ export default function WhatsAppIntelligenceMobileLabPage() {
             display: "inline-block",
             fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
             fontSize: "12px",
-            color: "#dbeafe",
-            background: "rgba(15, 23, 42, 0.78)",
+            color: "#e8f5ff",
+            background: "linear-gradient(180deg, rgba(20,36,60,.82) 0%, rgba(14,26,44,.75) 100%)",
             textDecoration: "none",
-            border: "1px solid rgba(148, 163, 184, 0.35)",
-            borderRadius: "8px",
-            padding: "6px 8px"
+            border: "1px solid rgba(173, 209, 246, 0.35)",
+            borderRadius: "999px",
+            padding: "7px 11px",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)"
           }}
         >
           Back to WhatsApp Intelligence
