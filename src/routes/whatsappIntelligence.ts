@@ -4567,7 +4567,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
   const leadId = typeof req.query.leadId === "string" ? req.query.leadId.trim().slice(0, 120) : "";
 
   const html = `<!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -4577,51 +4577,236 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
       * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; min-height: 100%; background: #070c16; color: #e8f1ff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-      #root { min-height: 100dvh; }
-      .lab-page { min-height: 100dvh; display: flex; justify-content: center; align-items: center; padding: 10px; background:
-        radial-gradient(1000px 500px at 20% -10%, rgba(58, 134, 255, 0.22), transparent 50%),
-        radial-gradient(900px 400px at 80% -10%, rgba(0, 214, 143, 0.12), transparent 45%),
-        linear-gradient(180deg, #091224 0%, #0b1321 100%);
+      html, body {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: radial-gradient(circle at top, rgba(35,44,95,.55), rgba(4,6,20,1) 42%);
+        color: #fff;
       }
-      .mobile-shell { width: 100%; max-width: 430px; height: 100dvh; max-height: 920px; border-radius: 24px; overflow: hidden; border: 1px solid #1d2b46; background: #0f182a; box-shadow: 0 26px 80px rgba(0,0,0,.46); display: grid; grid-template-rows: 58px 1fr auto auto; }
-      .topbar { background: #132139; border-bottom: 1px solid #223757; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; }
-      .lead { display: grid; }
-      .lead .name { font-size: 14px; font-weight: 700; color: #f2f7ff; }
-      .lead .meta { font-size: 11px; color: #98b2d3; }
-      .top-actions { display: flex; gap: 6px; }
-      .chip { border: 1px solid #31527f; border-radius: 999px; padding: 3px 8px; font-size: 11px; color: #d3e4fb; }
-      .chat { overflow-y: auto; padding: 10px; background: radial-gradient(120% 100% at 50% 0%, #11203a 0%, #0b1425 68%); }
-      .row { display: flex; margin-bottom: 8px; }
-      .row.in { justify-content: flex-start; }
-      .row.out { justify-content: flex-end; }
-      .bubble { max-width: 84%; border-radius: 14px; padding: 8px 10px; line-height: 1.34; font-size: 13px; animation: bubbleIn .2s ease-out; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
-      .bubble.in { background: #1b2b46; color: #e7f0ff; }
-      .bubble.out { background: #2382f7; color: #fff; }
-      .time { margin-top: 3px; font-size: 10px; opacity: .78; text-align: right; }
-      @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-      .sugg-wrap { border-top: 1px solid #223757; background: #0f1c31; padding: 10px 8px 8px; }
-      .sugg-title { font-size: 11px; color: #a8c0df; margin: 0 0 8px 4px; }
-      .sugg-row { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 3px; }
-      .card { min-width: 84%; scroll-snap-align: start; border-radius: 14px; border: 1px solid #244064; background: #152843; padding: 10px; transition: border-color .2s ease; }
-      .card.active { border-color: #4aa5ff; box-shadow: 0 0 0 1px #4aa5ff inset; }
-      .card h4 { margin: 0 0 4px; font-size: 13px; color: #f0f7ff; }
-      .card p { margin: 0 0 8px; font-size: 11px; color: #9eb9d8; }
-      .msg-preview { font-size: 11px; color: #dceafb; background: #1b3352; border-radius: 8px; padding: 6px; margin-bottom: 4px; }
-      .card-actions { display: flex; gap: 8px; margin-top: 8px; }
-      .btn { flex: 1; border: none; border-radius: 9px; padding: 8px 10px; font-size: 12px; cursor: pointer; }
-      .btn.secondary { border: 1px solid #34557f; background: transparent; color: #dceafb; }
-      .btn.primary { background: #2b8eff; color: #fff; font-weight: 700; }
-      .composer { border-top: 1px solid #223757; padding: 10px; background: #122039; position: sticky; bottom: 0; }
-      .composer .label { font-size: 11px; color: #9ab5d5; margin-bottom: 6px; }
-      .draft { border: 1px solid #2a4368; border-radius: 10px; background: #0f1c31; min-height: 42px; max-height: 108px; overflow-y: auto; padding: 6px; margin-bottom: 8px; }
-      .draft-item { font-size: 12px; color: #dbeafc; margin-bottom: 4px; }
-      .draft-empty { font-size: 12px; color: #718fb2; }
-      .send-full { width: 100%; border: none; border-radius: 10px; padding: 10px 12px; background: #2b8eff; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
-      .lab-link { position: fixed; top: 8px; left: 8px; z-index: 20; color: #d9e7fb; text-decoration: none; font-size: 12px; background: rgba(7,12,22,0.72); border: 1px solid rgba(131, 153, 187, 0.45); border-radius: 8px; padding: 6px 8px; }
+      #root { min-height: 100dvh; }
+      .page {
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+      }
+      .shell {
+        position: relative;
+        width: 100%;
+        max-width: 430px;
+        height: 840px;
+        max-height: calc(100dvh - 20px);
+        border-radius: 2.5rem;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.04);
+        box-shadow: 0 26px 90px rgba(0,0,0,.5);
+        backdrop-filter: blur(18px);
+      }
+      .glow { position: absolute; inset: 0; pointer-events: none; }
+      .glow .a { position: absolute; top: -64px; left: 34px; width: 180px; height: 180px; border-radius: 999px; background: rgba(34,211,238,.15); filter: blur(42px); }
+      .glow .b { position: absolute; top: 190px; right: -28px; width: 210px; height: 210px; border-radius: 999px; background: rgba(217,70,239,.12); filter: blur(50px); }
+      .glow .c { position: absolute; bottom: 130px; left: 34px; width: 150px; height: 150px; border-radius: 999px; background: rgba(139,92,246,.12); filter: blur(42px); }
+      .glow .d { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(255,255,255,.05), transparent 18%, transparent 80%, rgba(255,255,255,.03)); }
+      .app { position: relative; z-index: 3; height: 100%; display: flex; flex-direction: column; }
+      .section-head {
+        padding: 16px 14px 10px;
+        border-bottom: 1px solid rgba(255,255,255,.1);
+        background: rgba(0,0,0,.12);
+        backdrop-filter: blur(14px);
+      }
+      .head-row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+      .kicker { font-size: 11px; letter-spacing: .35em; text-transform: uppercase; color: rgba(255,255,255,.45); }
+      .title { font-size: 24px; font-weight: 600; letter-spacing: -.02em; margin-top: 3px; }
+      .spark {
+        width: 40px; height: 40px; border-radius: 14px;
+        border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.1);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; color: #b9ecff;
+        animation: pulse 2.4s infinite ease-in-out;
+      }
+      @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+      .search-wrap { position: relative; margin-bottom: 8px; }
+      .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,.45); font-size: 14px; }
+      .search {
+        width: 100%; height: 40px; border-radius: 16px;
+        border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.08);
+        color: #fff; padding: 0 10px 0 34px; outline: none;
+      }
+      .search::placeholder { color: rgba(255,255,255,.35); }
+      .filters { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; }
+      .pill {
+        border-radius: 999px; border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.05); color: rgba(255,255,255,.75);
+        font-size: 12px; height: 32px; padding: 0 12px; cursor: pointer; white-space: nowrap;
+      }
+      .pill.active { background: #fff; color: #0f172a; border-color: #fff; font-weight: 600; }
+      .lead-list {
+        padding: 10px 12px; height: 250px; overflow-y: auto; border-bottom: 1px solid rgba(255,255,255,.1);
+      }
+      .lead-item {
+        width: 100%; text-align: left; border-radius: 24px; border: 1px solid rgba(255,255,255,.08);
+        background: rgba(255,255,255,.045); color: #fff; padding: 11px; margin-bottom: 8px; cursor: pointer;
+        animation: rise .2s ease-out;
+      }
+      .lead-item.active {
+        background: rgba(255,255,255,.12);
+        border-color: rgba(120,220,255,.3);
+        box-shadow: 0 0 0 1px rgba(120,220,255,.18);
+      }
+      @keyframes rise { from { opacity:.0; transform: translateY(10px);} to {opacity:1; transform:none;} }
+      .lead-row { display: flex; gap: 10px; align-items: flex-start; }
+      .avatar {
+        width: 42px; height: 42px; border-radius: 14px; border: 1px solid rgba(255,255,255,.1);
+        background: linear-gradient(135deg, rgba(255,255,255,.2), rgba(255,255,255,.04));
+        display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
+      }
+      .name-line { display: flex; justify-content: space-between; gap: 8px; }
+      .name-line .name { font-size: 15px; font-weight: 600; }
+      .name-line .at { font-size: 11px; color: rgba(255,255,255,.45); white-space: nowrap; }
+      .preview { margin-top: 3px; font-size: 13px; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .lead-meta { margin-top: 7px; display: flex; align-items: center; gap: 7px; }
+      .badge { border-radius: 999px; border: 1px solid transparent; padding: 4px 8px; font-size: 11px; }
+      .urg-high { background: rgba(239,68,68,.15); color: #fecaca; border-color: rgba(248,113,113,.3); }
+      .urg-medium { background: rgba(245,158,11,.15); color: #fde68a; border-color: rgba(251,191,36,.25); }
+      .urg-low { background: rgba(16,185,129,.15); color: #a7f3d0; border-color: rgba(52,211,153,.25); }
+      .stage {
+        border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 4px 8px; font-size: 11px;
+        background: linear-gradient(90deg, rgba(34,211,238,.2), rgba(59,130,246,.2));
+        color: #e0f2fe;
+      }
+      .stage.price { background: linear-gradient(90deg, rgba(232,121,249,.2), rgba(139,92,246,.2)); color: #f5d0fe; }
+      .stage.deposit { background: linear-gradient(90deg, rgba(253,224,71,.2), rgba(251,146,60,.2)); color: #fef3c7; }
+      .unread {
+        margin-left: auto; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 999px;
+        background: #67e8f9; color: #0f172a; font-size: 11px; font-weight: 700;
+        display: inline-flex; align-items: center; justify-content: center;
+      }
+      .suggestion-wrap {
+        border-bottom: 1px solid rgba(255,255,255,.1);
+        border-top: 1px solid rgba(255,255,255,.08);
+        background: rgba(0,0,0,.12);
+        backdrop-filter: blur(14px);
+        padding: 10px 10px 9px;
+      }
+      .chat-head { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+      .chat-head .n { font-size: 14px; font-weight: 600; }
+      .chat-head .sub { margin-top: 2px; font-size: 11px; color: rgba(255,255,255,.45); }
+      .icon-btn {
+        width: 36px; height: 36px; border-radius: 14px;
+        border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.08);
+        color: #baf2ff; cursor: pointer;
+      }
+      .cards { display: flex; gap: 10px; overflow-x: auto; }
+      .card {
+        min-width: 244px; max-width: 244px;
+        border-radius: 24px; border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.06); backdrop-filter: blur(16px);
+        box-shadow: 0 16px 30px rgba(0,0,0,.35);
+        padding: 11px;
+        animation: rise .22s ease-out;
+      }
+      .card-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+      .card-title { font-size: 14px; font-weight: 600; }
+      .card-tag { font-size: 11px; color: rgba(186,230,253,.9); margin-top: 2px; }
+      .card-zap {
+        width: 32px; height: 32px; border-radius: 14px;
+        border: 1px solid rgba(103,232,249,.2);
+        background: rgba(34,211,238,.1);
+        display: flex; align-items: center; justify-content: center;
+        color: #cffafe;
+      }
+      .snips { min-height: 104px; display: grid; gap: 7px; }
+      .snip {
+        border-radius: 14px; border: 1px solid rgba(255,255,255,.08);
+        background: rgba(255,255,255,.08);
+        padding: 8px 9px; font-size: 12px; color: rgba(255,255,255,.8); line-height: 1.4;
+      }
+      .card-actions { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .btn {
+        height: 36px; border-radius: 14px; cursor: pointer; font-size: 12px;
+        border: 1px solid rgba(255,255,255,.12);
+      }
+      .btn.insert { background: #fff; color: #0f172a; font-weight: 600; border-color: #fff; }
+      .btn.send { background: rgba(255,255,255,.06); color: #fff; }
+      .chat-messages {
+        flex: 1; overflow-y: auto; padding: 12px; display: grid; gap: 10px;
+      }
+      .msg-row { display: flex; }
+      .msg-row.client { justify-content: flex-start; }
+      .msg-row.brand { justify-content: flex-end; }
+      .bubble {
+        max-width: 82%; border-radius: 1.6rem; padding: 11px 14px;
+        border: 1px solid rgba(255,255,255,.08); box-shadow: 0 10px 18px rgba(0,0,0,.32);
+        animation: bubbleIn .2s ease-out;
+      }
+      .bubble.client { background: rgba(255,255,255,.07); color: #fff; }
+      .bubble.brand {
+        border-color: rgba(207,250,254,.55);
+        background: linear-gradient(135deg, #67e8f9 0%, #a5f3fc 100%);
+        color: #0f172a;
+      }
+      .bubble .text { font-size: 14px; line-height: 1.45; }
+      .bubble .meta {
+        margin-top: 6px; font-size: 11px; display: flex; gap: 4px;
+      }
+      .bubble.client .meta { color: rgba(255,255,255,.45); }
+      .bubble.brand .meta { color: rgba(15,23,42,.68); justify-content: flex-end; }
+      .composer {
+        padding: 10px; border-top: 1px solid rgba(255,255,255,.1);
+        background: rgba(0,0,0,.2); backdrop-filter: blur(18px);
+      }
+      .stats { margin-bottom: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+      .stat {
+        border-radius: 14px; border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.05); padding: 8px;
+      }
+      .stat .k { font-size: 10px; letter-spacing: .25em; text-transform: uppercase; color: rgba(255,255,255,.35); }
+      .stat .v { margin-top: 5px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .draft-stack { margin-bottom: 9px; display: grid; gap: 6px; }
+      .draft-bubble {
+        margin-left: auto; max-width: 82%; border-radius: 1.4rem;
+        border: 1px solid rgba(207,250,254,.5);
+        background: linear-gradient(135deg, #67e8f9 0%, #a5f3fc 100%);
+        color: #0f172a; box-shadow: 0 10px 18px rgba(0,0,0,.28);
+        padding: 8px 12px; font-size: 13px; line-height: 1.35;
+      }
+      .composer-row { display: flex; align-items: flex-end; gap: 8px; }
+      .mini-btn {
+        width: 44px; height: 44px; border-radius: 14px;
+        border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); color: #fff; cursor: pointer; font-size: 16px;
+      }
+      .composer-pill {
+        flex: 1; min-height: 44px; border-radius: 1.6rem;
+        border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.07);
+        padding: 11px 12px; font-size: 13px; color: rgba(255,255,255,.42);
+      }
+      .send-fab {
+        width: 44px; height: 44px; border-radius: 14px;
+        border: 1px solid rgba(207,250,254,.35);
+        background: #67e8f9; color: #0f172a; cursor: pointer; font-size: 16px;
+      }
+      .hint {
+        margin-top: 7px; display: flex; justify-content: space-between; gap: 8px;
+        font-size: 11px; color: rgba(255,255,255,.36); padding: 0 2px;
+      }
+      .lab-link {
+        position: fixed; top: 8px; left: 8px; z-index: 12;
+        color: #d9e7fb; text-decoration: none; font-size: 12px;
+        background: rgba(7,12,22,.72); border: 1px solid rgba(131,153,187,.45);
+        border-radius: 999px; padding: 7px 10px;
+      }
       @media (max-width: 768px) {
-        .lab-page { padding: 0; }
-        .mobile-shell { border-radius: 0; max-width: 100%; max-height: 100dvh; border: none; box-shadow: none; }
+        .page { padding: 0; }
+        .shell {
+          border-radius: 0; max-width: 100%; height: 100dvh; max-height: 100dvh; border: none;
+        }
       }
     </style>
   </head>
@@ -4633,114 +4818,252 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       const LEAD_ID = ${JSON.stringify(leadId)};
       const MAX_LEN = 120;
 
-      function clampText(v) {
-        const t = String(v || "").replace(/\\s+/g, " ").trim();
-        if (t.length <= MAX_LEN) return t;
-        return t.slice(0, MAX_LEN - 1).trimEnd() + "…";
+      function clampText(value) {
+        const raw = String(value || "").replace(/\\s+/g, " ").trim();
+        if (raw.length <= MAX_LEN) return raw;
+        return raw.slice(0, MAX_LEN - 1).trimEnd() + "…";
       }
 
-      function nowIso() { return new Date().toISOString(); }
+      const urgencyClass = { High: "urg-high", Medium: "urg-medium", Low: "urg-low" };
+      const stageClass = { QUALIFICATION: "", PRICE_SENT: "price", DEPOSIT_PENDING: "deposit" };
 
-      function toTime(iso) {
-        const d = new Date(String(iso || ""));
-        if (Number.isNaN(d.getTime())) return "--:--";
-        return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-      }
-
-      function buildMockThread() {
-        return {
-          id: LEAD_ID || "lead_mobile_lab_001",
-          name: "Sara El Idrissi",
-          stage: "QUALIFIED",
+      const leadsSeed = [
+        {
+          id: LEAD_ID ? 999 : 1,
+          name: "Sara M.",
+          stage: "QUALIFICATION",
           urgency: "High",
-          messages: [
-            { id: "m1", from: "client", text: "Bonjour, je suis intéressée par le kaftan vert Swarovski. Disponible fin du mois ?", time: nowIso() },
-            { id: "m2", from: "brand", text: "Bonjour Sara, oui disponible. Je peux confirmer prix et délai selon votre date.", time: nowIso() },
-            { id: "m3", from: "client", text: "Parfait, mariage le 28. Quel est le prix et le délai ?", time: nowIso() }
-          ],
+          unread: 2,
+          lastAt: "Now",
+          preview: "Bonjour, j’ai besoin d’une tenue pour un mariage...",
+          avatar: "SM",
           suggestions: [
-            { id: "s1", title: "Prix + délai", rationale: "Réponse premium directe.", messages: ["Parfait pour le 28. Le prix est de 4 300 USD pour ce modèle.", "Le délai de confection est de 2 à 3 semaines selon finitions.", "Je peux réserver votre créneau atelier aujourd'hui."] },
-            { id: "s2", title: "Qualification finale", rationale: "Valider les infos clés avant confirmation.", messages: ["Merci. Je vous confirme tout de suite.", "Pouvez-vous partager votre taille et votre ville de livraison ?", "Dès réception, j'envoie la confirmation complète."] },
-            { id: "s3", title: "Conversion douce", rationale: "Ton luxe discret, CTA clair.", messages: ["Très bon timing pour votre date.", "Je peux finaliser votre pièce et bloquer l'atelier maintenant.", "Souhaitez-vous que je prépare l'étape de validation ?"] }
+            { id: 11, title: "Qualifier l’événement", tag: "Priorité", messages: ["Bonjour Sara, merci pour votre message.", "Puis-je connaître la date de l’événement ?", "Et le pays de livraison pour vérifier les délais ?"] },
+            { id: 12, title: "Proposer appel vidéo", tag: "Rapide", messages: ["Je peux aussi vous montrer plusieurs options.", "Nous pouvons organiser un appel vidéo rapide.", "Je vous présenterai les modèles disponibles."] },
+            { id: 13, title: "Qualifier budget", tag: "Strategic", messages: ["Avant de vous partager une sélection précise,", "avez-vous une idée du budget souhaité ?"] }
+          ],
+          messages: [
+            { id: 101, from: "client", text: "Bonjour, j’ai besoin d’une tenue pour un mariage en juin.", time: "10:12" },
+            { id: 102, from: "brand", text: "Bonjour Sara, merci pour votre message. Je serais ravie de vous orienter.", time: "10:13", status: "read" },
+            { id: 103, from: "client", text: "Je suis à Paris et j’aurais besoin d’une livraison avant le 18 juin.", time: "10:14" }
           ]
-        };
-      }
+        },
+        {
+          id: 2,
+          name: "Lina B.",
+          stage: "PRICE_SENT",
+          urgency: "Medium",
+          unread: 0,
+          lastAt: "4 min",
+          preview: "Merci, pouvez-vous m’envoyer d’autres options en bleu ?",
+          avatar: "LB",
+          suggestions: [
+            { id: 21, title: "Envoyer options", tag: "Send", messages: ["Bien sûr.", "Je vous partage une sélection raffinée en bleu.", "Je vous envoie cela dans un instant."] },
+            { id: 22, title: "Confirmer délai", tag: "Info", messages: ["Selon le modèle retenu,", "nous pourrons confirmer immédiatement", "le délai de production et d’expédition."] }
+          ],
+          messages: [
+            { id: 201, from: "brand", text: "Cette pièce est disponible avec ajustements, au prix de 4 800€.", time: "09:42", status: "read" },
+            { id: 202, from: "client", text: "Merci, pouvez-vous m’envoyer d’autres options en bleu ?", time: "09:44" }
+          ]
+        },
+        {
+          id: 3,
+          name: "Nadia K.",
+          stage: "DEPOSIT_PENDING",
+          urgency: "Low",
+          unread: 1,
+          lastAt: "18 min",
+          preview: "Je peux faire le virement aujourd’hui.",
+          avatar: "NK",
+          suggestions: [
+            { id: 31, title: "Coordonnées paiement", tag: "Hot", messages: ["Parfait.", "Je peux vous partager immédiatement", "les coordonnées de paiement.", "Cela nous permettra de lancer la production."] },
+            { id: 32, title: "Confirmer lancement", tag: "Next", messages: ["Dès réception de l’acompte,", "nous pourrons confirmer", "le lancement de votre pièce."] }
+          ],
+          messages: [{ id: 301, from: "client", text: "Je peux faire le virement aujourd’hui.", time: "08:11" }]
+        }
+      ];
 
       function App() {
-        const thread = React.useMemo(() => buildMockThread(), []);
-        const [chat, setChat] = React.useState(thread.messages || []);
-        const [activeId, setActiveId] = React.useState("");
-        const [draft, setDraft] = React.useState([]);
+        const [leads, setLeads] = React.useState(leadsSeed);
+        const [selectedLeadId, setSelectedLeadId] = React.useState(leadsSeed[0].id);
+        const [draftMessages, setDraftMessages] = React.useState([]);
+        const [filter, setFilter] = React.useState("All");
+        const [query, setQuery] = React.useState("");
         const [sending, setSending] = React.useState(false);
 
-        async function sendSequence(seq) {
-          if (!Array.isArray(seq) || seq.length < 2 || sending) return;
+        const selectedLead = React.useMemo(() => leads.find((lead) => lead.id === selectedLeadId) || leads[0], [leads, selectedLeadId]);
+
+        const filteredLeads = React.useMemo(() => {
+          return leads.filter((lead) => {
+            const matchesFilter = filter === "All" ? true : lead.urgency === filter;
+            const haystack = (lead.name + " " + lead.preview + " " + lead.stage).toLowerCase();
+            return matchesFilter && haystack.includes(String(query || "").toLowerCase());
+          });
+        }, [leads, filter, query]);
+
+        function insertSuggestion(messages) {
+          setDraftMessages((Array.isArray(messages) ? messages : []).slice(0, 4).map((m) => clampText(m)));
+        }
+
+        async function sendMessages() {
+          if (!draftMessages.length || sending) return;
           setSending(true);
           try {
-            for (let i = 0; i < seq.length; i += 1) {
-              const line = clampText(seq[i]);
-              if (!line) continue;
-              await new Promise((resolve) => setTimeout(resolve, 360 + i * 120));
-              setChat((prev) => prev.concat({ id: "out_" + Date.now() + "_" + i, from: "brand", text: line, time: nowIso() }));
+            for (let i = 0; i < draftMessages.length; i += 1) {
+              await new Promise((resolve) => setTimeout(resolve, 80 + i * 90));
             }
-            setDraft([]);
-            setActiveId("");
+            setLeads((prev) =>
+              prev.map((lead) => {
+                if (lead.id !== selectedLeadId) return lead;
+                const nextPreview = draftMessages[draftMessages.length - 1];
+                return {
+                  ...lead,
+                  preview: nextPreview,
+                  lastAt: "Now",
+                  messages: lead.messages.concat(
+                    draftMessages.map((msg, i) => ({
+                      id: Date.now() + i + Math.random(),
+                      from: "brand",
+                      text: clampText(msg),
+                      time: "Now",
+                      status: "sent"
+                    }))
+                  )
+                };
+              })
+            );
+            setDraftMessages([]);
           } finally {
             setSending(false);
           }
         }
 
         return (
-          <div className="lab-page">
-            <div className="mobile-shell">
-              <div className="topbar">
-                <div className="lead">
-                  <span className="name">{thread.name}</span>
-                  <span className="meta">{thread.stage} · {thread.urgency} · {String(MODE).toUpperCase()}</span>
-                </div>
-                <div className="top-actions">
-                  <span className="chip">leadId: {thread.id}</span>
-                </div>
-              </div>
-
-              <div className="chat">
-                {chat.map((m) => (
-                  <div key={m.id} className={"row " + (m.from === "brand" ? "out" : "in")}>
-                    <div className={"bubble " + (m.from === "brand" ? "out" : "in")}>
-                      <div>{clampText(m.text)}</div>
-                      <div className="time">{toTime(m.time)}</div>
+          <div className="page">
+            <div className="shell">
+              <div className="glow"><div className="a" /><div className="b" /><div className="c" /><div className="d" /></div>
+              <div className="app">
+                <div className="section-head">
+                  <div className="head-row">
+                    <div>
+                      <div className="kicker">WhatsApp Intelligence</div>
+                      <div className="title">Mobile Inbox</div>
                     </div>
+                    <div className="spark">✦</div>
                   </div>
-                ))}
-              </div>
 
-              <div className="sugg-wrap">
-                <div className="sugg-title">AI Suggestions (2-4 messages)</div>
-                <div className="sugg-row">
-                  {(thread.suggestions || []).map((s) => (
-                    <div key={s.id} className={"card " + (s.id === activeId ? "active" : "")}>
-                      <h4>{s.title}</h4>
-                      <p>{s.rationale}</p>
-                      {(s.messages || []).slice(0, 4).map((x, i) => (
-                        <div key={s.id + "_" + i} className="msg-preview">{i + 1}. {clampText(x)}</div>
-                      ))}
-                      <div className="card-actions">
-                        <button className="btn secondary" disabled={sending} onClick={() => { setDraft((s.messages || []).slice(0,4)); setActiveId(s.id); }}>Insert</button>
-                        <button className="btn primary" disabled={sending} onClick={() => { setActiveId(s.id); sendSequence((s.messages || []).slice(0,4)); }}>{sending && activeId === s.id ? "Sending…" : "Send"}</button>
-                      </div>
+                  <div className="search-wrap">
+                    <span className="search-icon">⌕</span>
+                    <input value={query} onChange={(e) => setQuery(e.target.value)} className="search" placeholder="Rechercher une conversation" />
+                  </div>
+
+                  <div className="filters">
+                    {["All", "High", "Medium", "Low"].map((item) => (
+                      <button key={item} onClick={() => setFilter(item)} className={"pill " + (filter === item ? "active" : "")}>
+                        {item === "All" ? "☰ " : ""}{item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="lead-list">
+                  {filteredLeads.map((lead) => {
+                    const active = lead.id === selectedLeadId;
+                    return (
+                      <button key={lead.id} onClick={() => setSelectedLeadId(lead.id)} className={"lead-item " + (active ? "active" : "")}>
+                        <div className="lead-row">
+                          <div className="avatar">{lead.avatar}</div>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div className="name-line">
+                              <span className="name">{lead.name}</span>
+                              <span className="at">{lead.lastAt}</span>
+                            </div>
+                            <div className="preview">{lead.preview}</div>
+                            <div className="lead-meta">
+                              <span className={"badge " + urgencyClass[lead.urgency]}>{lead.urgency}</span>
+                              <span className={"stage " + stageClass[lead.stage]}>{lead.stage}</span>
+                              {lead.unread > 0 ? <span className="unread">{lead.unread}</span> : null}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="suggestion-wrap">
+                  <div className="chat-head">
+                    <div>
+                      <div className="n">{selectedLead.name}</div>
+                      <div className="sub">Timing pressure détecté · suggestions prêtes · {String(MODE).toUpperCase()}</div>
                     </div>
-                  ))}
+                    <button className="icon-btn">✦</button>
+                  </div>
+                  <div className="cards">
+                    {(selectedLead.suggestions || []).map((card) => (
+                      <div key={card.id} className="card">
+                        <div className="card-top">
+                          <div>
+                            <div className="card-title">{card.title}</div>
+                            <div className="card-tag">{card.tag}</div>
+                          </div>
+                          <div className="card-zap">⚡</div>
+                        </div>
+                        <div className="snips">
+                          {card.messages.map((msg, i) => <div key={i} className="snip">{clampText(msg)}</div>)}
+                        </div>
+                        <div className="card-actions">
+                          <button className="btn insert" disabled={sending} onClick={() => insertSuggestion(card.messages)}>Insérer</button>
+                          <button className="btn send" disabled={sending} onClick={() => { insertSuggestion(card.messages); setTimeout(() => { void sendMessages(); }, 80); }}>Envoyer</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="composer">
-                <div className="label">Insert + Send sequence</div>
-                <div className="draft">
-                  {draft.length ? draft.map((line, idx) => <div key={"d_" + idx} className="draft-item">{idx + 1}. {clampText(line)}</div>) : <div className="draft-empty">No inserted sequence</div>}
+                <div className="chat-messages">
+                  {(selectedLead.messages || []).map((message) => {
+                    const own = message.from === "brand";
+                    return (
+                      <div key={message.id} className={"msg-row " + (own ? "brand" : "client")}>
+                        <div className={"bubble " + (own ? "brand" : "client")}>
+                          <div className="text">{clampText(message.text)}</div>
+                          <div className="meta">
+                            <span>{message.time}</span>
+                            {own ? <span>{message.status === "read" ? "✓✓" : "✓"}</span> : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <button className="send-full" disabled={sending || draft.length < 2} onClick={() => sendSequence(draft)}>
-                  {sending ? "Sending sequence…" : "Send inserted sequence"}
-                </button>
+
+                <div className="composer">
+                  <div className="stats">
+                    <div className="stat"><div className="k">AI</div><div className="v">{selectedLead.suggestions.length} cartes</div></div>
+                    <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead.stage}</div></div>
+                    <div className="stat"><div className="k">Speed</div><div className="v">Fast reply</div></div>
+                  </div>
+
+                  {draftMessages.length ? (
+                    <div className="draft-stack">
+                      {draftMessages.map((msg, i) => <div key={i} className="draft-bubble">{clampText(msg)}</div>)}
+                    </div>
+                  ) : null}
+
+                  <div className="composer-row">
+                    <button className="mini-btn">＋</button>
+                    <div className="composer-pill">
+                      {draftMessages.length ? String(draftMessages.length) + " messages prêts à être envoyés" : "Sélectionner une suggestion AI..."}
+                    </div>
+                    <button className="send-fab" onClick={() => { void sendMessages(); }}>➤</button>
+                  </div>
+
+                  <div className="hint">
+                    <span>✦ Suggestions courtes, style WhatsApp</span>
+                    <span>Ouvrir détail ›</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
