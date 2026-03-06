@@ -6060,7 +6060,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           }
         }
 
-        function MobileInboxView({ device }) {
+        function renderMobileInboxView(device) {
           return (
             <div className="mobile-pane">
               <div className="section-head">
@@ -6131,7 +6131,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           );
         }
 
-        function MobileAiDrawer() {
+        function renderMobileAiDrawer() {
           return (
             <>
               {mobileDrawerOffset >= (mobileDrawerClosedRef.current - 2) ? (
@@ -6240,7 +6240,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           );
         }
 
-        function MobileConversationView() {
+        function renderMobileConversationView() {
           const drawerOpenProgress = Math.max(
             0,
             Math.min(1, 1 - (mobileDrawerOffset / Math.max(1, mobileDrawerClosedRef.current)))
@@ -6284,7 +6284,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       );
                     })}
                   </div>
-                  <MobileAiDrawer />
+                  {renderMobileAiDrawer()}
                 </div>
               </div>
 
@@ -6343,7 +6343,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           );
         }
 
-        function MobileExperience({ device }) {
+        function renderMobileExperience(device) {
           return (
             <div className="app mobile-nav-shell">
               <div
@@ -6355,8 +6355,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   transition: mobileBackSwiping ? "none" : "transform .32s cubic-bezier(.22,.74,.22,1)"
                 }}
               >
-                <MobileInboxView device={device} />
-                <MobileConversationView />
+                {renderMobileInboxView(device)}
+                {renderMobileConversationView()}
               </div>
             </div>
           );
@@ -6563,7 +6563,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       </div>
                     ) : (
                       device === "mobile" ? (
-                        <MobileExperience device={device} />
+                        renderMobileExperience(device)
                       ) : (
                         <div className="app">
                           <div className="section-head">
