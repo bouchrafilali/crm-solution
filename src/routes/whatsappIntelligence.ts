@@ -5085,7 +5085,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .mobile-ai-drawer {
         position: absolute;
-        top: 120px;
+        top: calc(30% - 8px);
         right: 0;
         height: 70%;
         width: calc(100% - 8px);
