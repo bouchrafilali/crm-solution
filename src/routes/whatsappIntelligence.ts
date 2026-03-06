@@ -5886,7 +5886,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             "text"
           ).trim().toLowerCase();
           const textRaw = String((item && item.text) || "");
-          const textUrlMatch = textRaw.match(/https?:\/\/[^\s<>"')]+/i);
+          const textUrlMatch = textRaw.match(/https?:\\/\\/[^\\s<>"')]+/i);
           const mediaUrl = String(
             (metadata && (metadata.media_url || metadata.mediaUrl || metadata.url || metadata.link || metadata.file_url || metadata.fileUrl || metadata.image_url)) ||
             (textUrlMatch ? textUrlMatch[0] : "") ||
@@ -5931,10 +5931,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           else if (rawType.includes("document") || rawType.includes("file") || mimeType.includes("pdf") || mimeType.includes("msword")) kind = "document";
           else if (rawType.includes("link") || (linkPreview && linkPreview.url)) kind = "link_preview";
           else if (textUrlMatch && !mediaUrl) kind = "link_preview";
-          else if (mediaUrl && /\.(mp4|mov|webm|m4v)(\?|$)/i.test(mediaUrl)) kind = "video";
-          else if (mediaUrl && /\.(mp3|m4a|ogg|wav|opus|aac)(\?|$)/i.test(mediaUrl)) kind = "audio";
-          else if (mediaUrl && /\.(png|jpe?g|webp|gif|bmp|avif|svg)(\?|$)/i.test(mediaUrl)) kind = "image";
-          else if (mediaUrl && /\.(pdf|docx?|xlsx?|pptx?|zip|rar|txt)(\?|$)/i.test(mediaUrl)) kind = "document";
+          else if (mediaUrl && /\\.(mp4|mov|webm|m4v)(\\?|$)/i.test(mediaUrl)) kind = "video";
+          else if (mediaUrl && /\\.(mp3|m4a|ogg|wav|opus|aac)(\\?|$)/i.test(mediaUrl)) kind = "audio";
+          else if (mediaUrl && /\\.(png|jpe?g|webp|gif|bmp|avif|svg)(\\?|$)/i.test(mediaUrl)) kind = "image";
+          else if (mediaUrl && /\\.(pdf|docx?|xlsx?|pptx?|zip|rar|txt)(\\?|$)/i.test(mediaUrl)) kind = "document";
           else if (mediaUrl && !textRaw.trim()) kind = "document";
           const delivery = String((metadata && (metadata.delivery_status || metadata.status || metadata.whatsapp_status)) || "").trim().toUpperCase();
           const status = isBrand
@@ -5995,10 +5995,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
       function renderTextWithLinks(text) {
         const source = String(text || "");
-        const lines = source.split(/\n/);
+        const lines = source.split(/\\n/);
         return lines.map((line, lineIndex) => {
           const parts = [];
-          const regex = /(https?:\/\/[^\s<>"')]+)/g;
+          const regex = /(https?:\\/\\/[^\\s<>"')]+)/g;
           let cursor = 0;
           let match;
           while ((match = regex.exec(line)) !== null) {
