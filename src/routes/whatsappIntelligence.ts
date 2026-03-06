@@ -5117,32 +5117,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         overflow: hidden;
         z-index: 9;
       }
-      .mobile-ai-dragzone {
-        height: 22px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        touch-action: none;
-        cursor: grab;
-      }
-      .mobile-ai-edge-grab {
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 34px;
-        touch-action: none;
-        cursor: ew-resize;
-        background: linear-gradient(90deg, rgba(116, 184, 255, .12), rgba(0,0,0,0));
-      }
-      .mobile-ai-dragzone span {
-        width: 44px;
-        height: 4px;
-        border-radius: 999px;
-        background: rgba(196, 230, 255, .34);
-      }
       .mobile-ai-head {
-        padding: 0 10px 6px;
+        padding: 10px 10px 6px;
         border-bottom: 1px solid rgba(176, 215, 255, .16);
       }
       .mobile-ai-cards {
@@ -6255,10 +6231,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                       <span className="mobile-ai-handle-dot" />
                                       <span className="mobile-ai-handle-label">AI</span>
                                     </button>
-                                    <div className="mobile-ai-edge-grab" onClick={toggleMobileDrawer} onPointerDown={onMobileDrawerPointerDown} />
-                                    <div className="mobile-ai-dragzone" onPointerDown={onMobileDrawerPointerDown}>
-                                      <span />
-                                    </div>
                                     <div className="mobile-ai-head">
                                     <div className="chat-head">
                                       <div>
