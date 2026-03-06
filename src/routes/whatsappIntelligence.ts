@@ -5088,7 +5088,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         top: auto;
         right: 0;
         bottom: 0;
-        height: 45%;
+        height: auto;
+        min-height: 300px;
+        max-height: calc(100% - 8px);
         width: calc(100% - 8px);
         border-radius: 24px 0 0 24px;
         border: 1px solid rgba(170, 212, 255, .28);
@@ -5136,14 +5138,13 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         border-bottom: 1px solid rgba(176, 215, 255, .16);
       }
       .mobile-ai-cards {
-        flex: 1;
-        min-height: 0;
+        flex: 0 0 auto;
         padding: 10px;
         display: flex;
         align-items: flex-start;
         gap: 10px;
         overflow-x: auto;
-        overflow-y: hidden;
+        overflow-y: visible;
       }
       .shell.mobile .mobile-ai-cards .card {
         min-width: 270px;
