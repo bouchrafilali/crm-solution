@@ -4681,8 +4681,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         pointer-events: none;
         background:
           radial-gradient(48% 32% at 20% 10%, rgba(61, 216, 255, .16) 0%, rgba(0,0,0,0) 72%),
-          radial-gradient(46% 34% at 88% 86%, rgba(153, 102, 255, .14) 0%, rgba(0,0,0,0) 72%);
-        filter: blur(8px);
+          radial-gradient(62% 52% at 88% 72%, rgba(163, 96, 255, .26) 0%, rgba(0,0,0,0) 74%),
+          radial-gradient(45% 38% at 74% 30%, rgba(186, 104, 255, .18) 0%, rgba(0,0,0,0) 76%);
+        filter: blur(10px);
       }
       .shell.desktop::after {
         content: "";
@@ -4706,7 +4707,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         pointer-events: none;
         background:
           radial-gradient(55% 45% at 46% -6%, rgba(92, 161, 255, .2) 0%, rgba(0,0,0,0) 68%),
-          radial-gradient(40% 48% at 90% 30%, rgba(150, 98, 255, .14) 0%, rgba(0,0,0,0) 74%),
+          radial-gradient(56% 62% at 92% 32%, rgba(162, 96, 255, .2) 0%, rgba(0,0,0,0) 74%),
+          radial-gradient(46% 55% at 84% 86%, rgba(136, 82, 255, .18) 0%, rgba(0,0,0,0) 76%),
           radial-gradient(38% 42% at 8% 72%, rgba(55, 226, 255, .13) 0%, rgba(0,0,0,0) 76%);
         filter: blur(10px);
       }
@@ -4740,6 +4742,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         margin-left: 10px;
         background:
           radial-gradient(120% 90% at 46% -16%, rgba(87, 145, 255, .14) 0%, rgba(8,12,24,0) 66%),
+          radial-gradient(80% 90% at 92% 42%, rgba(158, 92, 255, .15) 0%, rgba(8,12,24,0) 72%),
           linear-gradient(180deg, rgba(14,23,42,.78), rgba(9,15,28,.72));
       }
       .desk-col.right {
