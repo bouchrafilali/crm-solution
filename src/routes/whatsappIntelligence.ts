@@ -161,6 +161,7 @@ import {
   WhatsAppLeadOutcomeError
 } from "../services/whatsappLeadOutcomesService.js";
 import {
+  getWhatsAppAgentRunSnapshotByRunId,
   getLatestWhatsAppAgentRunSnapshot,
   WhatsAppAgentOrchestratorError
 } from "../services/whatsappAgentOrchestratorService.js";
@@ -1785,6 +1786,21 @@ whatsappRouter.get("/api/whatsapp/leads/:id/agent-run/latest", async (req, res) 
     }
     console.error("[whatsapp] agent-run-latest", error);
     return res.status(503).json({ error: "agent_run_latest_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/agent-runs/:runId/snapshot", async (req, res) => {
+  const runId = String(req.params.runId || "").trim();
+  if (!runId) return res.status(400).json({ error: "invalid_run_id" });
+  try {
+    const payload = await getWhatsAppAgentRunSnapshotByRunId(runId);
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof WhatsAppAgentOrchestratorError) {
+      return res.status(400).json({ error: error.code, step: error.step, message: error.message });
+    }
+    console.error("[whatsapp] agent-run-by-id-snapshot", error);
+    return res.status(503).json({ error: "agent_run_snapshot_unavailable" });
   }
 });
 
@@ -6464,6 +6480,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           risk: lead && lead.risk ? lead.risk : null,
           aiDebug: null,
           agentRun: null,
+          agentRunMeta: null,
           agentRunError: null,
           generationMode: null,
           suggestions: [],
@@ -6507,6 +6524,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           enrichmentSource,
           enrichmentError,
           agentRun: null,
+          agentRunMeta: null,
           agentRunError: null,
           generationMode: null,
           skipAllowed: item && item.skipAllowed !== false,
@@ -6707,11 +6725,82 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         return "$" + formatted;
       }
 
+      function normalizeAgentRunSnapshot(payload) {
+        const run = payload && payload.run && typeof payload.run === "object" ? payload.run : null;
+        const stepsRaw = payload && Array.isArray(payload.steps) ? payload.steps : [];
+        const steps = stepsRaw
+          .map((step) => ({
+            stepName: String(step && step.stepName ? step.stepName : "").trim(),
+            status: String(step && step.status ? step.status : "").trim(),
+            provider: step && step.provider ? String(step.provider).trim() : null,
+            model: step && step.model ? String(step.model).trim() : null,
+            inputTokens: numberOrNull(step && step.inputTokens),
+            outputTokens: numberOrNull(step && step.outputTokens),
+            estimatedCostUsd: numberOrNull(step && step.estimatedCostUsd),
+            error: step && step.error ? String(step.error).trim() : null
+          }))
+          .filter((step) => step.stepName);
+        return {
+          run: run
+            ? {
+                id: String(run.id || "").trim(),
+                status: String(run.status || "").trim(),
+                startedAt: String(run.startedAt || "").trim(),
+                finishedAt: String(run.finishedAt || "").trim(),
+                totalInputTokens: numberOrNull(run.totalInputTokens),
+                totalOutputTokens: numberOrNull(run.totalOutputTokens),
+                totalEstimatedCostUsd: numberOrNull(run.totalEstimatedCostUsd)
+              }
+            : null,
+          steps
+        };
+      }
+
+      function parseApiErrorPayload(error) {
+        const fallback = { code: "", message: "" };
+        const raw = error instanceof Error ? String(error.message || "") : String(error || "");
+        if (!raw) return fallback;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            return {
+              code: String(parsed.error || "").trim(),
+              message: String(parsed.message || "").trim()
+            };
+          }
+        } catch {}
+        return { code: "", message: raw };
+      }
+
+      function normalizeAgentRunErrorMessage(error) {
+        const parsed = parseApiErrorPayload(error);
+        if (parsed.code === "agent_run_latest_unavailable" || parsed.code === "agent_run_snapshot_unavailable") {
+          return "Run details are temporarily unavailable.";
+        }
+        if (parsed.code === "run_not_found") return "No detailed run available for this cached suggestion.";
+        if (parsed.message) return parsed.message;
+        return "Run details are unavailable.";
+      }
+
+      function mapAgentRunMetaFromCardsPayload(payload) {
+        const meta = payload && payload.agentRunMeta && typeof payload.agentRunMeta === "object" ? payload.agentRunMeta : null;
+        const runIdRaw = String((meta && meta.runId) || "").trim();
+        const generatedAtRaw = String((meta && meta.generatedAt) || "").trim();
+        const sourceRaw = String((meta && meta.source) || "").trim().toLowerCase();
+        return {
+          runId: runIdRaw || null,
+          generatedAt: generatedAtRaw || null,
+          source: sourceRaw || "fresh_generation"
+        };
+      }
+
       function runAiFlowUiAssertions() {
         console.assert(formatCompactUsdCost(null) === "—", "ai-flow: null cost should render dash");
         console.assert(formatCompactTokenCount(null) === "—", "ai-flow: null tokens should render dash");
         console.assert(formatCompactUsdCost(0.0042) === "$0.0042", "ai-flow: compact 4-decimal formatting expected");
         console.assert(formatCompactUsdCost(0.000345) === "$0.000345", "ai-flow: compact 6-decimal formatting expected");
+        const parsedUnavailable = normalizeAgentRunErrorMessage(new Error(JSON.stringify({ error: "agent_run_latest_unavailable" })));
+        console.assert(parsedUnavailable === "Run details are temporarily unavailable.", "ai-flow: API unavailable should be user-friendly");
       }
 
       if (URL_QUERY.get("assertAiFlowUi") === "1") {
@@ -7229,50 +7318,53 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setLeads((prev) => prev.map((lead) => (String(lead.id) === String(leadId) ? { ...lead, ...patch } : lead)));
         }, []);
 
-        const loadAgentRun = React.useCallback(async (leadId) => {
+        const loadAgentRun = React.useCallback(async (leadId, runHintId) => {
           if (!LIVE_MODE || !leadId || !isUuidValue(leadId)) return;
           const requestId = agentRunRequestRef.current + 1;
           agentRunRequestRef.current = requestId;
           patchLead(leadId, { agentRunError: null });
+          const fallbackRunId = String(runHintId || "").trim();
           try {
             const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/agent-run/latest");
             if (requestId !== agentRunRequestRef.current) return;
-            const run = payload && payload.run && typeof payload.run === "object" ? payload.run : null;
-            const stepsRaw = payload && Array.isArray(payload.steps) ? payload.steps : [];
-            const steps = stepsRaw
-              .map((step) => ({
-                stepName: String(step && step.stepName ? step.stepName : "").trim(),
-                status: String(step && step.status ? step.status : "").trim(),
-                provider: step && step.provider ? String(step.provider).trim() : null,
-                model: step && step.model ? String(step.model).trim() : null,
-                inputTokens: numberOrNull(step && step.inputTokens),
-                outputTokens: numberOrNull(step && step.outputTokens),
-                estimatedCostUsd: numberOrNull(step && step.estimatedCostUsd),
-                error: step && step.error ? String(step.error).trim() : null
-              }))
-              .filter((step) => step.stepName);
+            const normalized = normalizeAgentRunSnapshot(payload);
             patchLead(leadId, {
-              agentRun: run
-                ? {
-                    run: {
-                      id: String(run.id || "").trim(),
-                      status: String(run.status || "").trim(),
-                      startedAt: String(run.startedAt || "").trim(),
-                      finishedAt: String(run.finishedAt || "").trim(),
-                      totalInputTokens: numberOrNull(run.totalInputTokens),
-                      totalOutputTokens: numberOrNull(run.totalOutputTokens),
-                      totalEstimatedCostUsd: numberOrNull(run.totalEstimatedCostUsd)
-                    },
-                    steps
-                  }
-                : { run: null, steps },
+              agentRun: normalized,
               agentRunError: null
             });
+            if (normalized.run || !fallbackRunId || !isUuidValue(fallbackRunId)) return;
+            const byIdPayload = await fetchJson("/api/whatsapp/agent-runs/" + encodeURIComponent(fallbackRunId) + "/snapshot");
+            if (requestId !== agentRunRequestRef.current) return;
+            const byIdNormalized = normalizeAgentRunSnapshot(byIdPayload);
+            patchLead(leadId, {
+              agentRun: byIdNormalized,
+              agentRunError: byIdNormalized.run ? null : "No detailed run available for this cached suggestion."
+            });
           } catch (error) {
+            const latestErrorMessage = normalizeAgentRunErrorMessage(error);
+            if (fallbackRunId && isUuidValue(fallbackRunId)) {
+              try {
+                const payloadById = await fetchJson("/api/whatsapp/agent-runs/" + encodeURIComponent(fallbackRunId) + "/snapshot");
+                if (requestId !== agentRunRequestRef.current) return;
+                const byId = normalizeAgentRunSnapshot(payloadById);
+                patchLead(leadId, {
+                  agentRun: byId,
+                  agentRunError: byId.run ? null : "No detailed run available for this cached suggestion."
+                });
+                return;
+              } catch (byIdError) {
+                if (requestId !== agentRunRequestRef.current) return;
+                patchLead(leadId, {
+                  agentRun: { run: null, steps: [] },
+                  agentRunError: normalizeAgentRunErrorMessage(byIdError) || latestErrorMessage
+                });
+                return;
+              }
+            }
             if (requestId !== agentRunRequestRef.current) return;
             patchLead(leadId, {
-              agentRun: null,
-              agentRunError: error instanceof Error ? error.message : String(error || "agent_run_failed")
+              agentRun: { run: null, steps: [] },
+              agentRunError: latestErrorMessage
             });
           }
         }, [patchLead]);
@@ -7305,6 +7397,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       ...lead,
                       aiDebug: old.aiDebug || null,
                       agentRun: old.agentRun || null,
+                      agentRunMeta: old.agentRunMeta || null,
                       agentRunError: old.agentRunError || null,
                       generationMode: old.generationMode || null,
                       messages: Array.isArray(old.messages) ? old.messages : []
@@ -7366,16 +7459,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             );
             if (requestId !== suggestionsRequestRef.current) return;
             const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
+            const agentRunMeta = mapAgentRunMetaFromCardsPayload(payload);
             patchLead(leadId, {
               suggestions,
               enrichmentStatus: String((payload && (payload.status || payload.enrichmentStatus)) || "error"),
               enrichmentSource: String((payload && (payload.enrichmentSource || payload.pipelineSource || payload.source)) || "active_ai_cards"),
               enrichmentError: payload && (payload.error || payload.enrichmentError) ? String(payload.error || payload.enrichmentError) : null,
+              agentRunMeta,
               generationMode: payload && (payload.generationMode || payload.generation_mode)
                 ? String(payload.generationMode || payload.generation_mode)
                 : null
             });
-            await loadAgentRun(leadId);
+            await loadAgentRun(leadId, agentRunMeta.runId);
             if (forceRegenerate) await loadMessages(leadId);
           } catch (error) {
             if (requestId !== suggestionsRequestRef.current) return;
@@ -7384,10 +7479,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               enrichmentStatus: "error",
               enrichmentSource: feedType === "reactivation" ? "reactivation_replies" : "active_ai_cards",
               enrichmentError: error instanceof Error ? error.message : String(error || "cards_failed"),
+              agentRunMeta: null,
               generationMode: null
             });
             console.error("[mobile-lab] lead cards load failed", { leadId, error });
-            await loadAgentRun(leadId);
+            await loadAgentRun(leadId, null);
           } finally {
             if (requestId === suggestionsRequestRef.current) {
               setLoadingSuggestions(false);
@@ -7395,6 +7491,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             }
           }
         }, [leads, loadAgentRun, loadMessages, patchLead]);
+
+        function regenerateSuggestionsForLead(lead) {
+          if (!lead || !lead.id) return;
+          void loadSuggestions(lead.id, true);
+        }
 
         React.useEffect(() => {
           if (!LIVE_MODE) return;
@@ -7425,13 +7526,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!LIVE_MODE) return;
           void loadSuggestions(selectedLeadId, false);
         }, [selectedLeadId, loadSuggestions]);
-
-        React.useEffect(() => {
-          if (!selectedLeadId) return;
-          if (LIVE_MODE && !isUuidValue(selectedLeadId)) return;
-          if (!LIVE_MODE) return;
-          void loadAgentRun(selectedLeadId);
-        }, [selectedLeadId, loadAgentRun]);
 
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;
@@ -7963,10 +8057,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const flow = lead.agentRun && typeof lead.agentRun === "object" ? lead.agentRun : null;
           const run = flow && flow.run && typeof flow.run === "object" ? flow.run : null;
           const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
+          const runMeta = lead.agentRunMeta && typeof lead.agentRunMeta === "object" ? lead.agentRunMeta : null;
           const hasCards = Array.isArray(lead.suggestions) && lead.suggestions.length > 0;
           const resultLabel = hasCards ? "cards ready" : "no cards";
           const modeRaw = String(lead.generationMode || "").trim().toLowerCase();
           const modeLabel = modeRaw === "cached" ? "cached state reused" : modeRaw === "fresh" ? "fresh generation" : null;
+          const shouldShowNoRunFallback = !run && modeRaw === "cached" && !lead.agentRunError;
           return (
             <div className="preview" style={{ marginTop: "10px", fontSize: "11px", lineHeight: 1.45 }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.78 }}>AI Flow</div>
@@ -7980,8 +8076,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     </div>
                   </>
                 )
-                : <div>run: none</div>}
+                : <div>run: none{runMeta && runMeta.runId ? " · hint: " + String(runMeta.runId) : ""}</div>}
               <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
+              {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion.</div> : null}
               {steps.length
                 ? (
                   <div style={{ marginTop: "4px" }}>
@@ -7999,7 +8096,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   </div>
                 )
                 : null}
-              {lead.agentRunError ? <div>flowError: {String(lead.agentRunError)}</div> : null}
+              {lead.agentRunError ? <div>{String(lead.agentRunError)}</div> : null}
             </div>
           );
         }
@@ -8121,12 +8218,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     </div>
                     <button
                       className="icon-btn"
-                      onClick={() => {
-                        if (!selectedLead) return;
-                        void loadSuggestions(selectedLead.id, true);
-                      }}
+                      disabled={!selectedLead || selectedLeadSuggestionsLoading}
+                      onClick={() => regenerateSuggestionsForLead(selectedLead)}
                     >
-                      {selectedLeadSuggestionsLoading ? "…" : "✦"}
+                      {selectedLeadSuggestionsLoading ? "Regenerating..." : "Regenerate suggestions"}
                     </button>
                   </div>
                 </div>
@@ -8629,12 +8724,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                       </div>
                                       <button
                                         className="icon-btn"
-                                onClick={() => {
-                                  if (!selectedLead) return;
-                                  void loadSuggestions(selectedLead.id, true);
-                                }}
+                                disabled={!selectedLead || selectedLeadSuggestionsLoading}
+                                onClick={() => regenerateSuggestionsForLead(selectedLead)}
                               >
-                                {selectedLeadSuggestionsLoading ? "…" : "✦"}
+                                {selectedLeadSuggestionsLoading ? "Regenerating..." : "Regenerate suggestions"}
                               </button>
                             </div>
                             <div className="cards">
@@ -8806,12 +8899,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               </div>
                               <button
                                 className="icon-btn"
-                                onClick={() => {
-                                  if (!selectedLead) return;
-                                  void loadSuggestions(selectedLead.id, true);
-                                }}
+                                disabled={!selectedLead || selectedLeadSuggestionsLoading}
+                                onClick={() => regenerateSuggestionsForLead(selectedLead)}
                               >
-                                {selectedLeadSuggestionsLoading ? "…" : "✦"}
+                                {selectedLeadSuggestionsLoading ? "Regenerating..." : "Regenerate suggestions"}
                               </button>
                             </div>
                             <div className="cards">

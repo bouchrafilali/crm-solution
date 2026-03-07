@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
+  getWhatsAppAgentRunSnapshotByRunId,
   getLatestWhatsAppAgentRunSnapshot,
   runWhatsAppAgentOrchestrator,
   triggerWhatsAppAgentOrchestratorForInbound
@@ -670,4 +671,50 @@ test("latest run retrieval keeps null cost/token metrics", async () => {
   assert.equal(payload.steps[0].inputTokens, null);
   assert.equal(payload.steps[0].outputTokens, null);
   assert.equal(payload.steps[0].estimatedCostUsd, null);
+});
+
+test("run snapshot by runId maps response", async () => {
+  const payload = await getWhatsAppAgentRunSnapshotByRunId("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
+    getRunById: async () => ({
+      run: {
+        id: "run-by-id",
+        leadId: "11111111-1111-4111-8111-111111111111",
+        messageId: "22222222-2222-4222-8222-222222222222",
+        status: "completed",
+        startedAt: "2026-03-07T10:00:00.000Z",
+        finishedAt: "2026-03-07T10:00:10.000Z",
+        totalInputTokens: 1200,
+        totalOutputTokens: 320,
+        totalEstimatedCostUsd: 0.0031,
+        createdAt: "2026-03-07T10:00:00.000Z"
+      },
+      steps: [
+        {
+          id: "s1",
+          runId: "run-by-id",
+          stepName: "stage_detection",
+          stepOrder: 1,
+          status: "completed",
+          provider: "claude",
+          model: "claude-haiku-4-5-20251001",
+          inputTokens: 900,
+          outputTokens: 120,
+          cachedInputTokens: 0,
+          unitInputPricePerMillion: 1,
+          unitOutputPricePerMillion: 5,
+          estimatedCostUsd: 0.0015,
+          startedAt: "2026-03-07T10:00:00.000Z",
+          finishedAt: "2026-03-07T10:00:01.000Z",
+          outputJson: null,
+          error: null,
+          createdAt: "2026-03-07T10:00:00.000Z"
+        }
+      ]
+    })
+  });
+
+  assert.equal(payload.run?.id, "run-by-id");
+  assert.equal(payload.run?.totalEstimatedCostUsd, 0.0031);
+  assert.equal(payload.steps[0].stepName, "stage_detection");
+  assert.equal(payload.steps[0].estimatedCostUsd, 0.0015);
 });

@@ -374,6 +374,69 @@ export async function getLatestWhatsAppAgentRunByLead(leadId: string): Promise<{
   };
 }
 
+export async function getWhatsAppAgentRunById(runId: string): Promise<{
+  run: WhatsAppAgentRunRecord;
+  steps: WhatsAppAgentRunStepRecord[];
+} | null> {
+  const db = getPoolOrThrow();
+  const runQ = await db.query<{
+    id: string;
+    lead_id: string;
+    message_id: string;
+    status: WhatsAppAgentRunStatus;
+    started_at: string;
+    finished_at: string | null;
+    total_input_tokens: number | null;
+    total_output_tokens: number | null;
+    total_estimated_cost_usd: string | number | null;
+    created_at: string;
+  }>(
+    `
+      select id, lead_id, message_id, status, started_at, finished_at, total_input_tokens, total_output_tokens, total_estimated_cost_usd, created_at
+      from whatsapp_agent_runs
+      where id = $1::uuid
+      limit 1
+    `,
+    [runId]
+  );
+  const runRow = runQ.rows[0];
+  if (!runRow) return null;
+
+  const stepsQ = await db.query<{
+    id: string;
+    run_id: string;
+    step_name: string;
+    step_order: number;
+    status: WhatsAppAgentRunStepStatus;
+    provider: string | null;
+    model: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    cached_input_tokens: number | null;
+    unit_input_price_per_million: string | number | null;
+    unit_output_price_per_million: string | number | null;
+    estimated_cost_usd: string | number | null;
+    started_at: string | null;
+    finished_at: string | null;
+    output_json: unknown;
+    error: string | null;
+    created_at: string;
+  }>(
+    `
+      select id, run_id, step_name, step_order, status, provider, model, input_tokens, output_tokens, cached_input_tokens, unit_input_price_per_million, unit_output_price_per_million, estimated_cost_usd, started_at, finished_at, output_json, error, created_at
+      from whatsapp_agent_run_steps
+      where run_id = $1::uuid
+      order by step_order asc, created_at asc
+    `,
+    [runRow.id]
+  );
+
+  return {
+    run: mapRunRow(runRow),
+    steps: stepsQ.rows.map(mapStepRow)
+  };
+}
+
 export async function upsertWhatsAppAgentLeadState(input: {
   leadId: string;
   latestRunId?: string | null;

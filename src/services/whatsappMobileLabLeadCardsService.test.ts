@@ -75,6 +75,8 @@ test("selected lead cards success", async () => {
   assert.equal(payload.topReplyCard?.label, "Option 1");
   assert.equal(payload.generationMode, "fresh");
   assert.equal(payload.enrichmentError, null);
+  assert.equal(payload.agentRunMeta.runId, null);
+  assert.equal(payload.agentRunMeta.source, "fresh_generation");
 });
 
 test("persisted results are reused before regeneration", async () => {
@@ -126,6 +128,8 @@ test("persisted results are reused before regeneration", async () => {
   assert.equal(payload.generationMode, "cached");
   assert.equal(payload.source, "cache");
   assert.equal(payload.cacheStatus, "hit");
+  assert.equal(payload.agentRunMeta.runId, "run-1");
+  assert.equal(payload.agentRunMeta.source, "cache");
   assert.equal(activeCallCount, 0);
   assert.equal(payload.replyCards.length, 0);
 });
@@ -213,6 +217,118 @@ test("stale cache triggers regeneration", async () => {
   assert.equal(payload.source, "fresh_generation");
   assert.equal(payload.cacheStatus, "stale");
   assert.equal(payload.topReplyCard?.label, "Fresh 1");
+});
+
+test("force refresh bypasses cache and stores a new orchestrator run", async () => {
+  let cachedReadCount = 0;
+  let orchestratorCalls = 0;
+  const payload = await buildMobileLabLeadCards(
+    "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+    { forceRefresh: true },
+    {
+      timeoutMs: () => 2000,
+      getLatestLeadMessage: async () => ({ id: "msg-force", createdAt: "2026-03-07T10:00:00.000Z" }),
+      getCachedLeadState: async () => {
+        cachedReadCount += 1;
+        if (cachedReadCount === 1) {
+          return {
+            leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+            latestRunId: "run-old",
+            latestMessageId: "msg-old",
+            stageAnalysis: null,
+            facts: null,
+            priorityItem: null,
+            strategy: null,
+            replyOptions: null,
+            brandReview: null,
+            topReplyCard: { label: "Old", intent: "Old", messages: ["A", "B"] },
+            providers: null,
+            createdAt: "2026-03-06T00:00:00.000Z",
+            updatedAt: "2026-03-06T00:00:00.000Z"
+          };
+        }
+        return {
+          leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+          latestRunId: "run-force-new",
+          latestMessageId: "msg-force",
+          stageAnalysis: null,
+          facts: null,
+          priorityItem: null,
+          strategy: null,
+          replyOptions: null,
+          brandReview: null,
+          topReplyCard: { label: "New", intent: "Fresh", messages: ["N1", "N2"] },
+          providers: { reply_generator: "openai" },
+          createdAt: "2026-03-07T10:00:00.000Z",
+          updatedAt: "2026-03-07T10:00:01.000Z"
+        };
+      },
+      runAgentOrchestrator: async () => {
+        orchestratorCalls += 1;
+        return {
+          runId: "run-force-new",
+          leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+          messageId: "msg-force",
+          status: "completed",
+          stageAnalysis: null,
+          strategy: null,
+          priority: null,
+          topReplyCard: null
+        };
+      },
+      getActiveReplyContext: async () => {
+        throw new Error("should_not_use_direct_generation_when_force_refresh");
+      }
+    }
+  );
+
+  assert.equal(orchestratorCalls, 1);
+  assert.equal(payload.generationMode, "fresh");
+  assert.equal(payload.source, "fresh_generation");
+  assert.equal(payload.cacheStatus, "stale");
+  assert.equal(payload.topReplyCard?.label, "New");
+  assert.equal(payload.agentRunMeta.runId, "run-force-new");
+  assert.equal(payload.enrichmentStatus, "enriched");
+});
+
+test("force refresh surfaces partial failure safely", async () => {
+  const payload = await buildMobileLabLeadCards(
+    "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+    { forceRefresh: true },
+    {
+      timeoutMs: () => 2000,
+      getLatestLeadMessage: async () => ({ id: "msg-force-partial", createdAt: "2026-03-07T10:00:00.000Z" }),
+      getCachedLeadState: async () => ({
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        latestRunId: "run-force-partial",
+        latestMessageId: "msg-force-partial",
+        stageAnalysis: null,
+        facts: null,
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: { label: "Partial card", intent: "Keep going", messages: ["P1", "P2"] },
+        providers: { reply_generator: "openai" },
+        createdAt: "2026-03-07T10:00:00.000Z",
+        updatedAt: "2026-03-07T10:00:01.000Z"
+      }),
+      runAgentOrchestrator: async () => ({
+        runId: "run-force-partial",
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        messageId: "msg-force-partial",
+        status: "partial",
+        stageAnalysis: null,
+        strategy: null,
+        priority: null,
+        topReplyCard: null
+      })
+    }
+  );
+
+  assert.equal(payload.enrichmentStatus, "enriched");
+  assert.equal(payload.enrichmentError, "partial_failure_some_steps_failed");
+  assert.equal(payload.agentRunMeta.runId, "run-force-partial");
 });
 
 test("unchanged lead does not regenerate repeatedly", async () => {

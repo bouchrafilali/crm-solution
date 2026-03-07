@@ -1,6 +1,7 @@
 import { listWhatsAppLeadMessages, type WhatsAppDirection } from "../db/whatsappLeadsRepo.js";
 import {
   createWhatsAppAgentRun,
+  getWhatsAppAgentRunById,
   getLatestWhatsAppAgentRunByLead,
   type WhatsAppAgentRunStatus,
   upsertWhatsAppAgentLeadState,
@@ -650,6 +651,68 @@ export async function getLatestWhatsAppAgentRunSnapshot(
   }
   const getLatestRun = depsOverride?.getLatestRun || defaultDeps().getLatestRun;
   const latest = await getLatestRun(safeLeadId);
+  if (!latest) return { run: null, steps: [] };
+  return {
+    run: {
+      id: latest.run.id,
+      status: latest.run.status,
+      startedAt: latest.run.startedAt,
+      finishedAt: latest.run.finishedAt,
+      totalInputTokens: latest.run.totalInputTokens,
+      totalOutputTokens: latest.run.totalOutputTokens,
+      totalEstimatedCostUsd: latest.run.totalEstimatedCostUsd
+    },
+    steps: latest.steps.map((step) => ({
+      stepName: step.stepName,
+      status: step.status,
+      provider: step.provider,
+      model: step.model,
+      inputTokens: step.inputTokens,
+      outputTokens: step.outputTokens,
+      cachedInputTokens: step.cachedInputTokens,
+      unitInputPricePerMillion: step.unitInputPricePerMillion,
+      unitOutputPricePerMillion: step.unitOutputPricePerMillion,
+      estimatedCostUsd: step.estimatedCostUsd,
+      error: step.error
+    }))
+  };
+}
+
+export async function getWhatsAppAgentRunSnapshotByRunId(
+  runId: string,
+  depsOverride?: Partial<Pick<OrchestratorDeps, never>> & {
+    getRunById?: typeof getWhatsAppAgentRunById;
+  }
+): Promise<{
+  run: {
+    id: string;
+    status: WhatsAppAgentRunStatus;
+    startedAt: string;
+    finishedAt: string | null;
+    totalInputTokens: number | null;
+    totalOutputTokens: number | null;
+    totalEstimatedCostUsd: number | null;
+  } | null;
+  steps: Array<{
+    stepName: string;
+    status: string;
+    provider: string | null;
+    model: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cachedInputTokens: number | null;
+    unitInputPricePerMillion: number | null;
+    unitOutputPricePerMillion: number | null;
+    estimatedCostUsd: number | null;
+    error: string | null;
+  }>;
+}> {
+  const safeRunId = String(runId || "").trim();
+  if (!safeRunId) {
+    throw new WhatsAppAgentOrchestratorError("invalid_run_id", "latest_run", "Run ID is required");
+  }
+  const getRunById = depsOverride?.getRunById || getWhatsAppAgentRunById;
+  const latest = await getRunById(safeRunId);
   if (!latest) return { run: null, steps: [] };
   return {
     run: {
