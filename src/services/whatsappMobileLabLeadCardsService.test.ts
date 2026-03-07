@@ -4,7 +4,7 @@ import { buildMobileLabLeadCards } from "./whatsappMobileLabLeadCardsService.js"
 import { buildMobileLabFeed } from "./whatsappMobileLabFeedService.js";
 
 test("selected lead cards success", async () => {
-  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", {
+  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
     getAiCards: async () => ({
       leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
@@ -54,13 +54,16 @@ test("selected lead cards success", async () => {
 
   assert.equal(payload.enrichmentStatus, "enriched");
   assert.equal(payload.enrichmentSource, "active_ai_cards");
+  assert.equal(payload.status, "enriched");
+  assert.equal(payload.source, "active_ai_cards");
+  assert.equal(payload.error, null);
   assert.equal(payload.replyCards.length, 2);
   assert.equal(payload.topReplyCard?.label, "Option 1");
   assert.equal(payload.enrichmentError, null);
 });
 
 test("selected lead cards timeout", async () => {
-  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", {
+  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 50,
     getAiCards: async () =>
       new Promise((resolve) => {
@@ -112,9 +115,68 @@ test("selected lead cards timeout", async () => {
 
   assert.equal(payload.enrichmentStatus, "timeout");
   assert.equal(payload.enrichmentSource, "active_ai_cards");
+  assert.equal(payload.status, "timeout");
+  assert.equal(payload.source, "active_ai_cards");
   assert.equal(payload.topReplyCard, null);
   assert.equal(payload.replyCards.length, 0);
   assert.equal(typeof payload.enrichmentError, "string");
+});
+
+test("selected lead cards error", async () => {
+  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
+    timeoutMs: () => 2000,
+    getAiCards: async () => {
+      throw new Error("provider_failed");
+    }
+  });
+
+  assert.equal(payload.enrichmentStatus, "error");
+  assert.equal(payload.enrichmentSource, "active_ai_cards");
+  assert.equal(payload.status, "error");
+  assert.equal(payload.source, "active_ai_cards");
+  assert.equal(payload.topReplyCard, null);
+  assert.equal(payload.replyCards.length, 0);
+  assert.equal(payload.enrichmentError, "provider_failed");
+  assert.equal(payload.error, "provider_failed");
+});
+
+test("selected reactivation lead cards success", async () => {
+  const payload = await buildMobileLabLeadCards(
+    "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+    { feedType: "reactivation" },
+    {
+      timeoutMs: () => 2000,
+      getReactivationReplies: async () => ({
+        shouldGenerate: true,
+        reactivationDecision: {
+          leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+          shouldReactivate: true,
+          reactivationPriority: "high",
+          reactivationReason: "stalled",
+          stalledStage: "PRICE_SENT",
+          silenceHours: 48,
+          signals: [],
+          recommendedAction: "reactivate_gently",
+          tone: "reassuring",
+          timing: "now"
+        },
+        replyOptions: [{ label: "Option 1", intent: "Reopen", messages: ["Message 1", "Message 2"] }],
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        timestamp: "2026-03-07T00:00:00.000Z"
+      }),
+      getAiCards: async () => {
+        throw new Error("should_not_call_ai_cards");
+      }
+    }
+  );
+
+  assert.equal(payload.enrichmentStatus, "enriched");
+  assert.equal(payload.enrichmentSource, "reactivation_replies");
+  assert.equal(payload.status, "enriched");
+  assert.equal(payload.source, "reactivation_replies");
+  assert.equal(payload.topReplyCard?.label, "Option 1");
+  assert.equal(payload.replyCards.length, 1);
 });
 
 test("feed remains unaffected by selected lead cards path", async () => {

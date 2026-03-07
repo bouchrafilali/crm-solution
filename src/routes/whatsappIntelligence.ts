@@ -4196,9 +4196,11 @@ whatsappRouter.get("/api/whatsapp/mobile-lab/leads/:id/cards", async (req, res) 
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leadId)) {
     return res.status(400).json({ error: "invalid_lead_id" });
   }
+  const rawFeedType = String(req.query?.feedType || "").trim().toLowerCase();
+  const feedType = rawFeedType === "reactivation" ? "reactivation" : "active";
 
   try {
-    const payload = await buildMobileLabLeadCards(leadId);
+    const payload = await buildMobileLabLeadCards(leadId, { feedType });
     return res.status(200).json(payload);
   } catch (error) {
     console.error("[whatsapp] mobile-lab-lead-cards", error);
@@ -6494,6 +6496,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
 
       function mapSuggestionsFromLeadCardsPayload(leadId, payload) {
+        const source = String((payload && (payload.source || payload.enrichmentSource)) || "active_ai_cards");
+        const tag = source === "reactivation_replies" ? "REACTIVATION" : "ACTIVE";
         const cards = Array.isArray(payload && payload.replyCards) ? payload.replyCards : [];
         if (!cards.length && payload && payload.topReplyCard && typeof payload.topReplyCard === "object") {
           cards.push(payload.topReplyCard);
@@ -6505,7 +6509,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             return {
               id: String(leadId || "") + "-on-demand-card-" + String(index + 1),
               title: clampText(String((card && card.label) || "AI card")),
-              tag: "ACTIVE",
+              tag,
               messages: topMessages
             };
           })
@@ -6957,6 +6961,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [loadingLeads, setLoadingLeads] = React.useState(false);
         const [loadingMessages, setLoadingMessages] = React.useState(false);
         const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
+        const [loadingSuggestionsLeadId, setLoadingSuggestionsLeadId] = React.useState("");
         const [errorText, setErrorText] = React.useState("");
         const [mobileManualText, setMobileManualText] = React.useState("");
         const [mediaViewer, setMediaViewer] = React.useState(null);
@@ -6984,6 +6989,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           startX: 0,
           startOffset: MOBILE_DRAWER_FALLBACK_CLOSED
         });
+        const suggestionsRequestRef = React.useRef(0);
         function viewModeFromWidth(width) {
           const safeWidth = Number(width) || 0;
           if (safeWidth < 760) return "mobile";
@@ -7104,6 +7110,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           () => leads.find((lead) => String(lead.id) === String(selectedLeadId)) || leads[0] || null,
           [leads, selectedLeadId]
         );
+        const selectedLeadSuggestionsLoading =
+          loadingSuggestions && String(loadingSuggestionsLeadId || "") === String(selectedLeadId || "");
 
         React.useEffect(() => {
           setDraftMessages([]);
@@ -7220,29 +7228,44 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const loadSuggestions = React.useCallback(async (leadId, forceRegenerate) => {
           if (!leadId || !isUuidValue(leadId)) return;
           if (!LIVE_MODE) return;
+          const requestId = suggestionsRequestRef.current + 1;
+          suggestionsRequestRef.current = requestId;
           setLoadingSuggestions(true);
+          setLoadingSuggestionsLeadId(String(leadId));
+          const lead = leads.find((item) => String(item.id) === String(leadId)) || null;
+          const feedType = lead && String(lead.feedType || "").toLowerCase() === "reactivation" ? "reactivation" : "active";
           try {
-            const payload = await fetchJson("/api/whatsapp/mobile-lab/leads/" + encodeURIComponent(leadId) + "/cards");
+            const payload = await fetchJson(
+              "/api/whatsapp/mobile-lab/leads/" +
+                encodeURIComponent(leadId) +
+                "/cards?feedType=" +
+                encodeURIComponent(feedType)
+            );
+            if (requestId !== suggestionsRequestRef.current) return;
             const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
             patchLead(leadId, {
               suggestions,
-              enrichmentStatus: String((payload && payload.enrichmentStatus) || "error"),
-              enrichmentSource: String((payload && payload.enrichmentSource) || "active_ai_cards"),
-              enrichmentError: payload && payload.enrichmentError ? String(payload.enrichmentError) : null
+              enrichmentStatus: String((payload && (payload.status || payload.enrichmentStatus)) || "error"),
+              enrichmentSource: String((payload && (payload.source || payload.enrichmentSource)) || "active_ai_cards"),
+              enrichmentError: payload && (payload.error || payload.enrichmentError) ? String(payload.error || payload.enrichmentError) : null
             });
             if (forceRegenerate) await loadMessages(leadId);
           } catch (error) {
+            if (requestId !== suggestionsRequestRef.current) return;
             patchLead(leadId, {
               suggestions: [],
               enrichmentStatus: "error",
-              enrichmentSource: "active_ai_cards",
+              enrichmentSource: feedType === "reactivation" ? "reactivation_replies" : "active_ai_cards",
               enrichmentError: error instanceof Error ? error.message : String(error || "cards_failed")
             });
             console.error("[mobile-lab] lead cards load failed", { leadId, error });
           } finally {
-            setLoadingSuggestions(false);
+            if (requestId === suggestionsRequestRef.current) {
+              setLoadingSuggestions(false);
+              setLoadingSuggestionsLeadId("");
+            }
           }
-        }, [loadMessages, patchLead]);
+        }, [leads, loadMessages, patchLead]);
 
         React.useEffect(() => {
           if (!LIVE_MODE) return;
@@ -7921,7 +7944,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                         void loadSuggestions(selectedLead.id, true);
                       }}
                     >
-                      {loadingSuggestions ? "…" : "✦"}
+                      {selectedLeadSuggestionsLoading ? "…" : "✦"}
                     </button>
                   </div>
                 </div>
@@ -7966,7 +7989,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     })
                     : (
                       <div className="preview">
-                        {loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}
+                        {selectedLeadSuggestionsLoading ? "Génération suggestions..." : "Aucune suggestion disponible"}
                         {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
                           <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.85, lineHeight: 1.45 }}>
                             <div>enrichmentStatus: {String(selectedLead.enrichmentStatus || "-")}</div>
@@ -8162,7 +8185,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                           void loadSuggestions(lead.id, true);
                         }}
                       >
-                        {loadingSuggestions && String(selectedLeadId) === safeLeadId ? "…" : "✦"}
+                        {loadingSuggestions && String(loadingSuggestionsLeadId || "") === safeLeadId ? "…" : "✦"}
                       </button>
                     </div>
                   </div>
@@ -8225,7 +8248,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                           </div>
                         );
                       })
-                      : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
+                      : <div className="preview">{loadingSuggestions && String(loadingSuggestionsLeadId || "") === safeLeadId ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
                   </div>
 
                   <div className="composer">
@@ -8429,7 +8452,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                   void loadSuggestions(selectedLead.id, true);
                                 }}
                               >
-                                {loadingSuggestions ? "…" : "✦"}
+                                {selectedLeadSuggestionsLoading ? "…" : "✦"}
                               </button>
                             </div>
                             <div className="cards">
@@ -8473,7 +8496,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                 })
                                 : (
                                   <div className="preview">
-                                    {loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}
+                                    {selectedLeadSuggestionsLoading ? "Génération suggestions..." : "Aucune suggestion disponible"}
                                     {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
                                       <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.85, lineHeight: 1.45 }}>
                                         <div>enrichmentStatus: {String(selectedLead.enrichmentStatus || "-")}</div>
@@ -8605,7 +8628,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                   void loadSuggestions(selectedLead.id, true);
                                 }}
                               >
-                                {loadingSuggestions ? "…" : "✦"}
+                                {selectedLeadSuggestionsLoading ? "…" : "✦"}
                               </button>
                             </div>
                             <div className="cards">
@@ -8649,7 +8672,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                 })
                                 : (
                                   <div className="preview">
-                                    {loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}
+                                    {selectedLeadSuggestionsLoading ? "Génération suggestions..." : "Aucune suggestion disponible"}
                                     {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
                                       <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.85, lineHeight: 1.45 }}>
                                         <div>enrichmentStatus: {String(selectedLead.enrichmentStatus || "-")}</div>
