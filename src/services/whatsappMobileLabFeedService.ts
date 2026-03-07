@@ -120,7 +120,7 @@ function resolveDefaultEnrichmentLeadLimit(limit: number): number {
 
 function resolveDefaultEnrichmentTimeoutMs(): number {
   const configured = parsePositiveInt(process.env.WHATSAPP_MOBILE_LAB_ENRICHMENT_TIMEOUT_MS);
-  const fallback = 1500;
+  const fallback = 2500;
   const raw = configured == null ? fallback : configured;
   return Math.max(100, Math.min(10000, raw));
 }

@@ -1180,6 +1180,57 @@ test("timeout item diagnostics", async () => {
   assert.equal(typeof payload.items[0].enrichmentError, "string");
 });
 
+test("active_ai_cards succeeds with longer timeout", async () => {
+  const payload = await buildMobileLabFeed(
+    { mode: "active_first", limit: 10, days: 30 },
+    {
+      ...noSkipDeps,
+      getPriorityView: async () =>
+        priorityViewFixture([
+          {
+            leadId: "lead-slow-success",
+            clientName: "Slow Success",
+            lastMessagePreview: "Bonjour",
+            lastMessageAt: "2026-03-07T09:00:00.000Z",
+            latestMessageDirection: "inbound",
+            needsReply: true,
+            waitingSinceMinutes: 15,
+            priorityScore: 91,
+            priorityBand: "high",
+            estimatedHeat: "hot",
+            stage: "QUALIFIED",
+            urgency: "medium",
+            paymentIntent: false,
+            dropoffRisk: "low",
+            recommendedAction: "answer_precisely",
+            commercialPriority: "high",
+            tone: null,
+            reasons: [],
+            topReplyCard: null
+          }
+        ]),
+      getReactivationView: async () => reactivationViewFixture([]),
+      enrichmentLeadLimit: () => 10,
+      enrichmentTimeoutMs: () => 1200,
+      enrichActiveLead: async () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              topReplyCard: { label: "Option Slow", intent: "Follow up", messages: ["Message 1", "Message 2"] },
+              tone: "warm_refined",
+              status: "enriched"
+            });
+          }, 700);
+        })
+    }
+  );
+
+  assert.equal(payload.items[0].topReplyCard?.label, "Option Slow");
+  assert.equal(payload.items[0].enrichmentStatus, "enriched");
+  assert.equal(payload.items[0].enrichmentSource, "active_ai_cards");
+  assert.equal(payload.items[0].enrichmentError, null);
+});
+
 test("skipped_by_limit diagnostics", async () => {
   const payload = await buildMobileLabFeed(
     { mode: "active_first", limit: 10, days: 30 },
