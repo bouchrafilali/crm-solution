@@ -1,0 +1,276 @@
+import { z } from "zod";
+import { env } from "../config/env.js";
+import { sanitizeForPrompt } from "./aiTextService.js";
+import { buildLeadTranscript, type LeadTranscriptResult } from "./whatsappTranscriptFormatter.js";
+import {
+  detectStageFromTranscript,
+  type StageDetectionAnalysis,
+  type StageDetectionResult
+} from "./whatsappStageDetectionService.js";
+import {
+  buildStrategicAdvisorFromContext,
+  type StrategicAdvisorResult,
+  type StrategicAdvisorStrategy
+} from "./whatsappStrategicAdvisorService.js";
+
+const MESSAGE_MAX_LENGTH = 280;
+
+const ReplyOptionSchema = z
+  .object({
+    label: z.string().min(1),
+    intent: z.string().min(1),
+    messages: z.array(z.string().min(1).max(MESSAGE_MAX_LENGTH)).min(2).max(4)
+  })
+  .strict();
+
+const ReplyGeneratorSchema = z
+  .object({
+    reply_options: z.array(ReplyOptionSchema).length(3)
+  })
+  .strict();
+
+export type ReplyGeneratorPayload = z.infer<typeof ReplyGeneratorSchema>;
+
+export type ReplyGeneratorResult = {
+  replyOptions: ReplyGeneratorPayload;
+  strategy: StrategicAdvisorStrategy;
+  stageAnalysis: StageDetectionAnalysis;
+  transcriptLength: number;
+  messageCount: number;
+  provider: "openai";
+  model: string;
+  timestamp: string;
+};
+
+export class ReplyGeneratorError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export function parseReplyGeneratorJson(raw: string): unknown {
+  const source = String(raw || "").trim();
+  if (!source) {
+    throw new ReplyGeneratorError("reply_generator_empty_ai_output", "AI output is empty");
+  }
+
+  const candidates: string[] = [];
+  const fencedJson = source.match(/```json\s*([\s\S]*?)```/i);
+  if (fencedJson?.[1]) candidates.push(String(fencedJson[1]).trim());
+  const fenced = source.match(/```\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) candidates.push(String(fenced[1]).trim());
+  candidates.push(source);
+
+  const firstBrace = source.indexOf("{");
+  const lastBrace = source.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(source.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+  }
+
+  throw new ReplyGeneratorError("reply_generator_invalid_json", "AI output is not valid JSON");
+}
+
+export function validateReplyGenerator(parsed: unknown): ReplyGeneratorPayload {
+  const result = ReplyGeneratorSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new ReplyGeneratorError(
+      "reply_generator_invalid_schema",
+      `Reply generator schema validation failed: ${result.error.issues.map((i) => i.path.join(".")).join(", ") || "unknown"}`
+    );
+  }
+  return result.data;
+}
+
+function buildReplyGeneratorSystemPrompt(): string {
+  return [
+    "You write WhatsApp reply options for a luxury couture sales context.",
+    "Return JSON only. No markdown.",
+    "Generate exactly 3 reply options.",
+    "Each option must have 2 to 4 short natural message bubbles.",
+    "Tone must feel quiet luxury, human, refined, concise.",
+    "No emojis.",
+    "No robotic phrasing.",
+    "No analysis, commentary, headings, bullet points, or markdown in messages.",
+    "Avoid generic filler unless strategically necessary.",
+    "Do not repeat the exact same wording across options."
+  ].join("\n");
+}
+
+function buildReplyGeneratorUserPrompt(input: {
+  transcript: string;
+  stageAnalysis: StageDetectionAnalysis;
+  strategy: StrategicAdvisorStrategy;
+}): string {
+  return [
+    "Generate WhatsApp reply options using this exact output JSON shape:",
+    "{",
+    '  "reply_options": [',
+    '    {"label":"Option 1","intent":"short description","messages":["short bubble 1","short bubble 2"]},',
+    '    {"label":"Option 2","intent":"short description","messages":["short bubble 1","short bubble 2","short bubble 3"]},',
+    '    {"label":"Option 3","intent":"short description","messages":["short bubble 1","short bubble 2"]}',
+    "  ]",
+    "}",
+    "Rules:",
+    "- Exactly 3 options.",
+    "- Each option must contain 2 to 4 short messages.",
+    "- Each message max 280 chars.",
+    "- No emojis.",
+    "- No analysis text.",
+    "Stage analysis JSON:",
+    JSON.stringify(input.stageAnalysis),
+    "Strategic advisor JSON:",
+    JSON.stringify(input.strategy),
+    "Transcript:",
+    input.transcript
+  ].join("\n");
+}
+
+export async function callReplyGeneratorModel(input: {
+  systemPrompt: string;
+  userPrompt: string;
+}): Promise<{ provider: "openai"; model: string; rawOutput: string }> {
+  const apiKey = String(env.OPENAI_API_KEY || "").trim();
+  const model = String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini";
+  if (!apiKey) {
+    throw new ReplyGeneratorError("reply_generator_provider_not_configured", "OPENAI_API_KEY missing");
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.35,
+      max_tokens: 1200,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: input.systemPrompt },
+        { role: "user", content: input.userPrompt }
+      ]
+    })
+  });
+
+  const rawResponseText = await response.text();
+  if (!response.ok) {
+    throw new ReplyGeneratorError(
+      "reply_generator_provider_error",
+      `OpenAI request failed (${response.status}): ${rawResponseText.slice(0, 500)}`
+    );
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rawResponseText);
+  } catch {
+    throw new ReplyGeneratorError("reply_generator_provider_non_json", "Provider response is not valid JSON");
+  }
+
+  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const choices = Array.isArray(root.choices) ? root.choices : [];
+  const first = choices[0] && typeof choices[0] === "object" ? (choices[0] as Record<string, unknown>) : {};
+  const message = first.message && typeof first.message === "object" ? (first.message as Record<string, unknown>) : {};
+  const content = String(message.content || "").trim();
+  if (!content) {
+    throw new ReplyGeneratorError("reply_generator_empty_ai_output", "Provider content is empty");
+  }
+
+  return {
+    provider: "openai",
+    model,
+    rawOutput: content
+  };
+}
+
+export async function buildReplyGeneratorFromContext(input: {
+  leadId: string;
+  transcript: LeadTranscriptResult;
+  stageAnalysis: StageDetectionAnalysis;
+  strategy: StrategicAdvisorStrategy;
+  callModel?: typeof callReplyGeneratorModel;
+}): Promise<ReplyGeneratorResult> {
+  const safeLeadId = String(input.leadId || "").trim();
+  if (!safeLeadId) {
+    throw new ReplyGeneratorError("invalid_lead_id", "Lead ID is required");
+  }
+
+  const messageCount = Number(input.transcript.messageCount || 0);
+  const transcriptLength = Number(input.transcript.transcriptLength || 0);
+  const transcriptText = String(input.transcript.transcript || "").trim();
+  if (messageCount <= 0 || !transcriptText) {
+    throw new ReplyGeneratorError("reply_generator_empty_transcript", "Transcript is empty");
+  }
+  if (transcriptLength < 30 || messageCount < 2) {
+    throw new ReplyGeneratorError("reply_generator_transcript_too_short", "Transcript is too short for reply generation");
+  }
+
+  console.info("[reply-generator] request", {
+    leadId: safeLeadId,
+    stage: input.stageAnalysis.stage,
+    strategyAction: input.strategy.recommended_action,
+    tone: input.strategy.tone,
+    messageCount,
+    transcriptLength,
+    transcriptPreview: sanitizeForPrompt(transcriptText, 500)
+  });
+
+  const systemPrompt = buildReplyGeneratorSystemPrompt();
+  const userPrompt = buildReplyGeneratorUserPrompt({
+    transcript: transcriptText,
+    stageAnalysis: input.stageAnalysis,
+    strategy: input.strategy
+  });
+  const modelCaller = input.callModel || callReplyGeneratorModel;
+  const modelResult = await modelCaller({ systemPrompt, userPrompt });
+
+  console.info("[reply-generator] raw-output", {
+    leadId: safeLeadId,
+    provider: modelResult.provider,
+    model: modelResult.model,
+    rawOutput: modelResult.rawOutput
+  });
+
+  const parsed = parseReplyGeneratorJson(modelResult.rawOutput);
+  const replyOptions = validateReplyGenerator(parsed);
+
+  return {
+    replyOptions,
+    strategy: input.strategy,
+    stageAnalysis: input.stageAnalysis,
+    transcriptLength,
+    messageCount,
+    provider: modelResult.provider,
+    model: modelResult.model,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export async function getLeadReplyGenerator(leadId: string): Promise<ReplyGeneratorResult> {
+  const transcript = await buildLeadTranscript(leadId, 30);
+  const stageDetection: StageDetectionResult = await detectStageFromTranscript({ leadId, transcript });
+  const strategicAdvisor: StrategicAdvisorResult = await buildStrategicAdvisorFromContext({
+    leadId,
+    transcript,
+    stageAnalysis: stageDetection.analysis
+  });
+
+  return buildReplyGeneratorFromContext({
+    leadId,
+    transcript,
+    stageAnalysis: stageDetection.analysis,
+    strategy: strategicAdvisor.strategy
+  });
+}

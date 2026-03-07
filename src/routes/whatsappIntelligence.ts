@@ -62,7 +62,6 @@ import {
   generateDailyBusinessBrief,
   generateFollowUp,
   generateStageDraft,
-  generateStrategicAdvisorResponse,
   type DraftType,
   type FollowUpType
 } from "../services/aiWhatsappService.js";
@@ -128,6 +127,10 @@ import {
 } from "../services/quoteRequestService.js";
 import { buildLeadTranscript } from "../services/whatsappTranscriptFormatter.js";
 import { detectLeadStage, StageDetectionError } from "../services/whatsappStageDetectionService.js";
+import { getLeadStrategicAdvisor, StrategicAdvisorError } from "../services/whatsappStrategicAdvisorService.js";
+import { getLeadReplyGenerator, ReplyGeneratorError } from "../services/whatsappReplyGeneratorService.js";
+import { getLeadBrandGuardian, BrandGuardianError } from "../services/whatsappBrandGuardianService.js";
+import { buildAiCardsViewModel, AiCardsOrchestrationError } from "../services/whatsappAiCardsService.js";
 
 export const whatsappRouter = Router();
 const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 200;
@@ -3847,20 +3850,78 @@ whatsappRouter.post("/api/whatsapp/leads/:id/strategic-advisor", async (req, res
   try {
     const lead = await getWhatsAppLeadById(leadId);
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
-    const messages = await listWhatsAppLeadMessages(leadId, { limit: 30, order: "asc" });
-    const result = await generateStrategicAdvisorResponse({
-      lead,
-      messages: messages.map((m) => ({ direction: m.direction, text: m.text }))
-    });
-    return res.status(200).json({
-      advisory: result.text,
-      provider: result.provider,
-      model: result.model,
-      timestamp: new Date().toISOString()
-    });
+
+    const result = await getLeadStrategicAdvisor(leadId);
+    return res.status(200).json(result);
   } catch (error) {
+    if (error instanceof StageDetectionError || error instanceof StrategicAdvisorError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
     console.error("[whatsapp] strategic-advisor", error);
     return res.status(503).json({ error: "strategic_advisor_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/reply-generator", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+
+    const result = await getLeadReplyGenerator(leadId);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof StageDetectionError || error instanceof StrategicAdvisorError || error instanceof ReplyGeneratorError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] reply-generator", error);
+    return res.status(503).json({ error: "reply_generator_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/brand-guardian", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+
+    const result = await getLeadBrandGuardian(leadId);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (
+      error instanceof StageDetectionError ||
+      error instanceof StrategicAdvisorError ||
+      error instanceof ReplyGeneratorError ||
+      error instanceof BrandGuardianError
+    ) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] brand-guardian", error);
+    return res.status(503).json({ error: "brand_guardian_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/ai-cards", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+
+    const payload = await buildAiCardsViewModel(leadId);
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof AiCardsOrchestrationError) {
+      return res.status(400).json({
+        error: "ai_cards_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] ai-cards", error);
+    return res.status(503).json({ error: "ai_cards_unavailable" });
   }
 });
 
