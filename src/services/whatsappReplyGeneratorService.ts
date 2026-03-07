@@ -266,7 +266,7 @@ export async function buildReplyGeneratorFromContext(input: {
   if (messageCount <= 0 || !transcriptText) {
     throw new ReplyGeneratorError("reply_generator_empty_transcript", "Transcript is empty");
   }
-  if (transcriptLength < 30 || messageCount < 2) {
+  if (transcriptLength < 30 || messageCount < 1) {
     throw new ReplyGeneratorError("reply_generator_transcript_too_short", "Transcript is too short for reply generation");
   }
 

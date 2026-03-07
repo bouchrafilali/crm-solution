@@ -212,53 +212,63 @@ export async function callStageDetectionModel(input: {
   const provider = getAiProviderForStep("stage");
 
   if (provider === "claude") {
-    const apiKey = String(env.CLAUDE_API_KEY || "").trim();
-    const model = String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001";
-    if (!apiKey) {
-      throw new StageDetectionError("stage_detection_provider_not_configured", "CLAUDE_API_KEY missing");
-    }
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        max_tokens: 900,
-        system: input.systemPrompt,
-        messages: [{ role: "user", content: input.userPrompt }]
-      })
-    });
-
-    const rawResponseText = await response.text();
-    if (!response.ok) {
-      throw new StageDetectionError(
-        "stage_detection_provider_error",
-        `Claude request failed (${response.status}): ${rawResponseText.slice(0, 500)}`
-      );
-    }
-
-    let payload: unknown;
     try {
-      payload = JSON.parse(rawResponseText);
-    } catch {
-      throw new StageDetectionError("stage_detection_provider_non_json", "Provider response is not valid JSON");
-    }
+      const apiKey = String(env.CLAUDE_API_KEY || "").trim();
+      const model = String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001";
+      if (!apiKey) {
+        throw new StageDetectionError("stage_detection_provider_not_configured", "CLAUDE_API_KEY missing");
+      }
 
-    const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-    const contentBlocks = Array.isArray(root.content) ? root.content : [];
-    const textBlock =
-      contentBlocks.find((block) => block && typeof block === "object" && (block as Record<string, unknown>).type === "text") || null;
-    const text = textBlock && typeof textBlock === "object" ? String((textBlock as Record<string, unknown>).text || "").trim() : "";
-    if (!text) {
-      throw new StageDetectionError("stage_detection_empty_ai_output", "Provider content is empty");
-    }
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          max_tokens: 900,
+          system: input.systemPrompt,
+          messages: [{ role: "user", content: input.userPrompt }]
+        })
+      });
 
-    return { provider: "claude", model, rawOutput: text };
+      const rawResponseText = await response.text();
+      if (!response.ok) {
+        throw new StageDetectionError(
+          "stage_detection_provider_error",
+          `Claude request failed (${response.status}): ${rawResponseText.slice(0, 500)}`
+        );
+      }
+
+      let payload: unknown;
+      try {
+        payload = JSON.parse(rawResponseText);
+      } catch {
+        throw new StageDetectionError("stage_detection_provider_non_json", "Provider response is not valid JSON");
+      }
+
+      const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const contentBlocks = Array.isArray(root.content) ? root.content : [];
+      const textBlock =
+        contentBlocks.find((block) => block && typeof block === "object" && (block as Record<string, unknown>).type === "text") || null;
+      const text = textBlock && typeof textBlock === "object" ? String((textBlock as Record<string, unknown>).text || "").trim() : "";
+      if (!text) {
+        throw new StageDetectionError("stage_detection_empty_ai_output", "Provider content is empty");
+      }
+
+      return { provider: "claude", model, rawOutput: text };
+    } catch (error) {
+      if (String(env.OPENAI_API_KEY || "").trim()) {
+        console.warn("[stage-detection] claude_failed_fallback_openai", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      } else {
+        throw error;
+      }
+    }
   }
 
   const apiKey = String(env.OPENAI_API_KEY || "").trim();
@@ -334,7 +344,7 @@ export async function detectStageFromTranscript(input: {
     throw new StageDetectionError("stage_detection_empty_transcript", "Transcript is empty");
   }
 
-  if (transcriptLength < 30 || messageCount < 2) {
+  if (transcriptLength < 30 || messageCount < 1) {
     throw new StageDetectionError(
       "stage_detection_transcript_too_short",
       "Transcript is too short for reliable stage detection"

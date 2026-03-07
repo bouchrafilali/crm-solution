@@ -278,7 +278,7 @@ export async function buildBrandGuardianFromContext(input: {
   if (messageCount <= 0 || !transcriptText) {
     throw new BrandGuardianError("brand_guardian_empty_transcript", "Transcript is empty");
   }
-  if (transcriptLength < 30 || messageCount < 2) {
+  if (transcriptLength < 30 || messageCount < 1) {
     throw new BrandGuardianError("brand_guardian_transcript_too_short", "Transcript is too short for brand review");
   }
 
