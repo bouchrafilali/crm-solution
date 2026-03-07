@@ -6679,6 +6679,45 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         return String(m).padStart(1, "0") + ":" + String(s).padStart(2, "0");
       }
 
+      function numberOrNull(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function formatCompactTokenCount(value) {
+        const n = numberOrNull(value);
+        if (n === null) return "—";
+        return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.max(0, Math.round(n)));
+      }
+
+      function formatCompactUsdCost(value) {
+        const n = numberOrNull(value);
+        if (n === null) return "—";
+        const abs = Math.abs(n);
+        const decimals = abs > 0 && abs < 0.001 ? 6 : (abs < 0.01 ? 5 : 4);
+        let formatted = n.toFixed(decimals);
+        if (formatted.includes(".")) {
+          const chunks = formatted.split(".");
+          const integerPart = chunks[0];
+          const fractionRaw = chunks[1] || "";
+          const fractionTrimmed = fractionRaw.replace(/0+$/, "");
+          const fraction = fractionTrimmed.length >= 4 ? fractionTrimmed : fractionTrimmed.padEnd(4, "0");
+          formatted = integerPart + "." + fraction;
+        }
+        return "$" + formatted;
+      }
+
+      function runAiFlowUiAssertions() {
+        console.assert(formatCompactUsdCost(null) === "—", "ai-flow: null cost should render dash");
+        console.assert(formatCompactTokenCount(null) === "—", "ai-flow: null tokens should render dash");
+        console.assert(formatCompactUsdCost(0.0042) === "$0.0042", "ai-flow: compact 4-decimal formatting expected");
+        console.assert(formatCompactUsdCost(0.000345) === "$0.000345", "ai-flow: compact 6-decimal formatting expected");
+      }
+
+      if (URL_QUERY.get("assertAiFlowUi") === "1") {
+        runAiFlowUiAssertions();
+      }
+
       function renderTextWithLinks(text) {
         const source = String(text || "");
         const lines = source.split(/\\n/);
@@ -7205,6 +7244,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 stepName: String(step && step.stepName ? step.stepName : "").trim(),
                 status: String(step && step.status ? step.status : "").trim(),
                 provider: step && step.provider ? String(step.provider).trim() : null,
+                model: step && step.model ? String(step.model).trim() : null,
+                inputTokens: numberOrNull(step && step.inputTokens),
+                outputTokens: numberOrNull(step && step.outputTokens),
+                estimatedCostUsd: numberOrNull(step && step.estimatedCostUsd),
                 error: step && step.error ? String(step.error).trim() : null
               }))
               .filter((step) => step.stepName);
@@ -7215,7 +7258,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       id: String(run.id || "").trim(),
                       status: String(run.status || "").trim(),
                       startedAt: String(run.startedAt || "").trim(),
-                      finishedAt: String(run.finishedAt || "").trim()
+                      finishedAt: String(run.finishedAt || "").trim(),
+                      totalInputTokens: numberOrNull(run.totalInputTokens),
+                      totalOutputTokens: numberOrNull(run.totalOutputTokens),
+                      totalEstimatedCostUsd: numberOrNull(run.totalEstimatedCostUsd)
                     },
                     steps
                   }
@@ -7929,8 +7975,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   <>
                     <div>runId: {String(run.id || "-")}</div>
                     <div>status: {String(run.status || "-")}</div>
-                    <div>startedAt: {String(run.startedAt || "-")}</div>
-                    <div>finishedAt: {String(run.finishedAt || "-")}</div>
+                    <div data-testid="ai-flow-run-summary">
+                      Run cost: {formatCompactUsdCost(run.totalEstimatedCostUsd)} · in: {formatCompactTokenCount(run.totalInputTokens)} · out: {formatCompactTokenCount(run.totalOutputTokens)}
+                    </div>
                   </>
                 )
                 : <div>run: none</div>}
@@ -7939,10 +7986,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 ? (
                   <div style={{ marginTop: "4px" }}>
                     {steps.map((step, index) => (
-                      <div key={String(step.stepName || "") + "-" + String(index)}>
-                        {String(step.stepName || "step")} · {String(step.status || "-")}
-                        {step.provider ? " · " + String(step.provider) : ""}
-                        {step.error ? " · err: " + String(step.error) : ""}
+                      <div key={String(step.stepName || "") + "-" + String(index)} style={{ marginTop: "2px" }} data-testid={"ai-flow-step-" + String(index)}>
+                        <div data-testid={"ai-flow-step-head-" + String(index)}>
+                          {String(step.stepName || "step")} · {String(step.status || "-")} · {step.provider ? String(step.provider) : "—"} · {step.model ? String(step.model) : "—"} · {formatCompactUsdCost(step.estimatedCostUsd)}
+                        </div>
+                        <div style={{ opacity: 0.82 }} data-testid={"ai-flow-step-usage-" + String(index)}>
+                          in {formatCompactTokenCount(step.inputTokens)} · out {formatCompactTokenCount(step.outputTokens)}
+                        </div>
+                        {step.error ? <div style={{ opacity: 0.82 }}>err: {String(step.error)}</div> : null}
                       </div>
                     ))}
                   </div>

@@ -623,3 +623,51 @@ test("latest run retrieval maps response", async () => {
   assert.equal(payload.steps[0].model, "claude-haiku-4-5-20251001");
   assert.equal(payload.steps[0].estimatedCostUsd, 0.0015);
 });
+
+test("latest run retrieval keeps null cost/token metrics", async () => {
+  const payload = await getLatestWhatsAppAgentRunSnapshot("11111111-1111-4111-8111-111111111111", {
+    getLatestRun: async () => ({
+      run: {
+        id: "run-null",
+        leadId: "11111111-1111-4111-8111-111111111111",
+        messageId: "22222222-2222-4222-8222-222222222222",
+        status: "running",
+        startedAt: "2026-03-07T10:00:00.000Z",
+        finishedAt: null,
+        totalInputTokens: null,
+        totalOutputTokens: null,
+        totalEstimatedCostUsd: null,
+        createdAt: "2026-03-07T10:00:00.000Z"
+      },
+      steps: [
+        {
+          id: "s-null",
+          runId: "run-null",
+          stepName: "reply_generator",
+          stepOrder: 1,
+          status: "running",
+          provider: "claude",
+          model: "claude-sonnet",
+          inputTokens: null,
+          outputTokens: null,
+          cachedInputTokens: null,
+          unitInputPricePerMillion: null,
+          unitOutputPricePerMillion: null,
+          estimatedCostUsd: null,
+          startedAt: "2026-03-07T10:00:01.000Z",
+          finishedAt: null,
+          outputJson: null,
+          error: null,
+          createdAt: "2026-03-07T10:00:01.000Z"
+        }
+      ]
+    })
+  });
+
+  assert.equal(payload.run?.totalInputTokens, null);
+  assert.equal(payload.run?.totalOutputTokens, null);
+  assert.equal(payload.run?.totalEstimatedCostUsd, null);
+  assert.equal(payload.steps[0].inputTokens, null);
+  assert.equal(payload.steps[0].outputTokens, null);
+  assert.equal(payload.steps[0].estimatedCostUsd, null);
+});
