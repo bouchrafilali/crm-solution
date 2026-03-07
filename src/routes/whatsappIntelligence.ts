@@ -133,6 +133,11 @@ import { getLeadBrandGuardian, BrandGuardianError } from "../services/whatsappBr
 import { buildAiCardsViewModel, AiCardsOrchestrationError } from "../services/whatsappAiCardsService.js";
 import { buildLeadPriorityScore, buildPriorityDeskQueue, PriorityDeskError } from "../services/whatsappPriorityDeskService.js";
 import { buildPriorityDeskView, PriorityDeskViewError } from "../services/whatsappPriorityDeskViewService.js";
+import {
+  buildLeadPriorityIntelligence,
+  buildPriorityIntelligenceQueue,
+  PriorityIntelligenceError
+} from "../services/whatsappPriorityIntelligenceService.js";
 import { buildLeadReactivationCheck, buildReactivationQueue, ReactivationEngineError } from "../services/whatsappReactivationEngineService.js";
 import { buildLeadReactivationReplies, ReactivationReplyError } from "../services/whatsappReactivationReplyService.js";
 import { buildReactivationQueueView, ReactivationQueueViewError } from "../services/whatsappReactivationQueueViewService.js";
@@ -4045,6 +4050,52 @@ whatsappRouter.post("/api/whatsapp/leads/:id/priority-score", async (req, res) =
     }
     console.error("[whatsapp] priority-score", error);
     return res.status(503).json({ error: "priority_score_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/leads/:id/priority-intelligence", async (req, res) => {
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
+  try {
+    const payload = await buildLeadPriorityIntelligence(leadId);
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof PriorityIntelligenceError) {
+      return res.status(400).json({
+        error: "priority_intelligence_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] priority-intelligence", error);
+    return res.status(503).json({ error: "priority_intelligence_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/priority-intelligence/queue", async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    days: z.coerce.number().int().min(1).max(365).optional()
+  }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+
+  try {
+    const payload = await buildPriorityIntelligenceQueue({
+      limit: parsed.data.limit ?? 20,
+      days: parsed.data.days ?? 30
+    });
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof PriorityIntelligenceError) {
+      return res.status(400).json({
+        error: "priority_intelligence_queue_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] priority-intelligence-queue", error);
+    return res.status(503).json({ error: "priority_intelligence_queue_unavailable" });
   }
 });
 
