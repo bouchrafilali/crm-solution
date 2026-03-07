@@ -8145,7 +8145,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 )
                 : <div>run: none{runMeta && runMeta.runId ? " · hint: " + String(runMeta.runId) : ""}</div>}
               <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
-              {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion.</div> : null}
+              {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion. Use Regenerate suggestions to capture full step trace.</div> : null}
               {steps.length
                 ? (
                   <div style={{ marginTop: "4px" }}>
