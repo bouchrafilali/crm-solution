@@ -147,9 +147,86 @@ export function createMockMobileLabDataSource(): MobileLabDataSource {
 export function createLiveMobileLabDataSource(): MobileLabDataSource {
   return {
     async getThread(input) {
-      // Placeholder for phase-2 real backend mapping.
-      // Keep output contract stable so UI can switch mock/live safely.
-      return getMockMobileLeadThread(input?.leadId);
+      const query = new URLSearchParams();
+      query.set("mode", "active_first");
+      query.set("limit", "50");
+      query.set("days", "30");
+      const feedRes = await fetch(`/api/whatsapp/mobile-lab/feed?${query.toString()}`);
+      if (!feedRes.ok) {
+        throw new Error("mobile_lab_feed_unavailable");
+      }
+      const feedPayload = (await feedRes.json()) as {
+        items?: Array<{
+          leadId: string;
+          clientName: string | null;
+          stage: string | null;
+          urgency: string | null;
+          lastMessageAt: string | null;
+          lastMessagePreview: string | null;
+          topReplyCard: { label: string; intent: string; messages: string[] } | null;
+        }>;
+      };
+      const items = Array.isArray(feedPayload?.items) ? feedPayload.items : [];
+      const target =
+        (input?.leadId
+          ? items.find((item) => String(item?.leadId || "") === String(input.leadId || ""))
+          : null) ||
+        items[0];
+      if (!target || !target.leadId) {
+        return getMockMobileLeadThread(input?.leadId);
+      }
+
+      const messagesRes = await fetch(
+        `/api/whatsapp/leads/${encodeURIComponent(String(target.leadId))}/messages?limit=80`
+      );
+      if (!messagesRes.ok) {
+        throw new Error("mobile_lab_messages_unavailable");
+      }
+      const messagesPayload = (await messagesRes.json()) as {
+        items?: Array<{
+          id: string;
+          direction: "IN" | "OUT";
+          text: string;
+          created_at: string;
+        }>;
+      };
+      const rawMessages = Array.isArray(messagesPayload?.items) ? messagesPayload.items : [];
+      const mappedMessages: MobileChatMessage[] = rawMessages.map((item) => ({
+        id: String(item?.id || ""),
+        from: String(item?.direction || "").toUpperCase() === "OUT" ? "brand" : "client",
+        text: String(item?.text || "").trim(),
+        time: String(item?.created_at || new Date().toISOString()),
+        status: String(item?.direction || "").toUpperCase() === "OUT" ? "sent" : undefined
+      }));
+      const topCard = target.topReplyCard;
+      const suggestions: MobileSuggestionCard[] =
+        topCard && Array.isArray(topCard.messages) && topCard.messages.length
+          ? [
+              toSuggestion(
+                `${target.leadId}-top-reply-card`,
+                String(topCard.label || "Option 1"),
+                String(topCard.intent || "Top recommended reply"),
+                topCard.messages.map((msg) => String(msg || "")),
+                { tag: "TOP_CARD", priority: 100 }
+              )
+            ]
+          : [];
+
+      return {
+        leadId: String(target.leadId),
+        name: String(target.clientName || "Client"),
+        stage: String(target.stage || "NEW"),
+        urgency: String(target.urgency || "").toLowerCase() === "high"
+          ? "High"
+          : String(target.urgency || "").toLowerCase() === "low"
+            ? "Low"
+            : "Medium",
+        unread: 0,
+        lastAt: String(target.lastMessageAt || new Date().toISOString()),
+        preview: String(target.lastMessagePreview || "Conversation WhatsApp"),
+        messages: mappedMessages,
+        suggestions
+      };
     }
   };
 }

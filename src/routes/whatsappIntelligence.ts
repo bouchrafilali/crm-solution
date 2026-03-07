@@ -6904,8 +6904,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
 
       function App() {
-        const [leads, setLeads] = React.useState(leadsSeed);
-        const [selectedLeadId, setSelectedLeadId] = React.useState(String(leadsSeed[0].id));
+        const [leads, setLeads] = React.useState(() => (LIVE_MODE ? [] : leadsSeed));
+        const [selectedLeadId, setSelectedLeadId] = React.useState(() => (LIVE_MODE ? "" : String(leadsSeed[0].id)));
         const [draftMessages, setDraftMessages] = React.useState([]);
         const [filter, setFilter] = React.useState("All");
         const [query, setQuery] = React.useState("");
@@ -6920,7 +6920,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [cardBubbleSelection, setCardBubbleSelection] = React.useState({});
         const [mobileUiState, setMobileUiState] = React.useState({
           view: "inbox",
-          selectedLeadId: String(leadsSeed[0].id),
+          selectedLeadId: LIVE_MODE ? "" : String(leadsSeed[0].id),
           aiDrawerOpen: false,
           insertedSequence: [],
           filter: "All",
@@ -7123,7 +7123,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             const mapped = (Array.isArray(payload && payload.items) ? payload.items : [])
               .map(mapLeadFromMobileFeed)
               .filter((lead) => lead.id);
-            if (!mapped.length) return;
+            if (!mapped.length) {
+              setLeads([]);
+              setSelectedLeadId("");
+              return;
+            }
             setLeads((prev) => {
               const prevMap = new Map((Array.isArray(prev) ? prev : []).map((lead) => [String(lead.id), lead]));
               return mapped.map((lead) => {

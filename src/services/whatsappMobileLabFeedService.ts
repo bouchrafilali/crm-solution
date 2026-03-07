@@ -187,9 +187,14 @@ export async function buildMobileLabFeed(
     }
 
     const activeItems = priorityView.items
-      .filter((item) => item.needsReply)
       .slice()
-      .sort((a, b) => b.priorityScore - a.priorityScore || b.waitingSinceMinutes - a.waitingSinceMinutes || a.leadId.localeCompare(b.leadId))
+      .sort(
+        (a, b) =>
+          Number(b.needsReply) - Number(a.needsReply) ||
+          b.priorityScore - a.priorityScore ||
+          b.waitingSinceMinutes - a.waitingSinceMinutes ||
+          a.leadId.localeCompare(b.leadId)
+      )
       .map(toActiveFeedItem)
       .filter((item) => !skippedSet.has(`active:${item.leadId}`));
 
