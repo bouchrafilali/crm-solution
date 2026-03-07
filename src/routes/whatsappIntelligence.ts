@@ -126,6 +126,8 @@ import {
   composeApprovedQuoteClientText,
   isQuoteApprovalReadyForClientSend
 } from "../services/quoteRequestService.js";
+import { buildLeadTranscript } from "../services/whatsappTranscriptFormatter.js";
+import { detectLeadStage, StageDetectionError } from "../services/whatsappStageDetectionService.js";
 
 export const whatsappRouter = Router();
 const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 200;
@@ -3138,6 +3140,43 @@ whatsappRouter.get("/api/whatsapp/leads/:id/messages", async (req, res) => {
   } catch (error) {
     console.error("[whatsapp] lead messages", error);
     return res.status(503).json({ error: "lead_messages_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/leads/:id/transcript", async (req, res) => {
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
+
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+
+    const transcript = await buildLeadTranscript(leadId, 30);
+    return res.status(200).json(transcript);
+  } catch (error) {
+    console.error("[whatsapp] lead transcript", error);
+    return res.status(503).json({ error: "lead_transcript_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/stage-detection", async (req, res) => {
+  const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
+  if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  const leadId = parsedLeadId.data.id;
+
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+
+    const result = await detectLeadStage(leadId);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof StageDetectionError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] stage detection", error);
+    return res.status(503).json({ error: "stage_detection_unavailable" });
   }
 });
 
