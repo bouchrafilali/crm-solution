@@ -142,6 +142,23 @@ import {
   MobileLabSkipError,
   skipMobileLabItem
 } from "../services/whatsappMobileLabSkipService.js";
+import {
+  trackWhatsAppOperatorEvent,
+  WhatsAppOperatorEventError
+} from "../services/whatsappOperatorEventsService.js";
+import {
+  buildWhatsAppOperatorEventsSummary,
+  WhatsAppOperatorAnalyticsError
+} from "../services/whatsappOperatorAnalyticsService.js";
+import {
+  buildWhatsAppOperatorEffectiveness,
+  WhatsAppOperatorEffectivenessError
+} from "../services/whatsappOperatorEffectivenessService.js";
+import {
+  fetchLeadOutcome,
+  saveLeadOutcome,
+  WhatsAppLeadOutcomeError
+} from "../services/whatsappLeadOutcomesService.js";
 
 export const whatsappRouter = Router();
 const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 200;
@@ -1710,6 +1727,40 @@ whatsappRouter.get("/api/whatsapp/leads/:id/insights", async (req, res) => {
   } catch (error) {
     console.error("[whatsapp] lead insights", error);
     return res.status(503).json({ error: "lead_insights_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/outcome", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+    const result = await saveLeadOutcome(leadId, req.body || {});
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof WhatsAppLeadOutcomeError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] lead outcome save", error);
+    return res.status(503).json({ error: "lead_outcome_save_failed" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/leads/:id/outcome", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+    const result = await fetchLeadOutcome(leadId);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof WhatsAppLeadOutcomeError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] lead outcome get", error);
+    return res.status(503).json({ error: "lead_outcome_get_failed" });
   }
 });
 
@@ -4194,6 +4245,77 @@ whatsappRouter.post("/api/whatsapp/mobile-lab/unskip", async (req, res) => {
   }
 });
 
+whatsappRouter.post("/api/whatsapp/operator-events", async (req, res) => {
+  try {
+    const result = await trackWhatsAppOperatorEvent(req.body || {});
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof WhatsAppOperatorEventError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] operator-events", error);
+    return res.status(503).json({ error: "operator_events_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/operator-events/summary", async (req, res) => {
+  const parsed = z
+    .object({
+      from: z.string().min(1),
+      to: z.string().min(1)
+    })
+    .safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "operator_events_summary_invalid_query",
+      message: "from and to query params are required"
+    });
+  }
+
+  try {
+    const result = await buildWhatsAppOperatorEventsSummary({
+      from: parsed.data.from,
+      to: parsed.data.to
+    });
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof WhatsAppOperatorAnalyticsError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] operator-events-summary", error);
+    return res.status(503).json({ error: "operator_events_summary_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/effectiveness", async (req, res) => {
+  const parsed = z
+    .object({
+      from: z.string().min(1),
+      to: z.string().min(1)
+    })
+    .safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "effectiveness_invalid_query",
+      message: "from and to query params are required"
+    });
+  }
+
+  try {
+    const result = await buildWhatsAppOperatorEffectiveness({
+      from: parsed.data.from,
+      to: parsed.data.to
+    });
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof WhatsAppOperatorEffectivenessError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] effectiveness", error);
+    return res.status(503).json({ error: "effectiveness_unavailable" });
+  }
+});
+
 whatsappRouter.post("/api/whatsapp/leads/:id/reactivation-replies", async (req, res) => {
   const leadId = String(req.params.id || "").trim();
   if (!leadId) return res.status(400).json({ error: "invalid_id" });
@@ -6067,6 +6189,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       const SHOW_DYNAMIC_DEBUG = ${isDynamicDecisionDebugEnabled() ? "true" : "false"};
       const MAX_LEN = 120;
       const LIVE_MODE = String(MODE) !== "mock";
+      const URL_QUERY = new URLSearchParams(window.location.search);
+      const FEED_MODE = String(URL_QUERY.get("feedMode") || "balanced").trim().toLowerCase();
+      const FEED_LIMIT = Math.max(1, Math.min(100, Number(URL_QUERY.get("limit") || 30) || 30));
+      const FEED_DAYS = Math.max(1, Math.min(365, Number(URL_QUERY.get("days") || 30) || 30));
+      const FEED_MAX_REACTIVATION_RAW = URL_QUERY.get("maxReactivation");
+      const FEED_MAX_REACTIVATION =
+        FEED_MAX_REACTIVATION_RAW !== null &&
+        Number.isInteger(Number(FEED_MAX_REACTIVATION_RAW)) &&
+        Number(FEED_MAX_REACTIVATION_RAW) >= 0
+          ? Number(FEED_MAX_REACTIVATION_RAW)
+          : null;
       const MOBILE_DRAWER_PEEK = 0;
       const MOBILE_DRAWER_FALLBACK_WIDTH = 340;
       const MOBILE_DRAWER_FALLBACK_CLOSED = MOBILE_DRAWER_FALLBACK_WIDTH - MOBILE_DRAWER_PEEK;
@@ -6206,6 +6339,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
       const urgencyClass = { High: "urg-high", Medium: "urg-medium", Low: "urg-low" };
       const stageClass = { QUALIFICATION: "", PRICE_SENT: "price", DEPOSIT_PENDING: "deposit" };
+      const feedTypeLabel = { active: "ACTIVE", reactivation: "REACTIVATION" };
 
       const leadsSeed = [
         {
@@ -6283,6 +6417,48 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           risk: lead && lead.risk ? lead.risk : null,
           aiDebug: null,
           suggestions: [],
+          messages: []
+        };
+      }
+
+      function mapLeadFromMobileFeed(item) {
+        const safeLeadId = String(item && item.leadId ? item.leadId : "").trim();
+        const stageRaw = String((item && item.stage) || "QUALIFICATION");
+        const feedType = String((item && item.feedType) || "active").toLowerCase() === "reactivation" ? "reactivation" : "active";
+        const topReplyCard = item && item.topReplyCard && typeof item.topReplyCard === "object" ? item.topReplyCard : null;
+        const topMessages = topReplyCard && Array.isArray(topReplyCard.messages) ? ensureBubbleSet(topReplyCard.messages) : [];
+        const hasCard = Boolean(topReplyCard && topMessages.length);
+        return {
+          id: safeLeadId,
+          name: String((item && item.clientName) || "Client"),
+          stage: stageForUi(stageRaw),
+          stageLabel: stageRaw,
+          channelType: "MOBILE_LAB",
+          urgency: urgencyForUi(item && item.urgency),
+          unread: item && item.needsReply ? 1 : 0,
+          lastAt: relativeTime(item && item.lastMessageAt),
+          preview: clampText((item && item.lastMessagePreview) || "Conversation WhatsApp"),
+          avatar: initials(item && item.clientName),
+          waitingFor: item && item.needsReply ? "WAITING_FOR_US" : "WAITING_FOR_CLIENT",
+          lastActivityAt: String((item && item.lastMessageAt) || ""),
+          createdAt: String((item && item.lastMessageAt) || ""),
+          risk: null,
+          aiDebug: null,
+          feedType,
+          queueRank: Number(item && item.queueRank) || 0,
+          recommendedAction: String((item && item.recommendedAction) || "").trim(),
+          tone: String((item && item.tone) || "").trim(),
+          skipAllowed: item && item.skipAllowed !== false,
+          suggestions: hasCard
+            ? [
+                {
+                  id: safeLeadId + "-top-card",
+                  title: clampText(String(topReplyCard.label || "AI card")),
+                  tag: feedTypeLabel[feedType],
+                  messages: topMessages
+                }
+              ]
+            : [],
           messages: []
         };
       }
@@ -6933,9 +7109,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setLoadingLeads(true);
           setErrorText("");
           try {
-            const payload = await fetchJson("/api/whatsapp/leads?range=30");
+            const query = new URLSearchParams();
+            query.set("mode", FEED_MODE);
+            query.set("limit", String(FEED_LIMIT));
+            query.set("days", String(FEED_DAYS));
+            if (FEED_MAX_REACTIVATION !== null) query.set("maxReactivation", String(FEED_MAX_REACTIVATION));
+            const payload = await fetchJson("/api/whatsapp/mobile-lab/feed?" + query.toString());
             const mapped = (Array.isArray(payload && payload.items) ? payload.items : [])
-              .map(mapLeadFromApi)
+              .map(mapLeadFromMobileFeed)
               .filter((lead) => lead.id);
             if (!mapped.length) return;
             setLeads((prev) => {
@@ -6989,47 +7170,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!leadId || !isUuidValue(leadId)) return;
           if (!LIVE_MODE) return;
           setLoadingSuggestions(true);
-          const applySuggestions = (cards, runPayload) => {
-            const dynamicDebug = extractDynamicDecisionDebug(runPayload, aiProvider);
-            setLeads((prev) =>
-              prev.map((lead) => {
-                if (String(lead.id) !== String(leadId)) return lead;
-                const fallback = fallbackSuggestionsFromMessages(Array.isArray(lead.messages) ? lead.messages : []);
-                return {
-                  ...lead,
-                  aiDebug: dynamicDebug || lead.aiDebug || null,
-                  suggestions: Array.isArray(cards) && cards.length ? cards : fallback
-                };
-              })
-            );
-          };
           try {
-            let runPayload = null;
-            if (!forceRegenerate) {
-              runPayload = await fetchJsonOptional("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/ai-latest");
+            await loadLeads();
+            if (forceRegenerate) {
+              await loadMessages(leadId);
             }
-            const hasSuggestions = Boolean(
-              runPayload &&
-                runPayload.status === "success" &&
-                Array.isArray(runPayload.suggestions) &&
-                runPayload.suggestions.length
-            );
-            if (!hasSuggestions) {
-              runPayload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/ai-regenerate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider: aiProvider })
-              });
-            }
-            const mapped = mapAiSuggestions(runPayload, aiProvider);
-            applySuggestions(mapped, runPayload);
           } catch (error) {
-            applySuggestions([], null);
-            console.error("[mobile-lab] load suggestions failed", { leadId, error });
+            console.error("[mobile-lab] feed refresh failed", { leadId, error });
           } finally {
             setLoadingSuggestions(false);
           }
-        }, [aiProvider]);
+        }, [loadLeads, loadMessages]);
 
         React.useEffect(() => {
           if (!LIVE_MODE) return;
@@ -7044,19 +7195,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             if (!Array.isArray(lead.messages) || !lead.messages.length) {
               void loadMessages(lead.id);
             }
-            if (!Array.isArray(lead.suggestions) || !lead.suggestions.length) {
-              void loadSuggestions(lead.id, false);
-            }
           });
-        }, [viewMode, streamAttentionLeads, loadMessages, loadSuggestions]);
+        }, [viewMode, streamAttentionLeads, loadMessages]);
 
         React.useEffect(() => {
           if (!selectedLeadId) return;
           if (LIVE_MODE && !isUuidValue(selectedLeadId)) return;
           if (!LIVE_MODE) return;
           void loadMessages(selectedLeadId);
-          void loadSuggestions(selectedLeadId, false);
-        }, [selectedLeadId, loadMessages, loadSuggestions]);
+        }, [selectedLeadId, loadMessages]);
 
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;

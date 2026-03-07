@@ -153,15 +153,10 @@ export async function buildMobileLabFeed(
   const mode = modeRaw as MobileLabFeedMode;
 
   const maxReactivationRaw = options?.maxReactivation;
-  const hasMaxReactivation = maxReactivationRaw !== undefined && maxReactivationRaw !== null;
-  const parsedMaxReactivation = hasMaxReactivation ? Number(maxReactivationRaw) : null;
-  if (
-    hasMaxReactivation &&
-    (!Number.isFinite(parsedMaxReactivation) || !Number.isInteger(parsedMaxReactivation) || parsedMaxReactivation < 0)
-  ) {
+  const maxReactivation = maxReactivationRaw !== undefined && maxReactivationRaw !== null ? Number(maxReactivationRaw) : null;
+  if (maxReactivation !== null && (!Number.isFinite(maxReactivation) || !Number.isInteger(maxReactivation) || maxReactivation < 0)) {
     throw new MobileLabFeedError("merge", "Invalid maxReactivation: must be an integer >= 0");
   }
-  const maxReactivation = hasMaxReactivation ? (parsedMaxReactivation as number) : null;
 
   const sourceLimit = Math.max(limit, Math.min(100, Math.max(limit * 3, limit + 20)));
   const deps: MobileLabFeedDeps = { ...defaultDeps(), ...(depsOverride || {}) };

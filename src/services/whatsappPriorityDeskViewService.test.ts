@@ -35,7 +35,7 @@ function queueItem(input: {
   };
 }
 
-function aiCards(input: { leadId: string; tone?: string | null; topLabel?: string }): AiCardsViewModel {
+function aiCards(input: { leadId: string; tone?: string; topLabel?: string }): AiCardsViewModel {
   const tone = input.tone === undefined ? "decisive_elegant" : input.tone;
   return {
     leadId: input.leadId,
@@ -232,7 +232,7 @@ test("null-safe handling when client name or last message missing", async () => 
       ],
       getLeadsMeta: async () => [{ id: "lead-x", clientName: null }],
       getLatestMessagesByLead: async () => new Map([["lead-x", null]]),
-      getAiCards: async () => ({ ...aiCards({ leadId: "lead-x", tone: null }), replyCards: [] })
+      getAiCards: async () => ({ ...aiCards({ leadId: "lead-x", tone: "" }), replyCards: [] })
     }
   );
 
