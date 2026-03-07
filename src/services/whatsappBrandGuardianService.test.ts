@@ -120,7 +120,8 @@ test("valid approval response", async () => {
     callModel: async () => ({
       provider: "openai",
       model: "gpt-4.1-mini",
-      rawOutput: JSON.stringify(validApprovalResponse)
+      rawOutput: JSON.stringify(validApprovalResponse),
+      usage: null
     })
   });
 
@@ -144,7 +145,8 @@ test("valid rewrite response", async () => {
     callModel: async () => ({
       provider: "openai",
       model: "gpt-4.1-mini",
-      rawOutput: JSON.stringify(validRewriteResponse)
+      rawOutput: JSON.stringify(validRewriteResponse),
+      usage: null
     })
   });
 

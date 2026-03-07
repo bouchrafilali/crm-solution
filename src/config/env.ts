@@ -37,6 +37,7 @@ const envSchema = z.object({
   AI_STRATEGY_PROVIDER: z.string().optional(),
   AI_REPLY_PROVIDER: z.string().optional(),
   AI_BRAND_PROVIDER: z.string().optional(),
+  AI_MODEL_PRICING_JSON: z.string().optional(),
   SHOW_AI_PROMPTS: z.string().optional(),
   ENABLE_TEAM_QUOTE_APPROVAL: z.string().optional(),
   ENABLE_TEAM_QUOTE_ANALYTICS: z.string().optional(),

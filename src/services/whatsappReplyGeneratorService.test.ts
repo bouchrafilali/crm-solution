@@ -94,7 +94,8 @@ test("empty transcript rejection", async () => {
           return {
             provider: "openai",
             model: "gpt-4.1-mini",
-            rawOutput: JSON.stringify(validReplyOptions)
+            rawOutput: JSON.stringify(validReplyOptions),
+            usage: null
           };
         }
       }),
@@ -186,7 +187,8 @@ test("successful validated response", async () => {
     callModel: async () => ({
       provider: "openai",
       model: "gpt-4.1-mini",
-      rawOutput: JSON.stringify(validReplyOptions)
+      rawOutput: JSON.stringify(validReplyOptions),
+      usage: null
     })
   });
 

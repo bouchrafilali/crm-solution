@@ -350,6 +350,9 @@ create table if not exists whatsapp_agent_runs (
   status text not null check (status in ('running', 'completed', 'failed', 'partial')),
   started_at timestamptz not null default now(),
   finished_at timestamptz,
+  total_input_tokens int,
+  total_output_tokens int,
+  total_estimated_cost_usd numeric(12,6),
   created_at timestamptz not null default now()
 );
 
@@ -363,6 +366,13 @@ create table if not exists whatsapp_agent_run_steps (
   step_order int not null,
   status text not null check (status in ('pending', 'running', 'completed', 'failed', 'skipped')),
   provider text,
+  model text,
+  input_tokens int,
+  output_tokens int,
+  cached_input_tokens int,
+  unit_input_price_per_million numeric(12,6),
+  unit_output_price_per_million numeric(12,6),
+  estimated_cost_usd numeric(12,6),
   started_at timestamptz,
   finished_at timestamptz,
   output_json jsonb,

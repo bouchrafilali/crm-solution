@@ -18,6 +18,7 @@ import {
   type ReplyGeneratorResult
 } from "./whatsappReplyGeneratorService.js";
 import { getAiProviderForStep, type AiProvider } from "./aiProviderRouting.js";
+import type { AiUsageMetrics } from "./aiPricing.js";
 
 const MESSAGE_MAX_LENGTH = 280;
 
@@ -48,6 +49,7 @@ export type BrandGuardianResult = {
   messageCount: number;
   provider: AiProvider;
   model: string;
+  usage?: AiUsageMetrics | null;
   timestamp: string;
 };
 
@@ -148,10 +150,28 @@ function buildBrandGuardianUserPrompt(input: {
   ].join("\n");
 }
 
+function toUsageMetrics(value: unknown): AiUsageMetrics | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const input = Number(row.input_tokens ?? row.prompt_tokens);
+  const output = Number(row.output_tokens ?? row.completion_tokens);
+  const cached = Number(
+    row.cache_read_input_tokens ??
+      (row.prompt_tokens_details && typeof row.prompt_tokens_details === "object"
+        ? (row.prompt_tokens_details as Record<string, unknown>).cached_tokens
+        : NaN)
+  );
+  return {
+    inputTokens: Number.isFinite(input) ? Math.max(0, Math.round(input)) : null,
+    outputTokens: Number.isFinite(output) ? Math.max(0, Math.round(output)) : null,
+    cachedInputTokens: Number.isFinite(cached) ? Math.max(0, Math.round(cached)) : null
+  };
+}
+
 export async function callBrandGuardianModel(input: {
   systemPrompt: string;
   userPrompt: string;
-}): Promise<{ provider: AiProvider; model: string; rawOutput: string }> {
+}): Promise<{ provider: AiProvider; model: string; rawOutput: string; usage: AiUsageMetrics | null }> {
   const provider = getAiProviderForStep("brand");
 
   if (provider === "claude") {
@@ -201,7 +221,7 @@ export async function callBrandGuardianModel(input: {
       throw new BrandGuardianError("brand_guardian_empty_ai_output", "Provider content is empty");
     }
 
-    return { provider: "claude", model, rawOutput: text };
+    return { provider: "claude", model, rawOutput: text, usage: toUsageMetrics(root.usage) };
   }
 
   const apiKey = String(env.OPENAI_API_KEY || "").trim();
@@ -255,7 +275,8 @@ export async function callBrandGuardianModel(input: {
   return {
     provider: "openai",
     model,
-    rawOutput: content
+    rawOutput: content,
+    usage: toUsageMetrics(root.usage)
   };
 }
 
@@ -322,6 +343,7 @@ export async function buildBrandGuardianFromContext(input: {
     messageCount,
     provider: modelResult.provider,
     model: modelResult.model,
+    usage: modelResult.usage,
     timestamp: new Date().toISOString()
   };
 }

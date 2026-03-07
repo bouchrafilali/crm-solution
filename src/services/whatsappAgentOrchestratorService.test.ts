@@ -66,6 +66,9 @@ test("successful full orchestrator run", async () => {
         status: "running",
         startedAt: "2026-03-07T10:00:00.000Z",
         finishedAt: null,
+        totalInputTokens: null,
+        totalOutputTokens: null,
+        totalEstimatedCostUsd: null,
         createdAt: "2026-03-07T10:00:00.000Z"
       }),
       updateRun: async (input) => {
@@ -80,6 +83,13 @@ test("successful full orchestrator run", async () => {
           stepOrder: input.stepOrder,
           status: input.status,
           provider: input.provider ?? null,
+          model: input.model ?? null,
+          inputTokens: input.inputTokens ?? null,
+          outputTokens: input.outputTokens ?? null,
+          cachedInputTokens: input.cachedInputTokens ?? null,
+          unitInputPricePerMillion: input.unitInputPricePerMillion ?? null,
+          unitOutputPricePerMillion: input.unitOutputPricePerMillion ?? null,
+          estimatedCostUsd: input.estimatedCostUsd ?? null,
           startedAt: input.startedAt ?? null,
           finishedAt: input.finishedAt ?? null,
           outputJson: input.outputJson ?? null,
@@ -192,6 +202,9 @@ test("partial failure preserves run log", async () => {
         status: "running",
         startedAt: "2026-03-07T10:00:00.000Z",
         finishedAt: null,
+        totalInputTokens: null,
+        totalOutputTokens: null,
+        totalEstimatedCostUsd: null,
         createdAt: "2026-03-07T10:00:00.000Z"
       }),
       updateRun: async (input) => {
@@ -206,6 +219,13 @@ test("partial failure preserves run log", async () => {
           stepOrder: input.stepOrder,
           status: input.status,
           provider: null,
+          model: null,
+          inputTokens: null,
+          outputTokens: null,
+          cachedInputTokens: null,
+          unitInputPricePerMillion: null,
+          unitOutputPricePerMillion: null,
+          estimatedCostUsd: null,
           startedAt: input.startedAt ?? null,
           finishedAt: input.finishedAt ?? null,
           outputJson: null,
@@ -263,6 +283,168 @@ test("partial failure preserves run log", async () => {
   assert.ok(steps.some((step) => step.stepName === "brand_guardian" && step.status === "skipped"));
 });
 
+test("mixed-provider run aggregates per-step and total costs safely", async () => {
+  const completedSteps: Array<{
+    stepName: string;
+    estimatedCostUsd: number | null | undefined;
+    inputTokens: number | null | undefined;
+    outputTokens: number | null | undefined;
+  }> = [];
+  let finalRunPayload: { totalInputTokens?: number | null; totalOutputTokens?: number | null; totalEstimatedCostUsd?: number | null } = {};
+
+  const result = await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "33333333-3333-4333-8333-333333333333" },
+    {
+      createRun: async () => ({
+        id: "run-costs",
+        leadId: "11111111-1111-4111-8111-111111111111",
+        messageId: "33333333-3333-4333-8333-333333333333",
+        status: "running",
+        startedAt: "2026-03-07T10:00:00.000Z",
+        finishedAt: null,
+        totalInputTokens: null,
+        totalOutputTokens: null,
+        totalEstimatedCostUsd: null,
+        createdAt: "2026-03-07T10:00:00.000Z"
+      }),
+      updateRun: async (input) => {
+        finalRunPayload = {
+          totalInputTokens: input.totalInputTokens,
+          totalOutputTokens: input.totalOutputTokens,
+          totalEstimatedCostUsd: input.totalEstimatedCostUsd
+        };
+      },
+      updateStep: async (input) => {
+        if (input.status === "completed") {
+          completedSteps.push({
+            stepName: input.stepName,
+            estimatedCostUsd: input.estimatedCostUsd,
+            inputTokens: input.inputTokens,
+            outputTokens: input.outputTokens
+          });
+        }
+        return {
+          id: `${input.stepName}-id`,
+          runId: input.runId,
+          stepName: input.stepName,
+          stepOrder: input.stepOrder,
+          status: input.status,
+          provider: input.provider ?? null,
+          model: input.model ?? null,
+          inputTokens: input.inputTokens ?? null,
+          outputTokens: input.outputTokens ?? null,
+          cachedInputTokens: input.cachedInputTokens ?? null,
+          unitInputPricePerMillion: input.unitInputPricePerMillion ?? null,
+          unitOutputPricePerMillion: input.unitOutputPricePerMillion ?? null,
+          estimatedCostUsd: input.estimatedCostUsd ?? null,
+          startedAt: input.startedAt ?? null,
+          finishedAt: input.finishedAt ?? null,
+          outputJson: input.outputJson ?? null,
+          error: input.error ?? null,
+          createdAt: "2026-03-07T10:00:00.000Z"
+        };
+      },
+      upsertLeadState: async (input) => ({
+        leadId: input.leadId,
+        latestRunId: input.latestRunId ?? null,
+        latestMessageId: input.latestMessageId ?? null,
+        stageAnalysis: input.stageAnalysis ?? null,
+        facts: input.facts ?? null,
+        priorityItem: input.priorityItem ?? null,
+        strategy: input.strategy ?? null,
+        replyOptions: input.replyOptions ?? null,
+        brandReview: input.brandReview ?? null,
+        topReplyCard: input.topReplyCard ?? null,
+        providers: input.providers ?? null,
+        createdAt: "2026-03-07T10:00:00.000Z",
+        updatedAt: "2026-03-07T10:00:00.000Z"
+      }),
+      getTranscript: async () => ({
+        transcript: "[2026-03-07 10:00] CLIENT: hi",
+        messageCount: 1,
+        transcriptLength: 40
+      }),
+      detectStage: async () => ({
+        analysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "claude",
+        model: "claude-haiku-4-5-20251001",
+        usage: { inputTokens: 1000, outputTokens: 100, cachedInputTokens: 0 },
+        timestamp: "2026-03-07T10:00:00.000Z"
+      }),
+      getMessages: async () => [{ direction: "IN", createdAt: "2026-03-07T09:50:00.000Z" }],
+      getStrategicAdvisor: async () => ({
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "claude",
+        model: "claude-haiku-4-5-20251001",
+        usage: null,
+        timestamp: "2026-03-07T10:00:00.000Z"
+      }),
+      getReplyGenerator: async () => ({
+        replyOptions: {
+          reply_options: [
+            { label: "Option 1", intent: "clarify", messages: ["A", "B"] },
+            { label: "Option 2", intent: "guide", messages: ["A", "B"] },
+            { label: "Option 3", intent: "close", messages: ["A", "B"] }
+          ]
+        },
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        usage: { inputTokens: 500, outputTokens: 200, cachedInputTokens: 0 },
+        timestamp: "2026-03-07T10:00:00.000Z"
+      }),
+      getBrandGuardian: async () => ({
+        review: {
+          approved: true,
+          issues: [],
+          reply_options: [
+            { label: "Option 1", intent: "clarify", messages: ["A", "B"] },
+            { label: "Option 2", intent: "guide", messages: ["A", "B"] },
+            { label: "Option 3", intent: "close", messages: ["A", "B"] }
+          ]
+        },
+        replyOptions: {
+          reply_options: [
+            { label: "Option 1", intent: "clarify", messages: ["A", "B"] },
+            { label: "Option 2", intent: "guide", messages: ["A", "B"] },
+            { label: "Option 3", intent: "close", messages: ["A", "B"] }
+          ]
+        },
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        usage: { inputTokens: 250, outputTokens: 120, cachedInputTokens: 0 },
+        timestamp: "2026-03-07T10:00:00.000Z"
+      })
+    }
+  );
+
+  assert.equal(result.status, "completed");
+  assert.equal(finalRunPayload.totalInputTokens, 1750);
+  assert.equal(finalRunPayload.totalOutputTokens, 420);
+  assert.equal(finalRunPayload.totalEstimatedCostUsd, 0.002312);
+
+  const strategic = completedSteps.find((step) => step.stepName === "strategic_advisor");
+  assert.ok(strategic);
+  assert.equal(strategic?.estimatedCostUsd ?? null, null);
+
+  const stage = completedSteps.find((step) => step.stepName === "stage_detection");
+  assert.equal(stage?.inputTokens, 1000);
+  assert.equal(stage?.outputTokens, 100);
+  assert.equal(stage?.estimatedCostUsd, 0.0015);
+});
+
 test("webhook trigger starts orchestrator asynchronously", async () => {
   let called = 0;
   triggerWhatsAppAgentOrchestratorForInbound(
@@ -280,6 +462,9 @@ test("webhook trigger starts orchestrator asynchronously", async () => {
           status: "running",
           startedAt: "2026-03-07T10:00:00.000Z",
           finishedAt: null,
+          totalInputTokens: null,
+          totalOutputTokens: null,
+          totalEstimatedCostUsd: null,
           createdAt: "2026-03-07T10:00:00.000Z"
         };
       },
@@ -291,6 +476,13 @@ test("webhook trigger starts orchestrator asynchronously", async () => {
         stepOrder: input.stepOrder,
         status: input.status,
         provider: null,
+        model: null,
+        inputTokens: null,
+        outputTokens: null,
+        cachedInputTokens: null,
+        unitInputPricePerMillion: null,
+        unitOutputPricePerMillion: null,
+        estimatedCostUsd: null,
         startedAt: input.startedAt ?? null,
         finishedAt: input.finishedAt ?? null,
         outputJson: null,
@@ -393,6 +585,9 @@ test("latest run retrieval maps response", async () => {
         status: "completed",
         startedAt: "2026-03-07T10:00:00.000Z",
         finishedAt: "2026-03-07T10:00:10.000Z",
+        totalInputTokens: 1200,
+        totalOutputTokens: 320,
+        totalEstimatedCostUsd: 0.0031,
         createdAt: "2026-03-07T10:00:00.000Z"
       },
       steps: [
@@ -403,6 +598,13 @@ test("latest run retrieval maps response", async () => {
           stepOrder: 1,
           status: "completed",
           provider: "claude",
+          model: "claude-haiku-4-5-20251001",
+          inputTokens: 900,
+          outputTokens: 120,
+          cachedInputTokens: 0,
+          unitInputPricePerMillion: 1,
+          unitOutputPricePerMillion: 5,
+          estimatedCostUsd: 0.0015,
           startedAt: "2026-03-07T10:00:00.000Z",
           finishedAt: "2026-03-07T10:00:01.000Z",
           outputJson: null,
@@ -414,6 +616,10 @@ test("latest run retrieval maps response", async () => {
   });
 
   assert.equal(payload.run?.id, "run-latest");
+  assert.equal(payload.run?.totalInputTokens, 1200);
+  assert.equal(payload.run?.totalEstimatedCostUsd, 0.0031);
   assert.equal(payload.steps.length, 1);
   assert.equal(payload.steps[0].provider, "claude");
+  assert.equal(payload.steps[0].model, "claude-haiku-4-5-20251001");
+  assert.equal(payload.steps[0].estimatedCostUsd, 0.0015);
 });

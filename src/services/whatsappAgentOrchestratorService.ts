@@ -13,6 +13,7 @@ import { buildReplyGeneratorFromContext } from "./whatsappReplyGeneratorService.
 import { detectStageFromTranscript } from "./whatsappStageDetectionService.js";
 import { buildStrategicAdvisorFromContext } from "./whatsappStrategicAdvisorService.js";
 import { buildLeadTranscript, type LeadTranscriptResult } from "./whatsappTranscriptFormatter.js";
+import { estimateAiCostUsd, type AiUsageMetrics } from "./aiPricing.js";
 
 export type WhatsAppAgentStepName =
   | "stage_detection"
@@ -165,6 +166,13 @@ async function markStep(
   status: "running" | "completed" | "failed" | "skipped",
   input?: {
     provider?: string | null;
+    model?: string | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cachedInputTokens?: number | null;
+    unitInputPricePerMillion?: number | null;
+    unitOutputPricePerMillion?: number | null;
+    estimatedCostUsd?: number | null;
     output?: Record<string, unknown> | null;
     error?: string | null;
   }
@@ -176,6 +184,13 @@ async function markStep(
     stepOrder: STEP_ORDER[stepName],
     status,
     provider: input?.provider ?? null,
+    model: input?.model ?? null,
+    inputTokens: input?.inputTokens ?? null,
+    outputTokens: input?.outputTokens ?? null,
+    cachedInputTokens: input?.cachedInputTokens ?? null,
+    unitInputPricePerMillion: input?.unitInputPricePerMillion ?? null,
+    unitOutputPricePerMillion: input?.unitOutputPricePerMillion ?? null,
+    estimatedCostUsd: input?.estimatedCostUsd ?? null,
     startedAt: status === "running" ? nowIso : undefined,
     finishedAt: status === "completed" || status === "failed" || status === "skipped" ? nowIso : undefined,
     outputJson: input?.output ?? null,
@@ -186,6 +201,48 @@ async function markStep(
 function toSafeError(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error || "unknown_error");
   return text.slice(0, 300);
+}
+
+function usageNumber(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+}
+
+function costNumber(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Number(value.toFixed(6)) : null;
+}
+
+function runCostTotal(value: number): number {
+  return Number((Number.isFinite(value) ? value : 0).toFixed(6));
+}
+
+function buildStepCostMetrics(input: {
+  provider: string | null | undefined;
+  model: string | null | undefined;
+  usage: AiUsageMetrics | null | undefined;
+}): {
+  provider: string | null;
+  model: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cachedInputTokens: number | null;
+  unitInputPricePerMillion: number | null;
+  unitOutputPricePerMillion: number | null;
+  estimatedCostUsd: number | null;
+} {
+  const provider = input.provider ? String(input.provider).trim() : "";
+  const model = input.model ? String(input.model).trim() : "";
+  const usage = input.usage || null;
+  const estimated = estimateAiCostUsd({ provider, model, usage });
+  return {
+    provider: provider || null,
+    model: model || null,
+    inputTokens: usageNumber(usage?.inputTokens),
+    outputTokens: usageNumber(usage?.outputTokens),
+    cachedInputTokens: usageNumber(usage?.cachedInputTokens),
+    unitInputPricePerMillion: costNumber(estimated.unitInputPricePerMillion),
+    unitOutputPricePerMillion: costNumber(estimated.unitOutputPricePerMillion),
+    estimatedCostUsd: costNumber(estimated.estimatedCostUsd)
+  };
 }
 
 function pickTopReplyCard(input: {
@@ -227,16 +284,31 @@ export async function runWhatsAppAgentOrchestrator(
   let finalStatus: WhatsAppAgentRunStatus = "completed";
   let topReplyCard: Record<string, unknown> | null = null;
   const providers: Record<string, string> = {};
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalEstimatedCostUsd = 0;
 
   let transcript: LeadTranscriptResult;
   try {
     transcript = await deps.getTranscript(leadId);
   } catch (error) {
-    await deps.updateRun({ runId: run.id, status: "failed" });
+    await deps.updateRun({
+      runId: run.id,
+      status: "failed",
+      totalInputTokens,
+      totalOutputTokens,
+      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
+    });
     throw new WhatsAppAgentOrchestratorError("transcript_failed", "transcript", toSafeError(error));
   }
   if (!transcript.transcript || transcript.transcriptLength < 30 || transcript.messageCount < 1) {
-    await deps.updateRun({ runId: run.id, status: "failed" });
+    await deps.updateRun({
+      runId: run.id,
+      status: "failed",
+      totalInputTokens,
+      totalOutputTokens,
+      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
+    });
     throw new WhatsAppAgentOrchestratorError("transcript_too_short", "transcript", "Transcript too short for orchestrator");
   }
 
@@ -245,8 +317,19 @@ export async function runWhatsAppAgentOrchestrator(
     const stage = await deps.detectStage({ leadId, transcript });
     stageAnalysis = stage.analysis as unknown as Record<string, unknown>;
     providers.stage_detection = stage.provider;
+    const stageMetrics = buildStepCostMetrics({ provider: stage.provider, model: stage.model, usage: stage.usage });
+    totalInputTokens += stageMetrics.inputTokens || 0;
+    totalOutputTokens += stageMetrics.outputTokens || 0;
+    totalEstimatedCostUsd += stageMetrics.estimatedCostUsd || 0;
     await markStep(deps, run.id, "stage_detection", "completed", {
       provider: stage.provider,
+      model: stage.model,
+      inputTokens: stageMetrics.inputTokens,
+      outputTokens: stageMetrics.outputTokens,
+      cachedInputTokens: stageMetrics.cachedInputTokens,
+      unitInputPricePerMillion: stageMetrics.unitInputPricePerMillion,
+      unitOutputPricePerMillion: stageMetrics.unitOutputPricePerMillion,
+      estimatedCostUsd: stageMetrics.estimatedCostUsd,
       output: { analysis: stage.analysis }
     });
   } catch (error) {
@@ -257,7 +340,13 @@ export async function runWhatsAppAgentOrchestrator(
     await markStep(deps, run.id, "strategic_advisor", "skipped", { error: "stage_detection_failed" });
     await markStep(deps, run.id, "reply_generator", "skipped", { error: "stage_detection_failed" });
     await markStep(deps, run.id, "brand_guardian", "skipped", { error: "stage_detection_failed" });
-    await deps.updateRun({ runId: run.id, status: "failed" });
+    await deps.updateRun({
+      runId: run.id,
+      status: "failed",
+      totalInputTokens,
+      totalOutputTokens,
+      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
+    });
     return {
       runId: run.id,
       leadId,
@@ -324,8 +413,23 @@ export async function runWhatsAppAgentOrchestrator(
     });
     strategy = strategic.strategy as unknown as Record<string, unknown>;
     providers.strategic_advisor = strategic.provider;
+    const strategyMetrics = buildStepCostMetrics({
+      provider: strategic.provider,
+      model: strategic.model,
+      usage: strategic.usage
+    });
+    totalInputTokens += strategyMetrics.inputTokens || 0;
+    totalOutputTokens += strategyMetrics.outputTokens || 0;
+    totalEstimatedCostUsd += strategyMetrics.estimatedCostUsd || 0;
     await markStep(deps, run.id, "strategic_advisor", "completed", {
       provider: strategic.provider,
+      model: strategic.model,
+      inputTokens: strategyMetrics.inputTokens,
+      outputTokens: strategyMetrics.outputTokens,
+      cachedInputTokens: strategyMetrics.cachedInputTokens,
+      unitInputPricePerMillion: strategyMetrics.unitInputPricePerMillion,
+      unitOutputPricePerMillion: strategyMetrics.unitOutputPricePerMillion,
+      estimatedCostUsd: strategyMetrics.estimatedCostUsd,
       output: { strategy: strategic.strategy }
     });
   } catch (error) {
@@ -346,7 +450,13 @@ export async function runWhatsAppAgentOrchestrator(
       topReplyCard: null,
       providers
     });
-    await deps.updateRun({ runId: run.id, status: finalStatus });
+    await deps.updateRun({
+      runId: run.id,
+      status: finalStatus,
+      totalInputTokens,
+      totalOutputTokens,
+      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
+    });
     return {
       runId: run.id,
       leadId,
@@ -369,8 +479,19 @@ export async function runWhatsAppAgentOrchestrator(
     });
     replyOptions = reply.replyOptions as unknown as Record<string, unknown>;
     providers.reply_generator = reply.provider;
+    const replyMetrics = buildStepCostMetrics({ provider: reply.provider, model: reply.model, usage: reply.usage });
+    totalInputTokens += replyMetrics.inputTokens || 0;
+    totalOutputTokens += replyMetrics.outputTokens || 0;
+    totalEstimatedCostUsd += replyMetrics.estimatedCostUsd || 0;
     await markStep(deps, run.id, "reply_generator", "completed", {
       provider: reply.provider,
+      model: reply.model,
+      inputTokens: replyMetrics.inputTokens,
+      outputTokens: replyMetrics.outputTokens,
+      cachedInputTokens: replyMetrics.cachedInputTokens,
+      unitInputPricePerMillion: replyMetrics.unitInputPricePerMillion,
+      unitOutputPricePerMillion: replyMetrics.unitOutputPricePerMillion,
+      estimatedCostUsd: replyMetrics.estimatedCostUsd,
       output: { replyOptions: reply.replyOptions }
     });
   } catch (error) {
@@ -391,7 +512,13 @@ export async function runWhatsAppAgentOrchestrator(
       topReplyCard,
       providers
     });
-    await deps.updateRun({ runId: run.id, status: finalStatus });
+    await deps.updateRun({
+      runId: run.id,
+      status: finalStatus,
+      totalInputTokens,
+      totalOutputTokens,
+      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
+    });
     return {
       runId: run.id,
       leadId,
@@ -415,8 +542,19 @@ export async function runWhatsAppAgentOrchestrator(
     });
     brandReview = review.review as unknown as Record<string, unknown>;
     providers.brand_guardian = review.provider;
+    const brandMetrics = buildStepCostMetrics({ provider: review.provider, model: review.model, usage: review.usage });
+    totalInputTokens += brandMetrics.inputTokens || 0;
+    totalOutputTokens += brandMetrics.outputTokens || 0;
+    totalEstimatedCostUsd += brandMetrics.estimatedCostUsd || 0;
     await markStep(deps, run.id, "brand_guardian", "completed", {
       provider: review.provider,
+      model: review.model,
+      inputTokens: brandMetrics.inputTokens,
+      outputTokens: brandMetrics.outputTokens,
+      cachedInputTokens: brandMetrics.cachedInputTokens,
+      unitInputPricePerMillion: brandMetrics.unitInputPricePerMillion,
+      unitOutputPricePerMillion: brandMetrics.unitOutputPricePerMillion,
+      estimatedCostUsd: brandMetrics.estimatedCostUsd,
       output: { review: review.review }
     });
   } catch (error) {
@@ -438,7 +576,13 @@ export async function runWhatsAppAgentOrchestrator(
     topReplyCard,
     providers
   });
-  await deps.updateRun({ runId: run.id, status: finalStatus });
+  await deps.updateRun({
+    runId: run.id,
+    status: finalStatus,
+    totalInputTokens,
+    totalOutputTokens,
+    totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
+  });
 
   return {
     runId: run.id,
@@ -482,11 +626,21 @@ export async function getLatestWhatsAppAgentRunSnapshot(
     status: WhatsAppAgentRunStatus;
     startedAt: string;
     finishedAt: string | null;
+    totalInputTokens: number | null;
+    totalOutputTokens: number | null;
+    totalEstimatedCostUsd: number | null;
   } | null;
   steps: Array<{
     stepName: string;
     status: string;
     provider: string | null;
+    model: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cachedInputTokens: number | null;
+    unitInputPricePerMillion: number | null;
+    unitOutputPricePerMillion: number | null;
+    estimatedCostUsd: number | null;
     error: string | null;
   }>;
 }> {
@@ -502,12 +656,22 @@ export async function getLatestWhatsAppAgentRunSnapshot(
       id: latest.run.id,
       status: latest.run.status,
       startedAt: latest.run.startedAt,
-      finishedAt: latest.run.finishedAt
+      finishedAt: latest.run.finishedAt,
+      totalInputTokens: latest.run.totalInputTokens,
+      totalOutputTokens: latest.run.totalOutputTokens,
+      totalEstimatedCostUsd: latest.run.totalEstimatedCostUsd
     },
     steps: latest.steps.map((step) => ({
       stepName: step.stepName,
       status: step.status,
       provider: step.provider,
+      model: step.model,
+      inputTokens: step.inputTokens,
+      outputTokens: step.outputTokens,
+      cachedInputTokens: step.cachedInputTokens,
+      unitInputPricePerMillion: step.unitInputPricePerMillion,
+      unitOutputPricePerMillion: step.unitOutputPricePerMillion,
+      estimatedCostUsd: step.estimatedCostUsd,
       error: step.error
     }))
   };

@@ -10,6 +10,9 @@ export type WhatsAppAgentRunRecord = {
   status: WhatsAppAgentRunStatus;
   startedAt: string;
   finishedAt: string | null;
+  totalInputTokens: number | null;
+  totalOutputTokens: number | null;
+  totalEstimatedCostUsd: number | null;
   createdAt: string;
 };
 
@@ -20,6 +23,13 @@ export type WhatsAppAgentRunStepRecord = {
   stepOrder: number;
   status: WhatsAppAgentRunStepStatus;
   provider: string | null;
+  model: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cachedInputTokens: number | null;
+  unitInputPricePerMillion: number | null;
+  unitOutputPricePerMillion: number | null;
+  estimatedCostUsd: number | null;
   startedAt: string | null;
   finishedAt: string | null;
   outputJson: Record<string, unknown> | null;
@@ -62,6 +72,9 @@ function mapRunRow(row: {
   status: WhatsAppAgentRunStatus;
   started_at: string;
   finished_at: string | null;
+  total_input_tokens: number | null;
+  total_output_tokens: number | null;
+  total_estimated_cost_usd: string | number | null;
   created_at: string;
 }): WhatsAppAgentRunRecord {
   return {
@@ -71,6 +84,9 @@ function mapRunRow(row: {
     status: row.status,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
+    totalInputTokens: row.total_input_tokens == null ? null : Number(row.total_input_tokens),
+    totalOutputTokens: row.total_output_tokens == null ? null : Number(row.total_output_tokens),
+    totalEstimatedCostUsd: row.total_estimated_cost_usd == null ? null : Number(row.total_estimated_cost_usd),
     createdAt: row.created_at
   };
 }
@@ -82,6 +98,13 @@ function mapStepRow(row: {
   step_order: number;
   status: WhatsAppAgentRunStepStatus;
   provider: string | null;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cached_input_tokens: number | null;
+  unit_input_price_per_million: string | number | null;
+  unit_output_price_per_million: string | number | null;
+  estimated_cost_usd: string | number | null;
   started_at: string | null;
   finished_at: string | null;
   output_json: unknown;
@@ -95,6 +118,15 @@ function mapStepRow(row: {
     stepOrder: Number(row.step_order || 0),
     status: row.status,
     provider: row.provider ? String(row.provider) : null,
+    model: row.model ? String(row.model) : null,
+    inputTokens: row.input_tokens == null ? null : Number(row.input_tokens),
+    outputTokens: row.output_tokens == null ? null : Number(row.output_tokens),
+    cachedInputTokens: row.cached_input_tokens == null ? null : Number(row.cached_input_tokens),
+    unitInputPricePerMillion:
+      row.unit_input_price_per_million == null ? null : Number(row.unit_input_price_per_million),
+    unitOutputPricePerMillion:
+      row.unit_output_price_per_million == null ? null : Number(row.unit_output_price_per_million),
+    estimatedCostUsd: row.estimated_cost_usd == null ? null : Number(row.estimated_cost_usd),
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     outputJson: asRecord(row.output_json),
@@ -116,12 +148,15 @@ export async function createWhatsAppAgentRun(input: {
     status: WhatsAppAgentRunStatus;
     started_at: string;
     finished_at: string | null;
+    total_input_tokens: number | null;
+    total_output_tokens: number | null;
+    total_estimated_cost_usd: string | number | null;
     created_at: string;
   }>(
     `
       insert into whatsapp_agent_runs (lead_id, message_id, status)
       values ($1::uuid, $2::uuid, $3::text)
-      returning id, lead_id, message_id, status, started_at, finished_at, created_at
+      returning id, lead_id, message_id, status, started_at, finished_at, total_input_tokens, total_output_tokens, total_estimated_cost_usd, created_at
     `,
     [input.leadId, input.messageId, input.status || "running"]
   );
@@ -132,6 +167,9 @@ export async function updateWhatsAppAgentRun(input: {
   runId: string;
   status: WhatsAppAgentRunStatus;
   finishedAt?: string | null;
+  totalInputTokens?: number | null;
+  totalOutputTokens?: number | null;
+  totalEstimatedCostUsd?: number | null;
 }): Promise<void> {
   const db = getPoolOrThrow();
   await db.query(
@@ -139,10 +177,20 @@ export async function updateWhatsAppAgentRun(input: {
       update whatsapp_agent_runs
       set
         status = $2::text,
-        finished_at = coalesce($3::timestamptz, case when $2::text = 'running' then null else now() end)
+        finished_at = coalesce($3::timestamptz, case when $2::text = 'running' then null else now() end),
+        total_input_tokens = coalesce($4::int, total_input_tokens),
+        total_output_tokens = coalesce($5::int, total_output_tokens),
+        total_estimated_cost_usd = coalesce($6::numeric(12,6), total_estimated_cost_usd)
       where id = $1::uuid
     `,
-    [input.runId, input.status, input.finishedAt ?? null]
+    [
+      input.runId,
+      input.status,
+      input.finishedAt ?? null,
+      input.totalInputTokens ?? null,
+      input.totalOutputTokens ?? null,
+      input.totalEstimatedCostUsd ?? null
+    ]
   );
 }
 
@@ -152,6 +200,13 @@ export async function upsertWhatsAppAgentRunStep(input: {
   stepOrder: number;
   status: WhatsAppAgentRunStepStatus;
   provider?: string | null;
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cachedInputTokens?: number | null;
+  unitInputPricePerMillion?: number | null;
+  unitOutputPricePerMillion?: number | null;
+  estimatedCostUsd?: number | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   outputJson?: Record<string, unknown> | null;
@@ -165,6 +220,13 @@ export async function upsertWhatsAppAgentRunStep(input: {
     step_order: number;
     status: WhatsAppAgentRunStepStatus;
     provider: string | null;
+    model: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    cached_input_tokens: number | null;
+    unit_input_price_per_million: string | number | null;
+    unit_output_price_per_million: string | number | null;
+    estimated_cost_usd: string | number | null;
     started_at: string | null;
     finished_at: string | null;
     output_json: unknown;
@@ -178,6 +240,13 @@ export async function upsertWhatsAppAgentRunStep(input: {
         step_order,
         status,
         provider,
+        model,
+        input_tokens,
+        output_tokens,
+        cached_input_tokens,
+        unit_input_price_per_million,
+        unit_output_price_per_million,
+        estimated_cost_usd,
         started_at,
         finished_at,
         output_json,
@@ -189,21 +258,35 @@ export async function upsertWhatsAppAgentRunStep(input: {
         $3::int,
         $4::text,
         nullif(trim($5::text), ''),
-        $6::timestamptz,
-        $7::timestamptz,
-        $8::jsonb,
-        nullif(trim($9::text), '')
+        nullif(trim($6::text), ''),
+        $7::int,
+        $8::int,
+        $9::int,
+        $10::numeric(12,6),
+        $11::numeric(12,6),
+        $12::numeric(12,6),
+        $13::timestamptz,
+        $14::timestamptz,
+        $15::jsonb,
+        nullif(trim($16::text), '')
       )
       on conflict (run_id, step_name)
       do update set
         step_order = excluded.step_order,
         status = excluded.status,
         provider = excluded.provider,
+        model = coalesce(excluded.model, whatsapp_agent_run_steps.model),
+        input_tokens = coalesce(excluded.input_tokens, whatsapp_agent_run_steps.input_tokens),
+        output_tokens = coalesce(excluded.output_tokens, whatsapp_agent_run_steps.output_tokens),
+        cached_input_tokens = coalesce(excluded.cached_input_tokens, whatsapp_agent_run_steps.cached_input_tokens),
+        unit_input_price_per_million = coalesce(excluded.unit_input_price_per_million, whatsapp_agent_run_steps.unit_input_price_per_million),
+        unit_output_price_per_million = coalesce(excluded.unit_output_price_per_million, whatsapp_agent_run_steps.unit_output_price_per_million),
+        estimated_cost_usd = coalesce(excluded.estimated_cost_usd, whatsapp_agent_run_steps.estimated_cost_usd),
         started_at = coalesce(excluded.started_at, whatsapp_agent_run_steps.started_at),
         finished_at = coalesce(excluded.finished_at, whatsapp_agent_run_steps.finished_at),
         output_json = coalesce(excluded.output_json, whatsapp_agent_run_steps.output_json),
         error = excluded.error
-      returning id, run_id, step_name, step_order, status, provider, started_at, finished_at, output_json, error, created_at
+      returning id, run_id, step_name, step_order, status, provider, model, input_tokens, output_tokens, cached_input_tokens, unit_input_price_per_million, unit_output_price_per_million, estimated_cost_usd, started_at, finished_at, output_json, error, created_at
     `,
     [
       input.runId,
@@ -211,6 +294,13 @@ export async function upsertWhatsAppAgentRunStep(input: {
       Math.max(1, Math.round(input.stepOrder || 1)),
       input.status,
       input.provider ?? null,
+      input.model ?? null,
+      input.inputTokens ?? null,
+      input.outputTokens ?? null,
+      input.cachedInputTokens ?? null,
+      input.unitInputPricePerMillion ?? null,
+      input.unitOutputPricePerMillion ?? null,
+      input.estimatedCostUsd ?? null,
       input.startedAt ?? null,
       input.finishedAt ?? null,
       input.outputJson == null ? null : JSON.stringify(input.outputJson),
@@ -232,10 +322,13 @@ export async function getLatestWhatsAppAgentRunByLead(leadId: string): Promise<{
     status: WhatsAppAgentRunStatus;
     started_at: string;
     finished_at: string | null;
+    total_input_tokens: number | null;
+    total_output_tokens: number | null;
+    total_estimated_cost_usd: string | number | null;
     created_at: string;
   }>(
     `
-      select id, lead_id, message_id, status, started_at, finished_at, created_at
+      select id, lead_id, message_id, status, started_at, finished_at, total_input_tokens, total_output_tokens, total_estimated_cost_usd, created_at
       from whatsapp_agent_runs
       where lead_id = $1::uuid
       order by created_at desc
@@ -253,6 +346,13 @@ export async function getLatestWhatsAppAgentRunByLead(leadId: string): Promise<{
     step_order: number;
     status: WhatsAppAgentRunStepStatus;
     provider: string | null;
+    model: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    cached_input_tokens: number | null;
+    unit_input_price_per_million: string | number | null;
+    unit_output_price_per_million: string | number | null;
+    estimated_cost_usd: string | number | null;
     started_at: string | null;
     finished_at: string | null;
     output_json: unknown;
@@ -260,7 +360,7 @@ export async function getLatestWhatsAppAgentRunByLead(leadId: string): Promise<{
     created_at: string;
   }>(
     `
-      select id, run_id, step_name, step_order, status, provider, started_at, finished_at, output_json, error, created_at
+      select id, run_id, step_name, step_order, status, provider, model, input_tokens, output_tokens, cached_input_tokens, unit_input_price_per_million, unit_output_price_per_million, estimated_cost_usd, started_at, finished_at, output_json, error, created_at
       from whatsapp_agent_run_steps
       where run_id = $1::uuid
       order by step_order asc, created_at asc
