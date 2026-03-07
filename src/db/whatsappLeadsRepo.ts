@@ -374,6 +374,13 @@ export type WhatsAppConversionMatchResult = {
   country: string | null;
 };
 
+export type LeadActivityWindowRow = {
+  id: string;
+  created_at: string;
+  last_activity_at: string | null;
+  stage?: string | null;
+};
+
 export type WhatsAppOrderConversionResult =
   | { status: "not_found" }
   | { status: "already_converted"; lead: WhatsAppConversionMatchResult }
@@ -440,6 +447,33 @@ function normalizeAiMode(input: unknown, channelType: WhatsAppChannelType): What
   if (channelType === "SHARED") return "ANALYZE_ONLY";
   const raw = String(input || "").trim().toUpperCase();
   return raw === "ANALYZE_ONLY" ? "ANALYZE_ONLY" : "ACTIVE";
+}
+
+function toActivityMs(row: Pick<LeadActivityWindowRow, "created_at" | "last_activity_at">): number {
+  const activityMs = new Date(String(row.last_activity_at || "")).getTime();
+  if (Number.isFinite(activityMs)) return activityMs;
+  const createdMs = new Date(String(row.created_at || "")).getTime();
+  return Number.isFinite(createdMs) ? createdMs : 0;
+}
+
+export function filterLeadRowsByRecentActivity<T extends LeadActivityWindowRow>(
+  rows: T[],
+  options: { days: number; stage: string; nowIso?: string }
+): T[] {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeDays = Math.max(1, Math.min(365, Math.round(Number(options.days || 30))));
+  const safeStage = String(options.stage || "ALL").trim().toUpperCase();
+  const nowMs = new Date(String(options.nowIso || new Date().toISOString())).getTime();
+  const windowStart = (Number.isFinite(nowMs) ? nowMs : Date.now()) - safeDays * 24 * 60 * 60 * 1000;
+
+  return safeRows
+    .filter((row) => {
+      const activityMs = toActivityMs(row);
+      if (!Number.isFinite(activityMs) || activityMs < windowStart) return false;
+      if (safeStage === "ALL") return true;
+      return normalizeStage(row.stage) === safeStage;
+    })
+    .sort((a, b) => toActivityMs(b) - toActivityMs(a) || String(b.id || "").localeCompare(String(a.id || "")));
 }
 
 function normalizeDetectedSignals(input: unknown): WhatsAppDetectedSignals {
@@ -1066,7 +1100,7 @@ export async function listWhatsAppLeads(options?: {
       select
         *
       from whatsapp_leads
-      where created_at >= now() - ($1::int * interval '1 day')
+      where coalesce(last_activity_at, created_at) >= now() - ($1::int * interval '1 day')
         and coalesce(channel_type, 'API') in ('API', 'SHARED')
         and ($2::text = 'ALL' or stage = $2::whatsapp_lead_stage)
       order by coalesce(last_activity_at, created_at) desc, created_at desc
@@ -1075,7 +1109,9 @@ export async function listWhatsAppLeads(options?: {
     [days, stage, limit]
   );
 
-  return rows.rows.map((row) => ({
+  const activityScopedRows = filterLeadRowsByRecentActivity(rows.rows, { days, stage });
+
+  return activityScopedRows.map((row) => ({
     ...(() => {
       const lead = mapLead(row);
       const scored = computeLeadScore(lead);
