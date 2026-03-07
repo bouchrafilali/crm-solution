@@ -23,6 +23,7 @@ import {
   createQuoteRequestsFromInbound,
   parseTeamDecisionWebhookPayload
 } from "../services/quoteRequestService.js";
+import { triggerWhatsAppAgentOrchestratorForInbound } from "../services/whatsappAgentOrchestratorService.js";
 
 export const zokoWebhookRouter = Router();
 
@@ -864,6 +865,13 @@ zokoWebhookRouter.post([
       ui_source: "zoko_webhook"
     });
     if (!message) return res.status(503).json({ error: "message_store_failed" });
+    if (resolvedDirection === "IN") {
+      triggerWhatsAppAgentOrchestratorForInbound({
+        leadId: lead.id,
+        messageId: message.id,
+        trigger: "zoko_inbound_webhook"
+      });
+    }
 
     if (resolvedDirection === "OUT" && /\bprix\b|\bprice\b|€|\$|\bmad\b|\bdhs?\b/i.test(String(payload.text || ""))) {
       await updateWhatsAppLeadFlags({ id: lead.id, priceSent: true });

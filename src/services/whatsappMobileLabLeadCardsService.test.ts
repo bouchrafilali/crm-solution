@@ -69,6 +69,52 @@ test("selected lead cards success", async () => {
   assert.equal(payload.enrichmentError, null);
 });
 
+test("persisted results are reused before regeneration", async () => {
+  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
+    timeoutMs: () => 5000,
+    getCachedLeadState: async () => ({
+      leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+      latestRunId: "run-1",
+      latestMessageId: "message-1",
+      stageAnalysis: {
+        stage: "QUALIFIED",
+        stage_confidence: 0.92,
+        urgency: "medium",
+        payment_intent: false,
+        dropoff_risk: "low",
+        priority_score: 70
+      },
+      facts: null,
+      priorityItem: null,
+      strategy: {
+        recommended_action: "answer_precisely",
+        commercial_priority: "high",
+        tone: "warm_refined",
+        pressure_level: "low",
+        primary_goal: "Clarify",
+        secondary_goal: "Advance"
+      },
+      replyOptions: null,
+      brandReview: null,
+      topReplyCard: {
+        label: "Option cached",
+        intent: "Clarify",
+        messages: ["Message 1", "Message 2"]
+      },
+      providers: { reply_generator: "openai" },
+      createdAt: "2026-03-07T00:00:00.000Z",
+      updatedAt: "2026-03-07T00:00:00.000Z"
+    }),
+    getActiveReplyContext: async () => {
+      throw new Error("should_not_regenerate_when_cached");
+    }
+  });
+
+  assert.equal(payload.enrichmentStatus, "enriched");
+  assert.equal(payload.topReplyCard?.label, "Option cached");
+  assert.equal(payload.replyCards.length, 0);
+});
+
 test("selected lead cards timeout", async () => {
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 50,

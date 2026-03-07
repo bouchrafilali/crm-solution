@@ -2,6 +2,7 @@ import {
   buildReplyGeneratorFromContext,
   type ReplyGeneratorResult
 } from "./whatsappReplyGeneratorService.js";
+import { getWhatsAppAgentLeadState } from "../db/whatsappAgentRunsRepo.js";
 import { detectStageFromTranscript } from "./whatsappStageDetectionService.js";
 import { buildStrategicAdvisorFromContext } from "./whatsappStrategicAdvisorService.js";
 import { buildLeadTranscript } from "./whatsappTranscriptFormatter.js";
@@ -53,6 +54,7 @@ export type MobileLabLeadCardsResult = {
 };
 
 type MobileLabLeadCardsDeps = {
+  getCachedLeadState: (leadId: string) => ReturnType<typeof getWhatsAppAgentLeadState>;
   getActiveReplyContext: (leadId: string) => Promise<ReplyGeneratorResult>;
   getReactivationReplies: (leadId: string) => ReturnType<typeof buildLeadReactivationReplies>;
   timeoutMs: () => number;
@@ -73,6 +75,7 @@ function resolveTimeoutMs(): number {
 
 function defaultDeps(): MobileLabLeadCardsDeps {
   return {
+    getCachedLeadState: (leadId: string) => getWhatsAppAgentLeadState(leadId),
     getActiveReplyContext: async (leadId: string) => {
       const transcript = await buildLeadTranscript(leadId, 30);
       const stageDetection = await detectStageFromTranscript({ leadId, transcript });
@@ -121,6 +124,83 @@ export async function buildMobileLabLeadCards(
   const feedType = input?.feedType === "reactivation" ? "reactivation" : "active";
 
   try {
+    if (feedType === "active") {
+      let cached: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
+      try {
+        cached = await deps.getCachedLeadState(safeLeadId);
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] cached_state_unavailable", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      const cachedTop = cached?.topReplyCard && typeof cached.topReplyCard === "object" ? cached.topReplyCard : null;
+      const cachedMessages = cachedTop && Array.isArray(cachedTop.messages)
+        ? cachedTop.messages.map((m) => String(m || "")).filter(Boolean)
+        : [];
+      if (cachedTop && cachedMessages.length > 0) {
+        const topReplyCard = {
+          label: String(cachedTop.label || "").trim(),
+          intent: String(cachedTop.intent || "").trim(),
+          messages: cachedMessages
+        };
+        const stage = cached?.stageAnalysis && typeof cached.stageAnalysis === "object"
+          ? cached.stageAnalysis
+          : null;
+        const strategy = cached?.strategy && typeof cached.strategy === "object"
+          ? cached.strategy
+          : null;
+        const providers = cached?.providers && typeof cached.providers === "object" ? cached.providers : null;
+        const provider =
+          String((providers && (providers.brand_guardian || providers.reply_generator || providers.strategic_advisor || providers.stage_detection)) || "").trim() ||
+          null;
+        return {
+          leadId: safeLeadId,
+          replyCards: [],
+          topReplyCard,
+          stageAnalysis: stage
+            ? {
+                stage: String(stage.stage || ""),
+                stageConfidence: Number(stage.stage_confidence ?? stage.stageConfidence ?? 0),
+                urgency: String(stage.urgency || "low"),
+                paymentIntent: Boolean(stage.payment_intent ?? stage.paymentIntent),
+                dropoffRisk: String(stage.dropoff_risk ?? stage.dropoffRisk ?? "low"),
+                priorityScore: Number(stage.priority_score ?? stage.priorityScore ?? 0)
+              }
+            : null,
+          summary: stage
+            ? {
+                stage: String(stage.stage || ""),
+                stageConfidence: Number(stage.stage_confidence ?? stage.stageConfidence ?? 0),
+                urgency: String(stage.urgency || "low"),
+                paymentIntent: Boolean(stage.payment_intent ?? stage.paymentIntent),
+                dropoffRisk: String(stage.dropoff_risk ?? stage.dropoffRisk ?? "low"),
+                priorityScore: Number(stage.priority_score ?? stage.priorityScore ?? 0)
+              }
+            : null,
+          strategy: strategy
+            ? {
+                recommendedAction: String(strategy.recommended_action ?? strategy.recommendedAction ?? ""),
+                commercialPriority: String(strategy.commercial_priority ?? strategy.commercialPriority ?? "medium"),
+                tone: String(strategy.tone || ""),
+                pressureLevel: String(strategy.pressure_level ?? strategy.pressureLevel ?? "none"),
+                primaryGoal: String(strategy.primary_goal ?? strategy.primaryGoal ?? ""),
+                secondaryGoal: String(strategy.secondary_goal ?? strategy.secondaryGoal ?? "")
+              }
+            : null,
+          enrichmentStatus: "enriched",
+          enrichmentSource: "active_ai_cards",
+          enrichmentError: null,
+          status: "enriched",
+          source: "active_ai_cards",
+          error: null,
+          provider,
+          model: null,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
+
     if (feedType === "reactivation") {
       const reactivation = await withTimeout(deps.getReactivationReplies(safeLeadId), timeoutMs);
       const replyCards = Array.isArray(reactivation.replyOptions)

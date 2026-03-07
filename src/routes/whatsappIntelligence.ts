@@ -160,6 +160,10 @@ import {
   saveLeadOutcome,
   WhatsAppLeadOutcomeError
 } from "../services/whatsappLeadOutcomesService.js";
+import {
+  getLatestWhatsAppAgentRunSnapshot,
+  WhatsAppAgentOrchestratorError
+} from "../services/whatsappAgentOrchestratorService.js";
 
 export const whatsappRouter = Router();
 const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 200;
@@ -1764,6 +1768,23 @@ whatsappRouter.get("/api/whatsapp/leads/:id/outcome", async (req, res) => {
     }
     console.error("[whatsapp] lead outcome get", error);
     return res.status(503).json({ error: "lead_outcome_get_failed" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/leads/:id/agent-run/latest", async (req, res) => {
+  const parsedParams = leadIdParamSchema.safeParse(req.params || {});
+  if (!parsedParams.success) {
+    return res.status(400).json({ error: "invalid_lead_id" });
+  }
+  try {
+    const payload = await getLatestWhatsAppAgentRunSnapshot(parsedParams.data.id);
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof WhatsAppAgentOrchestratorError) {
+      return res.status(400).json({ error: error.code, step: error.step, message: error.message });
+    }
+    console.error("[whatsapp] agent-run-latest", error);
+    return res.status(503).json({ error: "agent_run_latest_unavailable" });
   }
 });
 
