@@ -131,6 +131,17 @@ import { getLeadStrategicAdvisor, StrategicAdvisorError } from "../services/what
 import { getLeadReplyGenerator, ReplyGeneratorError } from "../services/whatsappReplyGeneratorService.js";
 import { getLeadBrandGuardian, BrandGuardianError } from "../services/whatsappBrandGuardianService.js";
 import { buildAiCardsViewModel, AiCardsOrchestrationError } from "../services/whatsappAiCardsService.js";
+import { buildLeadPriorityScore, buildPriorityDeskQueue, PriorityDeskError } from "../services/whatsappPriorityDeskService.js";
+import { buildPriorityDeskView, PriorityDeskViewError } from "../services/whatsappPriorityDeskViewService.js";
+import { buildLeadReactivationCheck, buildReactivationQueue, ReactivationEngineError } from "../services/whatsappReactivationEngineService.js";
+import { buildLeadReactivationReplies, ReactivationReplyError } from "../services/whatsappReactivationReplyService.js";
+import { buildReactivationQueueView, ReactivationQueueViewError } from "../services/whatsappReactivationQueueViewService.js";
+import { buildMobileLabFeed, MobileLabFeedError } from "../services/whatsappMobileLabFeedService.js";
+import {
+  clearSkippedMobileLabItem,
+  MobileLabSkipError,
+  skipMobileLabItem
+} from "../services/whatsappMobileLabSkipService.js";
 
 export const whatsappRouter = Router();
 const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 200;
@@ -3922,6 +3933,288 @@ whatsappRouter.post("/api/whatsapp/leads/:id/ai-cards", async (req, res) => {
     }
     console.error("[whatsapp] ai-cards", error);
     return res.status(503).json({ error: "ai_cards_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/priority-score", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+    const item = await buildLeadPriorityScore(leadId);
+    return res.status(200).json(item);
+  } catch (error) {
+    if (error instanceof PriorityDeskError) {
+      return res.status(400).json({
+        error: "priority_desk_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] priority-score", error);
+    return res.status(503).json({ error: "priority_score_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/priority-desk", async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    days: z.coerce.number().int().min(1).max(365).optional()
+  }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+
+  try {
+    const items = await buildPriorityDeskQueue({
+      limit: parsed.data.limit ?? 20,
+      days: parsed.data.days ?? 30
+    });
+    return res.status(200).json({ items });
+  } catch (error) {
+    if (error instanceof PriorityDeskError) {
+      return res.status(400).json({
+        error: "priority_desk_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] priority-desk", error);
+    return res.status(503).json({ error: "priority_desk_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/priority-desk/view", async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    days: z.coerce.number().int().min(1).max(365).optional()
+  }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+
+  try {
+    const payload = await buildPriorityDeskView({
+      limit: parsed.data.limit ?? 20,
+      days: parsed.data.days ?? 30
+    });
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof PriorityDeskViewError) {
+      return res.status(400).json({
+        error: "priority_desk_view_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] priority-desk-view", error);
+    return res.status(503).json({ error: "priority_desk_view_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/reactivation-check", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+    const result = await buildLeadReactivationCheck(leadId);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof ReactivationEngineError) {
+      return res.status(400).json({
+        error: "reactivation_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] reactivation-check", error);
+    return res.status(503).json({ error: "reactivation_check_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/reactivation-queue", async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    days: z.coerce.number().int().min(1).max(365).optional()
+  }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+
+  try {
+    const items = await buildReactivationQueue({
+      limit: parsed.data.limit ?? 20,
+      days: parsed.data.days ?? 30
+    });
+    return res.status(200).json({ items });
+  } catch (error) {
+    if (error instanceof ReactivationEngineError) {
+      return res.status(400).json({
+        error: "reactivation_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] reactivation-queue", error);
+    return res.status(503).json({ error: "reactivation_queue_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/reactivation-queue/view", async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    days: z.coerce.number().int().min(1).max(365).optional()
+  }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+
+  try {
+    const payload = await buildReactivationQueueView({
+      limit: parsed.data.limit ?? 20,
+      days: parsed.data.days ?? 30
+    });
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof ReactivationQueueViewError) {
+      return res.status(400).json({
+        error: "reactivation_queue_view_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] reactivation-queue-view", error);
+    return res.status(503).json({ error: "reactivation_queue_view_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/mobile-lab/feed", async (req, res) => {
+  const rawMode = req.query?.mode;
+  if (rawMode !== undefined) {
+    const mode = String(rawMode || "").trim().toLowerCase();
+    const allowedModes = ["balanced", "active_first", "reactivation_first", "active_only", "reactivation_only"];
+    if (!allowedModes.includes(mode)) {
+      return res.status(400).json({
+        error: "mobile_lab_feed_invalid_query",
+        field: "mode",
+        message: "mode must be one of balanced, active_first, reactivation_first, active_only, reactivation_only"
+      });
+    }
+  }
+
+  const rawMaxReactivation = req.query?.maxReactivation;
+  if (rawMaxReactivation !== undefined) {
+    const parsedMax = Number(rawMaxReactivation);
+    if (!Number.isFinite(parsedMax) || !Number.isInteger(parsedMax) || parsedMax < 0 || parsedMax > 100) {
+      return res.status(400).json({
+        error: "mobile_lab_feed_invalid_query",
+        field: "maxReactivation",
+        message: "maxReactivation must be an integer between 0 and 100"
+      });
+    }
+  }
+
+  const parsed = z.object({
+    mode: z.enum(["balanced", "active_first", "reactivation_first", "active_only", "reactivation_only"]).optional(),
+    maxReactivation: z.coerce.number().int().min(0).max(100).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    days: z.coerce.number().int().min(1).max(365).optional()
+  }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+
+  try {
+    const payload = await buildMobileLabFeed({
+      mode: parsed.data.mode ?? "balanced",
+      maxReactivation: parsed.data.maxReactivation,
+      limit: parsed.data.limit ?? 20,
+      days: parsed.data.days ?? 30
+    });
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof MobileLabFeedError) {
+      return res.status(400).json({
+        error: "mobile_lab_feed_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] mobile-lab-feed", error);
+    return res.status(503).json({ error: "mobile_lab_feed_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/mobile-lab/skip", async (req, res) => {
+  const parsed = z
+    .object({
+      leadId: z.string().uuid(),
+      feedType: z.enum(["active", "reactivation"]),
+      mode: z.enum(["1_hour", "later_today", "tomorrow", "custom"]),
+      customUntil: z.string().datetime().optional(),
+      reason: z.string().max(500).optional()
+    })
+    .safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+
+  try {
+    const lead = await getWhatsAppLeadById(parsed.data.leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+
+    const result = await skipMobileLabItem({
+      leadId: parsed.data.leadId,
+      feedType: parsed.data.feedType,
+      mode: parsed.data.mode,
+      customUntil: parsed.data.customUntil ?? null,
+      reason: parsed.data.reason ?? null
+    });
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof MobileLabSkipError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] mobile-lab-skip", error);
+    return res.status(503).json({ error: "mobile_lab_skip_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/mobile-lab/unskip", async (req, res) => {
+  const parsed = z
+    .object({
+      leadId: z.string().uuid(),
+      feedType: z.enum(["active", "reactivation"])
+    })
+    .safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+
+  try {
+    const result = await clearSkippedMobileLabItem({
+      leadId: parsed.data.leadId,
+      feedType: parsed.data.feedType
+    });
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof MobileLabSkipError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    console.error("[whatsapp] mobile-lab-unskip", error);
+    return res.status(503).json({ error: "mobile_lab_unskip_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/leads/:id/reactivation-replies", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!leadId) return res.status(400).json({ error: "invalid_id" });
+  try {
+    const lead = await getWhatsAppLeadById(leadId);
+    if (!lead) return res.status(404).json({ error: "lead_not_found" });
+
+    const result = await buildLeadReactivationReplies(leadId);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof ReactivationReplyError) {
+      return res.status(400).json({ error: error.code, message: error.message });
+    }
+    if (error instanceof ReactivationEngineError) {
+      return res.status(400).json({ error: "reactivation_failed", step: error.step, message: error.message });
+    }
+    if (error instanceof AiCardsOrchestrationError) {
+      return res.status(400).json({ error: "ai_cards_failed", step: error.step, message: error.message });
+    }
+    console.error("[whatsapp] reactivation-replies", error);
+    return res.status(503).json({ error: "reactivation_replies_unavailable" });
   }
 });
 
