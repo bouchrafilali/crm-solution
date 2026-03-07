@@ -1,4 +1,10 @@
-import { buildAiCardsViewModel, type AiCardsViewModel } from "./whatsappAiCardsService.js";
+import {
+  buildReplyGeneratorFromContext,
+  type ReplyGeneratorResult
+} from "./whatsappReplyGeneratorService.js";
+import { detectStageFromTranscript } from "./whatsappStageDetectionService.js";
+import { buildStrategicAdvisorFromContext } from "./whatsappStrategicAdvisorService.js";
+import { buildLeadTranscript } from "./whatsappTranscriptFormatter.js";
 import { buildLeadReactivationReplies } from "./whatsappReactivationReplyService.js";
 
 type Card = {
@@ -11,9 +17,30 @@ export type MobileLabLeadCardsResult = {
   leadId: string;
   replyCards: Card[];
   topReplyCard: Card | null;
-  stageAnalysis: AiCardsViewModel["summary"] | null;
-  summary: AiCardsViewModel["summary"] | null;
-  strategy: AiCardsViewModel["strategy"] | null;
+  stageAnalysis: {
+    stage: string;
+    stageConfidence: number;
+    urgency: string;
+    paymentIntent: boolean;
+    dropoffRisk: string;
+    priorityScore: number;
+  } | null;
+  summary: {
+    stage: string;
+    stageConfidence: number;
+    urgency: string;
+    paymentIntent: boolean;
+    dropoffRisk: string;
+    priorityScore: number;
+  } | null;
+  strategy: {
+    recommendedAction: string;
+    commercialPriority: string;
+    tone: string;
+    pressureLevel: string;
+    primaryGoal: string;
+    secondaryGoal: string;
+  } | null;
   enrichmentStatus: "enriched" | "timeout" | "error" | "no_generation_needed";
   enrichmentSource: "active_ai_cards" | "reactivation_replies";
   enrichmentError: string | null;
@@ -26,7 +53,7 @@ export type MobileLabLeadCardsResult = {
 };
 
 type MobileLabLeadCardsDeps = {
-  getAiCards: (leadId: string) => Promise<AiCardsViewModel>;
+  getActiveReplyContext: (leadId: string) => Promise<ReplyGeneratorResult>;
   getReactivationReplies: (leadId: string) => ReturnType<typeof buildLeadReactivationReplies>;
   timeoutMs: () => number;
 };
@@ -46,7 +73,21 @@ function resolveTimeoutMs(): number {
 
 function defaultDeps(): MobileLabLeadCardsDeps {
   return {
-    getAiCards: (leadId: string) => buildAiCardsViewModel(leadId),
+    getActiveReplyContext: async (leadId: string) => {
+      const transcript = await buildLeadTranscript(leadId, 30);
+      const stageDetection = await detectStageFromTranscript({ leadId, transcript });
+      const strategicAdvisor = await buildStrategicAdvisorFromContext({
+        leadId,
+        transcript,
+        stageAnalysis: stageDetection.analysis
+      });
+      return buildReplyGeneratorFromContext({
+        leadId,
+        transcript,
+        stageAnalysis: stageDetection.analysis,
+        strategy: strategicAdvisor.strategy
+      });
+    },
     getReactivationReplies: (leadId: string) => buildLeadReactivationReplies(leadId),
     timeoutMs: () => resolveTimeoutMs()
   };
@@ -91,10 +132,11 @@ export async function buildMobileLabLeadCards(
         : [];
       const status = reactivation.shouldGenerate && replyCards.length ? "enriched" : "no_generation_needed";
       const source = "reactivation_replies" as const;
+      const topReplyCard = replyCards.length ? replyCards[0] : null;
       return {
         leadId: safeLeadId,
-        replyCards,
-        topReplyCard: replyCards.length ? replyCards[0] : null,
+        replyCards: [],
+        topReplyCard,
         stageAnalysis: null,
         summary: null,
         strategy: null,
@@ -110,25 +152,53 @@ export async function buildMobileLabLeadCards(
       };
     }
 
-    const vm = await withTimeout(deps.getAiCards(safeLeadId), timeoutMs);
-    const replyCards = Array.isArray(vm.replyCards) ? vm.replyCards : [];
-    const status = replyCards.length ? "enriched" : "no_generation_needed";
+    const replyContext = await withTimeout(deps.getActiveReplyContext(safeLeadId), timeoutMs);
+    const replyCards = Array.isArray(replyContext.replyOptions?.reply_options) ? replyContext.replyOptions.reply_options : [];
+    const topReplyCard = replyCards.length
+      ? {
+          label: String(replyCards[0].label || "").trim(),
+          intent: String(replyCards[0].intent || "").trim(),
+          messages: Array.isArray(replyCards[0].messages) ? replyCards[0].messages.map((m) => String(m || "")).filter(Boolean) : []
+        }
+      : null;
+    const status = topReplyCard ? "enriched" : "no_generation_needed";
     const source = "active_ai_cards" as const;
     return {
       leadId: safeLeadId,
-      replyCards,
-      topReplyCard: replyCards.length ? replyCards[0] : null,
-      stageAnalysis: vm.summary || null,
-      summary: vm.summary || null,
-      strategy: vm.strategy || null,
+      replyCards: [],
+      topReplyCard,
+      stageAnalysis: {
+        stage: replyContext.stageAnalysis.stage,
+        stageConfidence: replyContext.stageAnalysis.stage_confidence,
+        urgency: replyContext.stageAnalysis.urgency,
+        paymentIntent: replyContext.stageAnalysis.payment_intent,
+        dropoffRisk: replyContext.stageAnalysis.dropoff_risk,
+        priorityScore: replyContext.stageAnalysis.priority_score
+      },
+      summary: {
+        stage: replyContext.stageAnalysis.stage,
+        stageConfidence: replyContext.stageAnalysis.stage_confidence,
+        urgency: replyContext.stageAnalysis.urgency,
+        paymentIntent: replyContext.stageAnalysis.payment_intent,
+        dropoffRisk: replyContext.stageAnalysis.dropoff_risk,
+        priorityScore: replyContext.stageAnalysis.priority_score
+      },
+      strategy: {
+        recommendedAction: replyContext.strategy.recommended_action,
+        commercialPriority: replyContext.strategy.commercial_priority,
+        tone: replyContext.strategy.tone,
+        pressureLevel: replyContext.strategy.pressure_level,
+        primaryGoal: replyContext.strategy.primary_goal,
+        secondaryGoal: replyContext.strategy.secondary_goal
+      },
       enrichmentStatus: status,
       enrichmentSource: source,
       enrichmentError: null,
       status,
       source,
       error: null,
-      provider: vm.meta?.provider || null,
-      model: vm.meta?.model || null,
+      provider: replyContext.provider || null,
+      model: replyContext.model || null,
       timestamp: new Date().toISOString()
     };
   } catch (error) {

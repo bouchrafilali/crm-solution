@@ -6,49 +6,56 @@ import { buildMobileLabFeed } from "./whatsappMobileLabFeedService.js";
 test("selected lead cards success", async () => {
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
-    getAiCards: async () => ({
-      leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
-      summary: {
-        stage: "QUALIFIED",
-        stageConfidence: 0.91,
-        urgency: "medium",
-        paymentIntent: false,
-        dropoffRisk: "low",
-        priorityScore: 71
+    getActiveReplyContext: async () => ({
+      replyOptions: {
+        reply_options: [
+          { label: "Option 1", intent: "Clarify", messages: ["Message 1", "Message 2"] },
+          { label: "Option 2", intent: "Guide", messages: ["Message 1", "Message 2"] },
+          { label: "Option 3", intent: "Close", messages: ["Message 1", "Message 2"] }
+        ]
       },
       strategy: {
-        recommendedAction: "answer_precisely",
-        commercialPriority: "high",
+        recommended_action: "answer_precisely",
+        action_confidence: 0.9,
+        commercial_priority: "high",
         tone: "warm_refined",
-        pressureLevel: "low",
-        primaryGoal: "Clarify options",
-        secondaryGoal: "Move to next step"
+        pressure_level: "low",
+        primary_goal: "Clarify options",
+        secondary_goal: "Move to next step",
+        missed_opportunities: [],
+        strategy_rationale: [],
+        do_now: [],
+        avoid: []
       },
-      signals: [],
-      facts: {
-        productsOfInterest: [],
-        eventDate: null,
-        deliveryDeadline: null,
-        destinationCountry: null,
-        budget: null,
-        pricePointsDetected: [],
-        customizationRequests: [],
-        preferredColors: [],
-        preferredFabrics: [],
-        paymentMethodPreference: null
+      stageAnalysis: {
+        stage: "QUALIFIED",
+        stage_confidence: 0.91,
+        priority_score: 71,
+        urgency: "medium",
+        payment_intent: false,
+        dropoff_risk: "low",
+        signals: [],
+        facts: {
+          products_of_interest: [],
+          event_date: null,
+          delivery_deadline: null,
+          destination_country: null,
+          budget: null,
+          price_points_detected: [],
+          customization_requests: [],
+          preferred_colors: [],
+          preferred_fabrics: [],
+          payment_method_preference: null
+        },
+        objections: [],
+        recommended_next_action: "answer_precisely",
+        reasoning_summary: []
       },
-      replyCards: [
-        { label: "Option 1", intent: "Clarify", messages: ["Message 1", "Message 2"] },
-        { label: "Option 2", intent: "Guide", messages: ["Message 1", "Message 2"] }
-      ],
-      brandGuardian: { approved: true, issues: [] },
-      meta: {
-        messageCount: 3,
-        transcriptLength: 120,
-        provider: "openai",
-        model: "gpt-4.1-mini",
-        timestamp: "2026-03-07T00:00:00.000Z"
-      }
+      transcriptLength: 120,
+      messageCount: 3,
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      timestamp: "2026-03-07T00:00:00.000Z"
     })
   });
 
@@ -57,7 +64,7 @@ test("selected lead cards success", async () => {
   assert.equal(payload.status, "enriched");
   assert.equal(payload.source, "active_ai_cards");
   assert.equal(payload.error, null);
-  assert.equal(payload.replyCards.length, 2);
+  assert.equal(payload.replyCards.length, 0);
   assert.equal(payload.topReplyCard?.label, "Option 1");
   assert.equal(payload.enrichmentError, null);
 });
@@ -65,49 +72,59 @@ test("selected lead cards success", async () => {
 test("selected lead cards timeout", async () => {
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 50,
-    getAiCards: async () =>
+    getActiveReplyContext: async () =>
       new Promise((resolve) => {
         setTimeout(() => {
           resolve({
-            leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
-            summary: {
-              stage: "QUALIFIED",
-              stageConfidence: 0.8,
-              urgency: "low",
-              paymentIntent: false,
-              dropoffRisk: "low",
-              priorityScore: 40
+            replyOptions: {
+              reply_options: [
+                { label: "Option 1", intent: "X", messages: ["A", "B"] },
+                { label: "Option 2", intent: "Y", messages: ["A", "B"] },
+                { label: "Option 3", intent: "Z", messages: ["A", "B"] }
+              ]
             },
             strategy: {
-              recommendedAction: "answer_precisely",
-              commercialPriority: "medium",
+              recommended_action: "answer_precisely",
+              action_confidence: 0.8,
+              commercial_priority: "medium",
               tone: "soft_luxury",
-              pressureLevel: "none",
-              primaryGoal: "Goal",
-              secondaryGoal: "Goal2"
+              pressure_level: "none",
+              primary_goal: "Goal",
+              secondary_goal: "Goal2",
+              missed_opportunities: [],
+              strategy_rationale: [],
+              do_now: [],
+              avoid: []
             },
-            signals: [],
-            facts: {
-              productsOfInterest: [],
-              eventDate: null,
-              deliveryDeadline: null,
-              destinationCountry: null,
-              budget: null,
-              pricePointsDetected: [],
-              customizationRequests: [],
-              preferredColors: [],
-              preferredFabrics: [],
-              paymentMethodPreference: null
+            stageAnalysis: {
+              stage: "QUALIFIED",
+              stage_confidence: 0.8,
+              priority_score: 40,
+              urgency: "low",
+              payment_intent: false,
+              dropoff_risk: "low",
+              signals: [],
+              facts: {
+                products_of_interest: [],
+                event_date: null,
+                delivery_deadline: null,
+                destination_country: null,
+                budget: null,
+                price_points_detected: [],
+                customization_requests: [],
+                preferred_colors: [],
+                preferred_fabrics: [],
+                payment_method_preference: null
+              },
+              objections: [],
+              recommended_next_action: "answer_precisely",
+              reasoning_summary: []
             },
-            replyCards: [{ label: "Option 1", intent: "X", messages: ["A", "B"] }],
-            brandGuardian: { approved: true, issues: [] },
-            meta: {
-              messageCount: 2,
-              transcriptLength: 100,
-              provider: "openai",
-              model: "gpt-4.1-mini",
-              timestamp: "2026-03-07T00:00:00.000Z"
-            }
+            transcriptLength: 100,
+            messageCount: 2,
+            provider: "openai",
+            model: "gpt-4.1-mini",
+            timestamp: "2026-03-07T00:00:00.000Z"
           });
         }, 150);
       })
@@ -125,7 +142,7 @@ test("selected lead cards timeout", async () => {
 test("selected lead cards error", async () => {
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 2000,
-    getAiCards: async () => {
+    getActiveReplyContext: async () => {
       throw new Error("provider_failed");
     }
   });
@@ -165,7 +182,7 @@ test("selected reactivation lead cards success", async () => {
         model: "gpt-4.1-mini",
         timestamp: "2026-03-07T00:00:00.000Z"
       }),
-      getAiCards: async () => {
+      getActiveReplyContext: async () => {
         throw new Error("should_not_call_ai_cards");
       }
     }
@@ -176,7 +193,7 @@ test("selected reactivation lead cards success", async () => {
   assert.equal(payload.status, "enriched");
   assert.equal(payload.source, "reactivation_replies");
   assert.equal(payload.topReplyCard?.label, "Option 1");
-  assert.equal(payload.replyCards.length, 1);
+  assert.equal(payload.replyCards.length, 0);
 });
 
 test("feed remains unaffected by selected lead cards path", async () => {
