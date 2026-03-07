@@ -4219,9 +4219,11 @@ whatsappRouter.get("/api/whatsapp/mobile-lab/leads/:id/cards", async (req, res) 
   }
   const rawFeedType = String(req.query?.feedType || "").trim().toLowerCase();
   const feedType = rawFeedType === "reactivation" ? "reactivation" : "active";
+  const rawForce = String(req.query?.force || "").trim().toLowerCase();
+  const forceRefresh = rawForce === "1" || rawForce === "true" || rawForce === "yes" || rawForce === "on";
 
   try {
-    const payload = await buildMobileLabLeadCards(leadId, { feedType });
+    const payload = await buildMobileLabLeadCards(leadId, { feedType, forceRefresh });
     return res.status(200).json(payload);
   } catch (error) {
     console.error("[whatsapp] mobile-lab-lead-cards", error);
@@ -6461,6 +6463,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           createdAt: String((lead && lead.created_at) || ""),
           risk: lead && lead.risk ? lead.risk : null,
           aiDebug: null,
+          agentRun: null,
+          agentRunError: null,
+          generationMode: null,
           suggestions: [],
           messages: []
         };
@@ -6501,6 +6506,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           enrichmentStatus,
           enrichmentSource,
           enrichmentError,
+          agentRun: null,
+          agentRunError: null,
+          generationMode: null,
           skipAllowed: item && item.skipAllowed !== false,
           suggestions: hasCard
             ? [
@@ -6517,7 +6525,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
 
       function mapSuggestionsFromLeadCardsPayload(leadId, payload) {
-        const source = String((payload && (payload.source || payload.enrichmentSource)) || "active_ai_cards");
+        const source = String((payload && (payload.enrichmentSource || payload.pipelineSource || payload.source)) || "active_ai_cards");
         const tag = source === "reactivation_replies" ? "REACTIVATION" : "ACTIVE";
         const cards = Array.isArray(payload && payload.replyCards) ? payload.replyCards : [];
         if (!cards.length && payload && payload.topReplyCard && typeof payload.topReplyCard === "object") {
@@ -7011,6 +7019,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           startOffset: MOBILE_DRAWER_FALLBACK_CLOSED
         });
         const suggestionsRequestRef = React.useRef(0);
+        const agentRunRequestRef = React.useRef(0);
         function viewModeFromWidth(width) {
           const safeWidth = Number(width) || 0;
           if (safeWidth < 760) return "mobile";
@@ -7181,6 +7190,47 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setLeads((prev) => prev.map((lead) => (String(lead.id) === String(leadId) ? { ...lead, ...patch } : lead)));
         }, []);
 
+        const loadAgentRun = React.useCallback(async (leadId) => {
+          if (!LIVE_MODE || !leadId || !isUuidValue(leadId)) return;
+          const requestId = agentRunRequestRef.current + 1;
+          agentRunRequestRef.current = requestId;
+          patchLead(leadId, { agentRunError: null });
+          try {
+            const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/agent-run/latest");
+            if (requestId !== agentRunRequestRef.current) return;
+            const run = payload && payload.run && typeof payload.run === "object" ? payload.run : null;
+            const stepsRaw = payload && Array.isArray(payload.steps) ? payload.steps : [];
+            const steps = stepsRaw
+              .map((step) => ({
+                stepName: String(step && step.stepName ? step.stepName : "").trim(),
+                status: String(step && step.status ? step.status : "").trim(),
+                provider: step && step.provider ? String(step.provider).trim() : null,
+                error: step && step.error ? String(step.error).trim() : null
+              }))
+              .filter((step) => step.stepName);
+            patchLead(leadId, {
+              agentRun: run
+                ? {
+                    run: {
+                      id: String(run.id || "").trim(),
+                      status: String(run.status || "").trim(),
+                      startedAt: String(run.startedAt || "").trim(),
+                      finishedAt: String(run.finishedAt || "").trim()
+                    },
+                    steps
+                  }
+                : { run: null, steps },
+              agentRunError: null
+            });
+          } catch (error) {
+            if (requestId !== agentRunRequestRef.current) return;
+            patchLead(leadId, {
+              agentRun: null,
+              agentRunError: error instanceof Error ? error.message : String(error || "agent_run_failed")
+            });
+          }
+        }, [patchLead]);
+
         const loadLeads = React.useCallback(async () => {
           if (!LIVE_MODE) return;
           setLoadingLeads(true);
@@ -7208,6 +7258,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   ? {
                       ...lead,
                       aiDebug: old.aiDebug || null,
+                      agentRun: old.agentRun || null,
+                      agentRunError: old.agentRunError || null,
+                      generationMode: old.generationMode || null,
                       messages: Array.isArray(old.messages) ? old.messages : []
                     }
                   : lead;
@@ -7256,20 +7309,27 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const lead = leads.find((item) => String(item.id) === String(leadId)) || null;
           const feedType = lead && String(lead.feedType || "").toLowerCase() === "reactivation" ? "reactivation" : "active";
           try {
+            const cardsQuery = new URLSearchParams();
+            cardsQuery.set("feedType", feedType);
+            if (forceRegenerate) cardsQuery.set("force", "1");
             const payload = await fetchJson(
               "/api/whatsapp/mobile-lab/leads/" +
                 encodeURIComponent(leadId) +
-                "/cards?feedType=" +
-                encodeURIComponent(feedType)
+                "/cards?" +
+                cardsQuery.toString()
             );
             if (requestId !== suggestionsRequestRef.current) return;
             const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
             patchLead(leadId, {
               suggestions,
               enrichmentStatus: String((payload && (payload.status || payload.enrichmentStatus)) || "error"),
-              enrichmentSource: String((payload && (payload.source || payload.enrichmentSource)) || "active_ai_cards"),
-              enrichmentError: payload && (payload.error || payload.enrichmentError) ? String(payload.error || payload.enrichmentError) : null
+              enrichmentSource: String((payload && (payload.enrichmentSource || payload.pipelineSource || payload.source)) || "active_ai_cards"),
+              enrichmentError: payload && (payload.error || payload.enrichmentError) ? String(payload.error || payload.enrichmentError) : null,
+              generationMode: payload && (payload.generationMode || payload.generation_mode)
+                ? String(payload.generationMode || payload.generation_mode)
+                : null
             });
+            await loadAgentRun(leadId);
             if (forceRegenerate) await loadMessages(leadId);
           } catch (error) {
             if (requestId !== suggestionsRequestRef.current) return;
@@ -7277,16 +7337,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               suggestions: [],
               enrichmentStatus: "error",
               enrichmentSource: feedType === "reactivation" ? "reactivation_replies" : "active_ai_cards",
-              enrichmentError: error instanceof Error ? error.message : String(error || "cards_failed")
+              enrichmentError: error instanceof Error ? error.message : String(error || "cards_failed"),
+              generationMode: null
             });
             console.error("[mobile-lab] lead cards load failed", { leadId, error });
+            await loadAgentRun(leadId);
           } finally {
             if (requestId === suggestionsRequestRef.current) {
               setLoadingSuggestions(false);
               setLoadingSuggestionsLeadId("");
             }
           }
-        }, [leads, loadMessages, patchLead]);
+        }, [leads, loadAgentRun, loadMessages, patchLead]);
 
         React.useEffect(() => {
           if (!LIVE_MODE) return;
@@ -7317,6 +7379,13 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!LIVE_MODE) return;
           void loadSuggestions(selectedLeadId, false);
         }, [selectedLeadId, loadSuggestions]);
+
+        React.useEffect(() => {
+          if (!selectedLeadId) return;
+          if (LIVE_MODE && !isUuidValue(selectedLeadId)) return;
+          if (!LIVE_MODE) return;
+          void loadAgentRun(selectedLeadId);
+        }, [selectedLeadId, loadAgentRun]);
 
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;
@@ -7839,6 +7908,47 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               <div className="section-head">{header}</div>
               <div className="mobile-shell-content">{content}</div>
               {bottomBar || null}
+            </div>
+          );
+        }
+
+        function renderAiFlowPanel(lead) {
+          if (!lead || String(lead.channelType || "").toUpperCase() !== "MOBILE_LAB") return null;
+          const flow = lead.agentRun && typeof lead.agentRun === "object" ? lead.agentRun : null;
+          const run = flow && flow.run && typeof flow.run === "object" ? flow.run : null;
+          const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
+          const hasCards = Array.isArray(lead.suggestions) && lead.suggestions.length > 0;
+          const resultLabel = hasCards ? "cards ready" : "no cards";
+          const modeRaw = String(lead.generationMode || "").trim().toLowerCase();
+          const modeLabel = modeRaw === "cached" ? "cached state reused" : modeRaw === "fresh" ? "fresh generation" : null;
+          return (
+            <div className="preview" style={{ marginTop: "10px", fontSize: "11px", lineHeight: 1.45 }}>
+              <div style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.78 }}>AI Flow</div>
+              {run
+                ? (
+                  <>
+                    <div>runId: {String(run.id || "-")}</div>
+                    <div>status: {String(run.status || "-")}</div>
+                    <div>startedAt: {String(run.startedAt || "-")}</div>
+                    <div>finishedAt: {String(run.finishedAt || "-")}</div>
+                  </>
+                )
+                : <div>run: none</div>}
+              <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
+              {steps.length
+                ? (
+                  <div style={{ marginTop: "4px" }}>
+                    {steps.map((step, index) => (
+                      <div key={String(step.stepName || "") + "-" + String(index)}>
+                        {String(step.stepName || "step")} · {String(step.status || "-")}
+                        {step.provider ? " · " + String(step.provider) : ""}
+                        {step.error ? " · err: " + String(step.error) : ""}
+                      </div>
+                    ))}
+                  </div>
+                )
+                : null}
+              {lead.agentRunError ? <div>flowError: {String(lead.agentRunError)}</div> : null}
             </div>
           );
         }
@@ -8528,6 +8638,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                   </div>
                                 )}
                             </div>
+                            {renderAiFlowPanel(selectedLead)}
                           </div>
                         </div>
 
@@ -8704,6 +8815,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                   </div>
                                 )}
                             </div>
+                            {renderAiFlowPanel(selectedLead)}
                           </div>
 
                           <div className="chat-messages">

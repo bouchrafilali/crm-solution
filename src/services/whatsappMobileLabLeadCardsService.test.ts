@@ -6,6 +6,10 @@ import { buildMobileLabFeed } from "./whatsappMobileLabFeedService.js";
 test("selected lead cards success", async () => {
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
+    getLatestLeadMessage: async () => ({ id: "msg-1", createdAt: "2026-03-07T00:00:00.000Z" }),
+    persistCachedLeadState: async () => {
+      throw new Error("ignore_persist_for_test");
+    },
     getActiveReplyContext: async () => ({
       replyOptions: {
         reply_options: [
@@ -62,16 +66,22 @@ test("selected lead cards success", async () => {
   assert.equal(payload.enrichmentStatus, "enriched");
   assert.equal(payload.enrichmentSource, "active_ai_cards");
   assert.equal(payload.status, "enriched");
-  assert.equal(payload.source, "active_ai_cards");
+  assert.equal(payload.source, "fresh_generation");
+  assert.equal(payload.cacheStatus, "miss");
+  assert.equal(payload.pipelineSource, "active_ai_cards");
+  assert.equal(payload.basedOnMessageId, "msg-1");
   assert.equal(payload.error, null);
   assert.equal(payload.replyCards.length, 0);
   assert.equal(payload.topReplyCard?.label, "Option 1");
+  assert.equal(payload.generationMode, "fresh");
   assert.equal(payload.enrichmentError, null);
 });
 
 test("persisted results are reused before regeneration", async () => {
+  let activeCallCount = 0;
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
+    getLatestLeadMessage: async () => ({ id: "message-1", createdAt: "2026-03-06T23:59:00.000Z" }),
     getCachedLeadState: async () => ({
       leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
       latestRunId: "run-1",
@@ -106,18 +116,145 @@ test("persisted results are reused before regeneration", async () => {
       updatedAt: "2026-03-07T00:00:00.000Z"
     }),
     getActiveReplyContext: async () => {
+      activeCallCount += 1;
       throw new Error("should_not_regenerate_when_cached");
     }
   });
 
   assert.equal(payload.enrichmentStatus, "enriched");
   assert.equal(payload.topReplyCard?.label, "Option cached");
+  assert.equal(payload.generationMode, "cached");
+  assert.equal(payload.source, "cache");
+  assert.equal(payload.cacheStatus, "hit");
+  assert.equal(activeCallCount, 0);
   assert.equal(payload.replyCards.length, 0);
+});
+
+test("stale cache triggers regeneration", async () => {
+  let activeCallCount = 0;
+  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
+    timeoutMs: () => 5000,
+    getLatestLeadMessage: async () => ({ id: "msg-new", createdAt: "2026-03-07T01:00:00.000Z" }),
+    getCachedLeadState: async () => ({
+      leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+      latestRunId: "run-1",
+      latestMessageId: "msg-old",
+      stageAnalysis: null,
+      facts: null,
+      priorityItem: null,
+      strategy: null,
+      replyOptions: null,
+      brandReview: null,
+      topReplyCard: { label: "Old", intent: "Old", messages: ["A", "B"] },
+      providers: null,
+      createdAt: "2026-03-06T00:00:00.000Z",
+      updatedAt: "2026-03-06T00:00:00.000Z"
+    }),
+    persistCachedLeadState: async () => {
+      throw new Error("ignore_persist_for_test");
+    },
+    getActiveReplyContext: async () => {
+      activeCallCount += 1;
+      return {
+        replyOptions: {
+          reply_options: [
+            { label: "Fresh 1", intent: "Clarify", messages: ["Message 1", "Message 2"] },
+            { label: "Fresh 2", intent: "Guide", messages: ["Message 1", "Message 2"] },
+            { label: "Fresh 3", intent: "Close", messages: ["Message 1", "Message 2"] }
+          ]
+        },
+        strategy: {
+          recommended_action: "answer_precisely",
+          action_confidence: 0.9,
+          commercial_priority: "high",
+          tone: "warm_refined",
+          pressure_level: "low",
+          primary_goal: "Clarify options",
+          secondary_goal: "Move to next step",
+          missed_opportunities: [],
+          strategy_rationale: [],
+          do_now: [],
+          avoid: []
+        },
+        stageAnalysis: {
+          stage: "QUALIFIED",
+          stage_confidence: 0.91,
+          priority_score: 71,
+          urgency: "medium",
+          payment_intent: false,
+          dropoff_risk: "low",
+          signals: [],
+          facts: {
+            products_of_interest: [],
+            event_date: null,
+            delivery_deadline: null,
+            destination_country: null,
+            budget: null,
+            price_points_detected: [],
+            customization_requests: [],
+            preferred_colors: [],
+            preferred_fabrics: [],
+            payment_method_preference: null
+          },
+          objections: [],
+          recommended_next_action: "answer_precisely",
+          reasoning_summary: []
+        },
+        transcriptLength: 120,
+        messageCount: 3,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        timestamp: "2026-03-07T00:00:00.000Z"
+      };
+    }
+  });
+
+  assert.equal(activeCallCount, 1);
+  assert.equal(payload.source, "fresh_generation");
+  assert.equal(payload.cacheStatus, "stale");
+  assert.equal(payload.topReplyCard?.label, "Fresh 1");
+});
+
+test("unchanged lead does not regenerate repeatedly", async () => {
+  let activeCallCount = 0;
+  const deps = {
+    timeoutMs: () => 5000,
+    getLatestLeadMessage: async () => ({ id: "msg-same", createdAt: "2026-03-07T00:00:00.000Z" }),
+    getCachedLeadState: async () => ({
+      leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+      latestRunId: "run-1",
+      latestMessageId: "msg-same",
+      stageAnalysis: null,
+      facts: null,
+      priorityItem: null,
+      strategy: null,
+      replyOptions: null,
+      brandReview: null,
+      topReplyCard: { label: "Stable", intent: "Stable", messages: ["A", "B"] },
+      providers: null,
+      createdAt: "2026-03-06T00:00:00.000Z",
+      updatedAt: "2026-03-07T00:00:01.000Z"
+    }),
+    getActiveReplyContext: async () => {
+      activeCallCount += 1;
+      throw new Error("should_not_call_on_unchanged");
+    }
+  };
+
+  const first = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, deps);
+  const second = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, deps);
+
+  assert.equal(first.source, "cache");
+  assert.equal(second.source, "cache");
+  assert.equal(first.cacheStatus, "hit");
+  assert.equal(second.cacheStatus, "hit");
+  assert.equal(activeCallCount, 0);
 });
 
 test("selected lead cards timeout", async () => {
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 50,
+    getLatestLeadMessage: async () => ({ id: "msg-timeout", createdAt: "2026-03-07T00:00:00.000Z" }),
     getActiveReplyContext: async () =>
       new Promise((resolve) => {
         setTimeout(() => {
@@ -179,7 +316,8 @@ test("selected lead cards timeout", async () => {
   assert.equal(payload.enrichmentStatus, "timeout");
   assert.equal(payload.enrichmentSource, "active_ai_cards");
   assert.equal(payload.status, "timeout");
-  assert.equal(payload.source, "active_ai_cards");
+  assert.equal(payload.source, "fresh_generation");
+  assert.equal(payload.pipelineSource, "active_ai_cards");
   assert.equal(payload.topReplyCard, null);
   assert.equal(payload.replyCards.length, 0);
   assert.equal(typeof payload.enrichmentError, "string");
@@ -188,6 +326,7 @@ test("selected lead cards timeout", async () => {
 test("selected lead cards error", async () => {
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 2000,
+    getLatestLeadMessage: async () => ({ id: "msg-error", createdAt: "2026-03-07T00:00:00.000Z" }),
     getActiveReplyContext: async () => {
       throw new Error("provider_failed");
     }
@@ -196,7 +335,8 @@ test("selected lead cards error", async () => {
   assert.equal(payload.enrichmentStatus, "error");
   assert.equal(payload.enrichmentSource, "active_ai_cards");
   assert.equal(payload.status, "error");
-  assert.equal(payload.source, "active_ai_cards");
+  assert.equal(payload.source, "fresh_generation");
+  assert.equal(payload.pipelineSource, "active_ai_cards");
   assert.equal(payload.topReplyCard, null);
   assert.equal(payload.replyCards.length, 0);
   assert.equal(payload.enrichmentError, "provider_failed");
@@ -228,6 +368,7 @@ test("selected reactivation lead cards success", async () => {
         model: "gpt-4.1-mini",
         timestamp: "2026-03-07T00:00:00.000Z"
       }),
+      getLatestLeadMessage: async () => ({ id: "msg-reactivation", createdAt: "2026-03-07T00:00:00.000Z" }),
       getActiveReplyContext: async () => {
         throw new Error("should_not_call_ai_cards");
       }
@@ -237,7 +378,8 @@ test("selected reactivation lead cards success", async () => {
   assert.equal(payload.enrichmentStatus, "enriched");
   assert.equal(payload.enrichmentSource, "reactivation_replies");
   assert.equal(payload.status, "enriched");
-  assert.equal(payload.source, "reactivation_replies");
+  assert.equal(payload.source, "fresh_generation");
+  assert.equal(payload.pipelineSource, "reactivation_replies");
   assert.equal(payload.topReplyCard?.label, "Option 1");
   assert.equal(payload.replyCards.length, 0);
 });

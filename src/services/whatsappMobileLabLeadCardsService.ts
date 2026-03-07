@@ -2,11 +2,12 @@ import {
   buildReplyGeneratorFromContext,
   type ReplyGeneratorResult
 } from "./whatsappReplyGeneratorService.js";
-import { getWhatsAppAgentLeadState } from "../db/whatsappAgentRunsRepo.js";
+import { getWhatsAppAgentLeadState, upsertWhatsAppAgentLeadState } from "../db/whatsappAgentRunsRepo.js";
 import { detectStageFromTranscript } from "./whatsappStageDetectionService.js";
 import { buildStrategicAdvisorFromContext } from "./whatsappStrategicAdvisorService.js";
 import { buildLeadTranscript } from "./whatsappTranscriptFormatter.js";
 import { buildLeadReactivationReplies } from "./whatsappReactivationReplyService.js";
+import { listWhatsAppLeadMessages } from "../db/whatsappLeadsRepo.js";
 
 type Card = {
   label: string;
@@ -18,6 +19,11 @@ export type MobileLabLeadCardsResult = {
   leadId: string;
   replyCards: Card[];
   topReplyCard: Card | null;
+  generationMode: "cached" | "fresh" | null;
+  source: "cache" | "fresh_generation";
+  cacheStatus: "hit" | "miss" | "stale";
+  basedOnMessageId: string | null;
+  basedOnTimestamp: string | null;
   stageAnalysis: {
     stage: string;
     stageConfidence: number;
@@ -46,7 +52,7 @@ export type MobileLabLeadCardsResult = {
   enrichmentSource: "active_ai_cards" | "reactivation_replies";
   enrichmentError: string | null;
   status: "enriched" | "timeout" | "error" | "no_generation_needed";
-  source: "active_ai_cards" | "reactivation_replies";
+  pipelineSource: "active_ai_cards" | "reactivation_replies";
   error: string | null;
   provider: string | null;
   model: string | null;
@@ -55,6 +61,16 @@ export type MobileLabLeadCardsResult = {
 
 type MobileLabLeadCardsDeps = {
   getCachedLeadState: (leadId: string) => ReturnType<typeof getWhatsAppAgentLeadState>;
+  getLatestLeadMessage: (leadId: string) => Promise<{ id: string; createdAt: string } | null>;
+  persistCachedLeadState: (input: {
+    leadId: string;
+    latestMessageId?: string | null;
+    stageAnalysis?: Record<string, unknown> | null;
+    strategy?: Record<string, unknown> | null;
+    replyOptions?: Record<string, unknown> | null;
+    topReplyCard?: Record<string, unknown> | null;
+    providers?: Record<string, unknown> | null;
+  }) => ReturnType<typeof upsertWhatsAppAgentLeadState>;
   getActiveReplyContext: (leadId: string) => Promise<ReplyGeneratorResult>;
   getReactivationReplies: (leadId: string) => ReturnType<typeof buildLeadReactivationReplies>;
   timeoutMs: () => number;
@@ -76,6 +92,22 @@ function resolveTimeoutMs(): number {
 function defaultDeps(): MobileLabLeadCardsDeps {
   return {
     getCachedLeadState: (leadId: string) => getWhatsAppAgentLeadState(leadId),
+    getLatestLeadMessage: async (leadId: string) => {
+      const messages = await listWhatsAppLeadMessages(leadId, { limit: 1, order: "desc" });
+      const latest = messages[0] || null;
+      if (!latest) return null;
+      return { id: String(latest.id || "").trim(), createdAt: String(latest.createdAt || "").trim() };
+    },
+    persistCachedLeadState: (input) =>
+      upsertWhatsAppAgentLeadState({
+        leadId: input.leadId,
+        latestMessageId: input.latestMessageId ?? null,
+        stageAnalysis: input.stageAnalysis ?? null,
+        strategy: input.strategy ?? null,
+        replyOptions: input.replyOptions ?? null,
+        topReplyCard: input.topReplyCard ?? null,
+        providers: input.providers ?? null
+      }),
     getActiveReplyContext: async (leadId: string) => {
       const transcript = await buildLeadTranscript(leadId, 30);
       const stageDetection = await detectStageFromTranscript({ leadId, transcript });
@@ -113,15 +145,39 @@ function toSafeError(error: unknown): string {
   return text.slice(0, 180);
 }
 
+function toMs(value: string | null | undefined): number {
+  if (!value) return NaN;
+  return new Date(value).getTime();
+}
+
+function resolveCacheStatus(input: {
+  forceRefresh: boolean;
+  hasCachedTopCard: boolean;
+  cachedLatestMessageId: string | null;
+  cachedUpdatedAt: string | null;
+  latestMessageId: string | null;
+  latestMessageAt: string | null;
+}): "hit" | "miss" | "stale" {
+  if (input.forceRefresh) return "stale";
+  if (!input.hasCachedTopCard) return "miss";
+  if (!input.latestMessageId && !input.latestMessageAt) return "hit";
+  if (input.cachedLatestMessageId && input.latestMessageId && input.cachedLatestMessageId !== input.latestMessageId) return "stale";
+  const latestMs = toMs(input.latestMessageAt);
+  const cachedMs = toMs(input.cachedUpdatedAt);
+  if (Number.isFinite(latestMs) && Number.isFinite(cachedMs) && latestMs > cachedMs) return "stale";
+  return "hit";
+}
+
 export async function buildMobileLabLeadCards(
   leadId: string,
-  input?: { feedType?: "active" | "reactivation" | null },
+  input?: { feedType?: "active" | "reactivation" | null; forceRefresh?: boolean | null },
   depsOverride?: Partial<MobileLabLeadCardsDeps>
 ): Promise<MobileLabLeadCardsResult> {
   const safeLeadId = String(leadId || "").trim();
   const deps: MobileLabLeadCardsDeps = { ...defaultDeps(), ...(depsOverride || {}) };
   const timeoutMs = deps.timeoutMs();
   const feedType = input?.feedType === "reactivation" ? "reactivation" : "active";
+  const forceRefresh = Boolean(input?.forceRefresh);
 
   try {
     if (feedType === "active") {
@@ -134,11 +190,28 @@ export async function buildMobileLabLeadCards(
           error: error instanceof Error ? error.message : String(error)
         });
       }
+      let latestMessage: { id: string; createdAt: string } | null = null;
+      try {
+        latestMessage = await deps.getLatestLeadMessage(safeLeadId);
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] latest_message_unavailable", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
       const cachedTop = cached?.topReplyCard && typeof cached.topReplyCard === "object" ? cached.topReplyCard : null;
       const cachedMessages = cachedTop && Array.isArray(cachedTop.messages)
         ? cachedTop.messages.map((m) => String(m || "")).filter(Boolean)
         : [];
-      if (cachedTop && cachedMessages.length > 0) {
+      const cacheStatus = resolveCacheStatus({
+        forceRefresh,
+        hasCachedTopCard: Boolean(cachedTop && cachedMessages.length > 0),
+        cachedLatestMessageId: cached?.latestMessageId || null,
+        cachedUpdatedAt: cached?.updatedAt || null,
+        latestMessageId: latestMessage?.id || null,
+        latestMessageAt: latestMessage?.createdAt || null
+      });
+      if (cacheStatus === "hit" && cachedTop && cachedMessages.length > 0) {
         const topReplyCard = {
           label: String(cachedTop.label || "").trim(),
           intent: String(cachedTop.intent || "").trim(),
@@ -158,6 +231,11 @@ export async function buildMobileLabLeadCards(
           leadId: safeLeadId,
           replyCards: [],
           topReplyCard,
+          generationMode: "cached",
+          source: "cache",
+          cacheStatus: "hit",
+          basedOnMessageId: cached?.latestMessageId || latestMessage?.id || null,
+          basedOnTimestamp: latestMessage?.createdAt || cached?.updatedAt || null,
           stageAnalysis: stage
             ? {
                 stage: String(stage.stage || ""),
@@ -192,13 +270,84 @@ export async function buildMobileLabLeadCards(
           enrichmentSource: "active_ai_cards",
           enrichmentError: null,
           status: "enriched",
-          source: "active_ai_cards",
+          pipelineSource: "active_ai_cards",
           error: null,
           provider,
           model: null,
           timestamp: new Date().toISOString()
         };
       }
+
+      const replyContext = await withTimeout(deps.getActiveReplyContext(safeLeadId), timeoutMs);
+      const replyCards = Array.isArray(replyContext.replyOptions?.reply_options) ? replyContext.replyOptions.reply_options : [];
+      const topReplyCard = replyCards.length
+        ? {
+            label: String(replyCards[0].label || "").trim(),
+            intent: String(replyCards[0].intent || "").trim(),
+            messages: Array.isArray(replyCards[0].messages) ? replyCards[0].messages.map((m) => String(m || "")).filter(Boolean) : []
+          }
+        : null;
+      const status = topReplyCard ? "enriched" : "no_generation_needed";
+      const pipelineSource = "active_ai_cards" as const;
+      try {
+        await deps.persistCachedLeadState({
+          leadId: safeLeadId,
+          latestMessageId: latestMessage?.id || null,
+          stageAnalysis: replyContext.stageAnalysis as unknown as Record<string, unknown>,
+          strategy: replyContext.strategy as unknown as Record<string, unknown>,
+          replyOptions: replyContext.replyOptions as unknown as Record<string, unknown>,
+          topReplyCard: topReplyCard as unknown as Record<string, unknown> | null,
+          providers: { reply_generator: replyContext.provider }
+        });
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] persist_cached_state_failed", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return {
+        leadId: safeLeadId,
+        replyCards: [],
+        topReplyCard,
+        generationMode: "fresh",
+        source: "fresh_generation",
+        cacheStatus,
+        basedOnMessageId: latestMessage?.id || null,
+        basedOnTimestamp: latestMessage?.createdAt || null,
+        stageAnalysis: {
+          stage: replyContext.stageAnalysis.stage,
+          stageConfidence: replyContext.stageAnalysis.stage_confidence,
+          urgency: replyContext.stageAnalysis.urgency,
+          paymentIntent: replyContext.stageAnalysis.payment_intent,
+          dropoffRisk: replyContext.stageAnalysis.dropoff_risk,
+          priorityScore: replyContext.stageAnalysis.priority_score
+        },
+        summary: {
+          stage: replyContext.stageAnalysis.stage,
+          stageConfidence: replyContext.stageAnalysis.stage_confidence,
+          urgency: replyContext.stageAnalysis.urgency,
+          paymentIntent: replyContext.stageAnalysis.payment_intent,
+          dropoffRisk: replyContext.stageAnalysis.dropoff_risk,
+          priorityScore: replyContext.stageAnalysis.priority_score
+        },
+        strategy: {
+          recommendedAction: replyContext.strategy.recommended_action,
+          commercialPriority: replyContext.strategy.commercial_priority,
+          tone: replyContext.strategy.tone,
+          pressureLevel: replyContext.strategy.pressure_level,
+          primaryGoal: replyContext.strategy.primary_goal,
+          secondaryGoal: replyContext.strategy.secondary_goal
+        },
+        enrichmentStatus: status,
+        enrichmentSource: pipelineSource,
+        enrichmentError: null,
+        status,
+        pipelineSource,
+        error: null,
+        provider: replyContext.provider || null,
+        model: replyContext.model || null,
+        timestamp: new Date().toISOString()
+      };
     }
 
     if (feedType === "reactivation") {
@@ -217,6 +366,11 @@ export async function buildMobileLabLeadCards(
         leadId: safeLeadId,
         replyCards: [],
         topReplyCard,
+        generationMode: "fresh",
+        source: "fresh_generation",
+        cacheStatus: "miss",
+        basedOnMessageId: null,
+        basedOnTimestamp: null,
         stageAnalysis: null,
         summary: null,
         strategy: null,
@@ -224,7 +378,7 @@ export async function buildMobileLabLeadCards(
         enrichmentSource: source,
         enrichmentError: null,
         status,
-        source,
+        pipelineSource: source,
         error: null,
         provider: reactivation.provider || null,
         model: reactivation.model || null,
@@ -232,53 +386,26 @@ export async function buildMobileLabLeadCards(
       };
     }
 
-    const replyContext = await withTimeout(deps.getActiveReplyContext(safeLeadId), timeoutMs);
-    const replyCards = Array.isArray(replyContext.replyOptions?.reply_options) ? replyContext.replyOptions.reply_options : [];
-    const topReplyCard = replyCards.length
-      ? {
-          label: String(replyCards[0].label || "").trim(),
-          intent: String(replyCards[0].intent || "").trim(),
-          messages: Array.isArray(replyCards[0].messages) ? replyCards[0].messages.map((m) => String(m || "")).filter(Boolean) : []
-        }
-      : null;
-    const status = topReplyCard ? "enriched" : "no_generation_needed";
-    const source = "active_ai_cards" as const;
     return {
       leadId: safeLeadId,
       replyCards: [],
-      topReplyCard,
-      stageAnalysis: {
-        stage: replyContext.stageAnalysis.stage,
-        stageConfidence: replyContext.stageAnalysis.stage_confidence,
-        urgency: replyContext.stageAnalysis.urgency,
-        paymentIntent: replyContext.stageAnalysis.payment_intent,
-        dropoffRisk: replyContext.stageAnalysis.dropoff_risk,
-        priorityScore: replyContext.stageAnalysis.priority_score
-      },
-      summary: {
-        stage: replyContext.stageAnalysis.stage,
-        stageConfidence: replyContext.stageAnalysis.stage_confidence,
-        urgency: replyContext.stageAnalysis.urgency,
-        paymentIntent: replyContext.stageAnalysis.payment_intent,
-        dropoffRisk: replyContext.stageAnalysis.dropoff_risk,
-        priorityScore: replyContext.stageAnalysis.priority_score
-      },
-      strategy: {
-        recommendedAction: replyContext.strategy.recommended_action,
-        commercialPriority: replyContext.strategy.commercial_priority,
-        tone: replyContext.strategy.tone,
-        pressureLevel: replyContext.strategy.pressure_level,
-        primaryGoal: replyContext.strategy.primary_goal,
-        secondaryGoal: replyContext.strategy.secondary_goal
-      },
-      enrichmentStatus: status,
-      enrichmentSource: source,
+      topReplyCard: null,
+      generationMode: null,
+      source: "fresh_generation",
+      cacheStatus: "miss",
+      basedOnMessageId: null,
+      basedOnTimestamp: null,
+      stageAnalysis: null,
+      summary: null,
+      strategy: null,
+      enrichmentStatus: "no_generation_needed",
+      enrichmentSource: "active_ai_cards",
       enrichmentError: null,
-      status,
-      source,
+      status: "no_generation_needed",
+      pipelineSource: "active_ai_cards",
       error: null,
-      provider: replyContext.provider || null,
-      model: replyContext.model || null,
+      provider: null,
+      model: null,
       timestamp: new Date().toISOString()
     };
   } catch (error) {
@@ -290,6 +417,11 @@ export async function buildMobileLabLeadCards(
       leadId: safeLeadId,
       replyCards: [],
       topReplyCard: null,
+      generationMode: null,
+      source: "fresh_generation",
+      cacheStatus: "stale",
+      basedOnMessageId: null,
+      basedOnTimestamp: null,
       stageAnalysis: null,
       summary: null,
       strategy: null,
@@ -297,7 +429,7 @@ export async function buildMobileLabLeadCards(
       enrichmentSource: source,
       enrichmentError: safeError,
       status,
-      source,
+      pipelineSource: source,
       error: safeError,
       provider: null,
       model: null,
