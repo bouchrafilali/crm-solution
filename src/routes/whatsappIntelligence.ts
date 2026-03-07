@@ -1740,7 +1740,8 @@ whatsappRouter.post("/api/whatsapp/leads/:id/outcome", async (req, res) => {
     return res.status(200).json(result);
   } catch (error) {
     if (error instanceof WhatsAppLeadOutcomeError) {
-      return res.status(400).json({ error: error.code, message: error.message });
+      const knownError = error as WhatsAppLeadOutcomeError;
+      return res.status(400).json({ error: knownError.code, message: knownError.message });
     }
     console.error("[whatsapp] lead outcome save", error);
     return res.status(503).json({ error: "lead_outcome_save_failed" });
@@ -1757,7 +1758,8 @@ whatsappRouter.get("/api/whatsapp/leads/:id/outcome", async (req, res) => {
     return res.status(200).json(result);
   } catch (error) {
     if (error instanceof WhatsAppLeadOutcomeError) {
-      return res.status(400).json({ error: error.code, message: error.message });
+      const knownError = error as WhatsAppLeadOutcomeError;
+      return res.status(400).json({ error: knownError.code, message: knownError.message });
     }
     console.error("[whatsapp] lead outcome get", error);
     return res.status(503).json({ error: "lead_outcome_get_failed" });
@@ -4251,7 +4253,8 @@ whatsappRouter.post("/api/whatsapp/operator-events", async (req, res) => {
     return res.status(200).json(result);
   } catch (error) {
     if (error instanceof WhatsAppOperatorEventError) {
-      return res.status(400).json({ error: error.code, message: error.message });
+      const knownError = error as WhatsAppOperatorEventError;
+      return res.status(400).json({ error: knownError.code, message: knownError.message });
     }
     console.error("[whatsapp] operator-events", error);
     return res.status(503).json({ error: "operator_events_unavailable" });
@@ -4280,7 +4283,8 @@ whatsappRouter.get("/api/whatsapp/operator-events/summary", async (req, res) => 
     return res.status(200).json(result);
   } catch (error) {
     if (error instanceof WhatsAppOperatorAnalyticsError) {
-      return res.status(400).json({ error: error.code, message: error.message });
+      const knownError = error as WhatsAppOperatorAnalyticsError;
+      return res.status(400).json({ error: knownError.code, message: knownError.message });
     }
     console.error("[whatsapp] operator-events-summary", error);
     return res.status(503).json({ error: "operator_events_summary_unavailable" });
@@ -4309,7 +4313,8 @@ whatsappRouter.get("/api/whatsapp/effectiveness", async (req, res) => {
     return res.status(200).json(result);
   } catch (error) {
     if (error instanceof WhatsAppOperatorEffectivenessError) {
-      return res.status(400).json({ error: error.code, message: error.message });
+      const knownError = error as WhatsAppOperatorEffectivenessError;
+      return res.status(400).json({ error: knownError.code, message: knownError.message });
     }
     console.error("[whatsapp] effectiveness", error);
     return res.status(503).json({ error: "effectiveness_unavailable" });
