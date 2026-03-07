@@ -158,6 +158,18 @@ function toMs(value: string | null | undefined): number {
   return new Date(value).getTime();
 }
 
+function normalizeTopReplyCard(value: unknown): Card | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const label = String(row.label || "").trim();
+  const intent = String(row.intent || "").trim();
+  const messages = Array.isArray(row.messages)
+    ? row.messages.map((m) => String(m || "")).map((m) => m.trim()).filter(Boolean)
+    : [];
+  if (!label || !messages.length) return null;
+  return { label, intent, messages };
+}
+
 function resolveCacheStatus(input: {
   forceRefresh: boolean;
   hasCachedTopCard: boolean;
@@ -186,8 +198,166 @@ export async function buildMobileLabLeadCards(
   const timeoutMs = deps.timeoutMs();
   const feedType = input?.feedType === "reactivation" ? "reactivation" : "active";
   const forceRefresh = Boolean(input?.forceRefresh);
+  let cachedBeforeForceRefresh: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
 
   try {
+    if (forceRefresh) {
+      try {
+        cachedBeforeForceRefresh = await deps.getCachedLeadState(safeLeadId);
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] cached_state_before_regeneration_unavailable", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      let latestMessage: { id: string; createdAt: string } | null = null;
+      try {
+        latestMessage = await deps.getLatestLeadMessage(safeLeadId);
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] latest_message_unavailable", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      if (!latestMessage?.id) {
+        return {
+          leadId: safeLeadId,
+          replyCards: [],
+          topReplyCard: null,
+          generationMode: "fresh",
+          source: "fresh_generation",
+          cacheStatus: "stale",
+          basedOnMessageId: null,
+          basedOnTimestamp: null,
+          agentRunMeta: {
+            runId: null,
+            generatedAt: null,
+            source: "fresh_generation"
+          },
+          stageAnalysis: null,
+          summary: null,
+          strategy: null,
+          enrichmentStatus: "error",
+          enrichmentSource: "active_ai_cards",
+          enrichmentError: "no_messages_for_regeneration",
+          status: "error",
+          pipelineSource: "active_ai_cards",
+          error: "no_messages_for_regeneration",
+          provider: null,
+          model: null,
+          timestamp: new Date().toISOString()
+        };
+      }
+      const regenResult = await withTimeout(
+        deps.runAgentOrchestrator({
+          leadId: safeLeadId,
+          messageId: String(latestMessage.id),
+          trigger: "mobile_lab_manual_regenerate"
+        }),
+        timeoutMs
+      );
+      let refreshed: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
+      try {
+        refreshed = await deps.getCachedLeadState(safeLeadId);
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] refreshed_state_unavailable", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      const refreshedRunId = String(refreshed?.latestRunId || "").trim();
+      const fromCurrentRun = Boolean(regenResult.runId && refreshedRunId && refreshedRunId === String(regenResult.runId));
+      const fromRun = normalizeTopReplyCard(regenResult.topReplyCard);
+      const refreshedTop = fromCurrentRun ? normalizeTopReplyCard(refreshed?.topReplyCard) : null;
+      const cachedBeforeTop = normalizeTopReplyCard(cachedBeforeForceRefresh?.topReplyCard);
+      const topReplyCard = fromRun || refreshedTop || cachedBeforeTop;
+      const stageSource =
+        fromCurrentRun && refreshed?.stageAnalysis && typeof refreshed.stageAnalysis === "object"
+          ? refreshed.stageAnalysis
+          : regenResult.stageAnalysis && typeof regenResult.stageAnalysis === "object"
+            ? regenResult.stageAnalysis
+            : null;
+      const strategySource =
+        fromCurrentRun && refreshed?.strategy && typeof refreshed.strategy === "object"
+          ? refreshed.strategy
+          : regenResult.strategy && typeof regenResult.strategy === "object"
+            ? regenResult.strategy
+            : null;
+      const providers = fromCurrentRun && refreshed?.providers && typeof refreshed.providers === "object" ? refreshed.providers : null;
+      const provider =
+        String((providers && (providers.brand_guardian || providers.reply_generator || providers.strategic_advisor || providers.stage_detection)) || "").trim() ||
+        null;
+      const partialError = regenResult.status === "partial" ? "partial_failure_some_steps_failed" : null;
+      const failed = regenResult.status === "failed";
+      const usedFallbackCard = Boolean(!fromRun && !refreshedTop && cachedBeforeTop);
+      const status = topReplyCard
+        ? "enriched"
+        : failed
+          ? "error"
+          : "no_generation_needed";
+      const errorText = usedFallbackCard
+        ? (failed
+            ? "Regeneration failed. Kept previous suggestions."
+            : regenResult.status === "partial"
+              ? "Regeneration partially failed. Kept previous suggestions."
+              : "No new usable suggestions. Kept previous suggestions.")
+        : (failed ? "provider_failed" : partialError);
+      return {
+        leadId: safeLeadId,
+        replyCards: [],
+        topReplyCard,
+        generationMode: "fresh",
+        source: "fresh_generation",
+        cacheStatus: "stale",
+        basedOnMessageId: latestMessage.id,
+        basedOnTimestamp: latestMessage.createdAt || null,
+        agentRunMeta: {
+          runId: regenResult.runId || (fromCurrentRun ? refreshed?.latestRunId || null : null),
+          generatedAt: (fromCurrentRun ? refreshed?.updatedAt : null) || latestMessage.createdAt || null,
+          source: "fresh_generation"
+        },
+        stageAnalysis: stageSource
+          ? {
+              stage: String((stageSource as Record<string, unknown>).stage || ""),
+              stageConfidence: Number((stageSource as Record<string, unknown>).stage_confidence ?? (stageSource as Record<string, unknown>).stageConfidence ?? 0),
+              urgency: String((stageSource as Record<string, unknown>).urgency || "low"),
+              paymentIntent: Boolean((stageSource as Record<string, unknown>).payment_intent ?? (stageSource as Record<string, unknown>).paymentIntent),
+              dropoffRisk: String((stageSource as Record<string, unknown>).dropoff_risk ?? (stageSource as Record<string, unknown>).dropoffRisk ?? "low"),
+              priorityScore: Number((stageSource as Record<string, unknown>).priority_score ?? (stageSource as Record<string, unknown>).priorityScore ?? 0)
+            }
+          : null,
+        summary: stageSource
+          ? {
+              stage: String((stageSource as Record<string, unknown>).stage || ""),
+              stageConfidence: Number((stageSource as Record<string, unknown>).stage_confidence ?? (stageSource as Record<string, unknown>).stageConfidence ?? 0),
+              urgency: String((stageSource as Record<string, unknown>).urgency || "low"),
+              paymentIntent: Boolean((stageSource as Record<string, unknown>).payment_intent ?? (stageSource as Record<string, unknown>).paymentIntent),
+              dropoffRisk: String((stageSource as Record<string, unknown>).dropoff_risk ?? (stageSource as Record<string, unknown>).dropoffRisk ?? "low"),
+              priorityScore: Number((stageSource as Record<string, unknown>).priority_score ?? (stageSource as Record<string, unknown>).priorityScore ?? 0)
+            }
+          : null,
+        strategy: strategySource
+          ? {
+              recommendedAction: String((strategySource as Record<string, unknown>).recommended_action ?? (strategySource as Record<string, unknown>).recommendedAction ?? ""),
+              commercialPriority: String((strategySource as Record<string, unknown>).commercial_priority ?? (strategySource as Record<string, unknown>).commercialPriority ?? "medium"),
+              tone: String((strategySource as Record<string, unknown>).tone || ""),
+              pressureLevel: String((strategySource as Record<string, unknown>).pressure_level ?? (strategySource as Record<string, unknown>).pressureLevel ?? "none"),
+              primaryGoal: String((strategySource as Record<string, unknown>).primary_goal ?? (strategySource as Record<string, unknown>).primaryGoal ?? ""),
+              secondaryGoal: String((strategySource as Record<string, unknown>).secondary_goal ?? (strategySource as Record<string, unknown>).secondaryGoal ?? "")
+            }
+          : null,
+        enrichmentStatus: status,
+        enrichmentSource: "active_ai_cards",
+        enrichmentError: errorText,
+        status,
+        pipelineSource: "active_ai_cards",
+        error: errorText,
+        provider,
+        model: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+
     if (feedType === "active") {
       let cached: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
       try {
@@ -219,137 +389,6 @@ export async function buildMobileLabLeadCards(
         latestMessageId: latestMessage?.id || null,
         latestMessageAt: latestMessage?.createdAt || null
       });
-      if (forceRefresh) {
-        if (!latestMessage?.id) {
-          return {
-            leadId: safeLeadId,
-            replyCards: [],
-            topReplyCard: null,
-            generationMode: "fresh",
-            source: "fresh_generation",
-            cacheStatus: "stale",
-            basedOnMessageId: null,
-            basedOnTimestamp: null,
-            agentRunMeta: {
-              runId: null,
-              generatedAt: null,
-              source: "fresh_generation"
-            },
-            stageAnalysis: null,
-            summary: null,
-            strategy: null,
-            enrichmentStatus: "error",
-            enrichmentSource: "active_ai_cards",
-            enrichmentError: "no_messages_for_regeneration",
-            status: "error",
-            pipelineSource: "active_ai_cards",
-            error: "no_messages_for_regeneration",
-            provider: null,
-            model: null,
-            timestamp: new Date().toISOString()
-          };
-        }
-        const regenResult = await withTimeout(
-          deps.runAgentOrchestrator({
-            leadId: safeLeadId,
-            messageId: String(latestMessage.id),
-            trigger: "mobile_lab_manual_regenerate"
-          }),
-          timeoutMs
-        );
-        let refreshed: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
-        try {
-          refreshed = await deps.getCachedLeadState(safeLeadId);
-        } catch (error) {
-          console.warn("[mobile-lab-lead-cards] refreshed_state_unavailable", {
-            leadId: safeLeadId,
-            error: error instanceof Error ? error.message : String(error)
-          });
-        }
-        const refreshedRunId = String(refreshed?.latestRunId || "").trim();
-        const fromCurrentRun = Boolean(regenResult.runId && refreshedRunId && refreshedRunId === String(regenResult.runId));
-        const refreshedTop = fromCurrentRun && refreshed?.topReplyCard && typeof refreshed.topReplyCard === "object"
-          ? refreshed.topReplyCard
-          : null;
-        const refreshedMessages = refreshedTop && Array.isArray(refreshedTop.messages)
-          ? refreshedTop.messages.map((m) => String(m || "")).filter(Boolean)
-          : [];
-        const topReplyCard = refreshedTop && refreshedMessages.length
-          ? {
-              label: String(refreshedTop.label || "").trim(),
-              intent: String(refreshedTop.intent || "").trim(),
-              messages: refreshedMessages
-            }
-          : null;
-        const stage = fromCurrentRun && refreshed?.stageAnalysis && typeof refreshed.stageAnalysis === "object" ? refreshed.stageAnalysis : null;
-        const strategy = fromCurrentRun && refreshed?.strategy && typeof refreshed.strategy === "object" ? refreshed.strategy : null;
-        const providers = fromCurrentRun && refreshed?.providers && typeof refreshed.providers === "object" ? refreshed.providers : null;
-        const provider =
-          String((providers && (providers.brand_guardian || providers.reply_generator || providers.strategic_advisor || providers.stage_detection)) || "").trim() ||
-          null;
-        const partialError = regenResult.status === "partial" ? "partial_failure_some_steps_failed" : null;
-        const failed = regenResult.status === "failed";
-        const status = topReplyCard
-          ? "enriched"
-          : failed
-            ? "error"
-            : "no_generation_needed";
-        const errorText = failed ? "provider_failed" : partialError;
-        return {
-          leadId: safeLeadId,
-          replyCards: [],
-          topReplyCard,
-          generationMode: "fresh",
-          source: "fresh_generation",
-          cacheStatus: "stale",
-          basedOnMessageId: latestMessage.id,
-          basedOnTimestamp: latestMessage.createdAt || null,
-          agentRunMeta: {
-            runId: regenResult.runId || (fromCurrentRun ? refreshed?.latestRunId || null : null),
-            generatedAt: (fromCurrentRun ? refreshed?.updatedAt : null) || latestMessage.createdAt || null,
-            source: "fresh_generation"
-          },
-          stageAnalysis: stage
-            ? {
-                stage: String(stage.stage || ""),
-                stageConfidence: Number(stage.stage_confidence ?? stage.stageConfidence ?? 0),
-                urgency: String(stage.urgency || "low"),
-                paymentIntent: Boolean(stage.payment_intent ?? stage.paymentIntent),
-                dropoffRisk: String(stage.dropoff_risk ?? stage.dropoffRisk ?? "low"),
-                priorityScore: Number(stage.priority_score ?? stage.priorityScore ?? 0)
-              }
-            : null,
-          summary: stage
-            ? {
-                stage: String(stage.stage || ""),
-                stageConfidence: Number(stage.stage_confidence ?? stage.stageConfidence ?? 0),
-                urgency: String(stage.urgency || "low"),
-                paymentIntent: Boolean(stage.payment_intent ?? stage.paymentIntent),
-                dropoffRisk: String(stage.dropoff_risk ?? stage.dropoffRisk ?? "low"),
-                priorityScore: Number(stage.priority_score ?? stage.priorityScore ?? 0)
-              }
-            : null,
-          strategy: strategy
-            ? {
-                recommendedAction: String(strategy.recommended_action ?? strategy.recommendedAction ?? ""),
-                commercialPriority: String(strategy.commercial_priority ?? strategy.commercialPriority ?? "medium"),
-                tone: String(strategy.tone || ""),
-                pressureLevel: String(strategy.pressure_level ?? strategy.pressureLevel ?? "none"),
-                primaryGoal: String(strategy.primary_goal ?? strategy.primaryGoal ?? ""),
-                secondaryGoal: String(strategy.secondary_goal ?? strategy.secondaryGoal ?? "")
-              }
-            : null,
-          enrichmentStatus: status,
-          enrichmentSource: "active_ai_cards",
-          enrichmentError: errorText,
-          status,
-          pipelineSource: "active_ai_cards",
-          error: errorText,
-          provider,
-          model: null,
-          timestamp: new Date().toISOString()
-        };
-      }
       if (cacheStatus === "hit" && cachedTop && cachedMessages.length > 0) {
         const topReplyCard = {
           label: String(cachedTop.label || "").trim(),
@@ -572,11 +611,16 @@ export async function buildMobileLabLeadCards(
     const status = isTimeout ? "timeout" : "error";
     const source = feedType === "reactivation" ? "reactivation_replies" : "active_ai_cards";
     const safeError = toSafeError(error);
+    const cachedBeforeTop = forceRefresh ? normalizeTopReplyCard(cachedBeforeForceRefresh?.topReplyCard) : null;
+    const preserved = Boolean(cachedBeforeTop);
+    const fallbackMessage = isTimeout
+      ? "Regeneration timed out. Kept previous suggestions."
+      : "Regeneration failed. Kept previous suggestions.";
     return {
       leadId: safeLeadId,
       replyCards: [],
-      topReplyCard: null,
-      generationMode: null,
+      topReplyCard: cachedBeforeTop,
+      generationMode: forceRefresh ? "fresh" : null,
       source: "fresh_generation",
       cacheStatus: "stale",
       basedOnMessageId: null,
@@ -589,12 +633,12 @@ export async function buildMobileLabLeadCards(
       stageAnalysis: null,
       summary: null,
       strategy: null,
-      enrichmentStatus: status,
+      enrichmentStatus: preserved ? "enriched" : status,
       enrichmentSource: source,
-      enrichmentError: safeError,
-      status,
+      enrichmentError: preserved ? fallbackMessage : safeError,
+      status: preserved ? "enriched" : status,
       pipelineSource: source,
-      error: safeError,
+      error: preserved ? fallbackMessage : safeError,
       provider: null,
       model: null,
       timestamp: new Date().toISOString()

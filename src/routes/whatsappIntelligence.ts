@@ -6482,6 +6482,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           agentRun: null,
           agentRunMeta: null,
           agentRunError: null,
+          suggestionsNotice: null,
           generationMode: null,
           suggestions: [],
           messages: []
@@ -6526,6 +6527,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           agentRun: null,
           agentRunMeta: null,
           agentRunError: null,
+          suggestionsNotice: null,
           generationMode: null,
           skipAllowed: item && item.skipAllowed !== false,
           suggestions: hasCard
@@ -7399,6 +7401,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       agentRun: old.agentRun || null,
                       agentRunMeta: old.agentRunMeta || null,
                       agentRunError: old.agentRunError || null,
+                      suggestionsNotice: old.suggestionsNotice || null,
                       generationMode: old.generationMode || null,
                       messages: Array.isArray(old.messages) ? old.messages : []
                     }
@@ -7446,6 +7449,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setLoadingSuggestions(true);
           setLoadingSuggestionsLeadId(String(leadId));
           const lead = leads.find((item) => String(item.id) === String(leadId)) || null;
+          const previousSuggestions = lead && Array.isArray(lead.suggestions) ? lead.suggestions : [];
           const feedType = lead && String(lead.feedType || "").toLowerCase() === "reactivation" ? "reactivation" : "active";
           try {
             const cardsQuery = new URLSearchParams();
@@ -7460,12 +7464,22 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             if (requestId !== suggestionsRequestRef.current) return;
             const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
             const agentRunMeta = mapAgentRunMetaFromCardsPayload(payload);
+            const statusRaw = String((payload && (payload.status || payload.enrichmentStatus)) || "").trim().toLowerCase();
+            const preservePrevious = Boolean(forceRegenerate && previousSuggestions.length && !suggestions.length);
+            const suggestionNotice = preservePrevious
+              ? (statusRaw === "timeout"
+                  ? "Regeneration timed out. Kept previous suggestions."
+                  : statusRaw === "error"
+                    ? "Regeneration failed. Kept previous suggestions."
+                    : "No new usable suggestions. Kept previous suggestions.")
+              : null;
             patchLead(leadId, {
-              suggestions,
+              suggestions: preservePrevious ? previousSuggestions : suggestions,
               enrichmentStatus: String((payload && (payload.status || payload.enrichmentStatus)) || "error"),
               enrichmentSource: String((payload && (payload.enrichmentSource || payload.pipelineSource || payload.source)) || "active_ai_cards"),
               enrichmentError: payload && (payload.error || payload.enrichmentError) ? String(payload.error || payload.enrichmentError) : null,
               agentRunMeta,
+              suggestionsNotice: suggestionNotice,
               generationMode: payload && (payload.generationMode || payload.generation_mode)
                 ? String(payload.generationMode || payload.generation_mode)
                 : null
@@ -7474,12 +7488,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             if (forceRegenerate) await loadMessages(leadId);
           } catch (error) {
             if (requestId !== suggestionsRequestRef.current) return;
+            const preserved = Boolean(forceRegenerate && previousSuggestions.length);
             patchLead(leadId, {
-              suggestions: [],
-              enrichmentStatus: "error",
+              suggestions: preserved ? previousSuggestions : [],
+              enrichmentStatus: preserved ? String(lead && lead.enrichmentStatus ? lead.enrichmentStatus : "enriched") : "error",
               enrichmentSource: feedType === "reactivation" ? "reactivation_replies" : "active_ai_cards",
               enrichmentError: error instanceof Error ? error.message : String(error || "cards_failed"),
               agentRunMeta: null,
+              suggestionsNotice: preserved ? "Regeneration failed. Kept previous suggestions." : null,
               generationMode: null
             });
             console.error("[mobile-lab] lead cards load failed", { leadId, error });
@@ -8276,6 +8292,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                         ) : null}
                       </div>
                     )}
+                  {selectedLead && selectedLead.suggestionsNotice ? (
+                    <div className="preview" style={{ marginTop: "6px", fontSize: "11px", opacity: 0.9 }}>
+                      {String(selectedLead.suggestionsNotice)}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </>
@@ -8781,6 +8802,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     ) : null}
                                   </div>
                                 )}
+                              {selectedLead && selectedLead.suggestionsNotice ? (
+                                <div className="preview" style={{ marginTop: "6px", fontSize: "11px", opacity: 0.9 }}>
+                                  {String(selectedLead.suggestionsNotice)}
+                                </div>
+                              ) : null}
                             </div>
                             {renderAiFlowPanel(selectedLead)}
                           </div>
@@ -8956,6 +8982,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     ) : null}
                                   </div>
                                 )}
+                              {selectedLead && selectedLead.suggestionsNotice ? (
+                                <div className="preview" style={{ marginTop: "6px", fontSize: "11px", opacity: 0.9 }}>
+                                  {String(selectedLead.suggestionsNotice)}
+                                </div>
+                              ) : null}
                             </div>
                             {renderAiFlowPanel(selectedLead)}
                           </div>

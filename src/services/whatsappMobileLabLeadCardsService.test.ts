@@ -273,7 +273,7 @@ test("force refresh bypasses cache and stores a new orchestrator run", async () 
           stageAnalysis: null,
           strategy: null,
           priority: null,
-          topReplyCard: null
+          topReplyCard: { label: "From orchestrator", intent: "Fresh run", messages: ["R1", "R2"] }
         };
       },
       getActiveReplyContext: async () => {
@@ -286,7 +286,7 @@ test("force refresh bypasses cache and stores a new orchestrator run", async () 
   assert.equal(payload.generationMode, "fresh");
   assert.equal(payload.source, "fresh_generation");
   assert.equal(payload.cacheStatus, "stale");
-  assert.equal(payload.topReplyCard?.label, "New");
+  assert.equal(payload.topReplyCard?.label, "From orchestrator");
   assert.equal(payload.agentRunMeta.runId, "run-force-new");
   assert.equal(payload.enrichmentStatus, "enriched");
 });
@@ -329,6 +329,185 @@ test("force refresh surfaces partial failure safely", async () => {
   assert.equal(payload.enrichmentStatus, "enriched");
   assert.equal(payload.enrichmentError, "partial_failure_some_steps_failed");
   assert.equal(payload.agentRunMeta.runId, "run-force-partial");
+});
+
+test("force refresh failure preserves previous cached cards", async () => {
+  const payload = await buildMobileLabLeadCards(
+    "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+    { forceRefresh: true },
+    {
+      timeoutMs: () => 2000,
+      getLatestLeadMessage: async () => ({ id: "msg-force-failed", createdAt: "2026-03-07T10:00:00.000Z" }),
+      getCachedLeadState: async () => ({
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        latestRunId: "run-old",
+        latestMessageId: "msg-old",
+        stageAnalysis: null,
+        facts: null,
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: { label: "Keep old", intent: "Fallback", messages: ["O1", "O2"] },
+        providers: null,
+        createdAt: "2026-03-07T09:00:00.000Z",
+        updatedAt: "2026-03-07T09:00:00.000Z"
+      }),
+      runAgentOrchestrator: async () => ({
+        runId: "run-failed",
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        messageId: "msg-force-failed",
+        status: "failed",
+        stageAnalysis: null,
+        strategy: null,
+        priority: null,
+        topReplyCard: null
+      })
+    }
+  );
+
+  assert.equal(payload.topReplyCard?.label, "Keep old");
+  assert.equal(payload.enrichmentStatus, "enriched");
+  assert.equal(payload.enrichmentError, "Regeneration failed. Kept previous suggestions.");
+});
+
+test("force refresh no_generation_needed preserves previous cached cards", async () => {
+  const payload = await buildMobileLabLeadCards(
+    "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+    { forceRefresh: true },
+    {
+      timeoutMs: () => 2000,
+      getLatestLeadMessage: async () => ({ id: "msg-force-empty", createdAt: "2026-03-07T10:00:00.000Z" }),
+      getCachedLeadState: async () => ({
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        latestRunId: "run-old",
+        latestMessageId: "msg-old",
+        stageAnalysis: null,
+        facts: null,
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: { label: "Keep old", intent: "Fallback", messages: ["O1", "O2"] },
+        providers: null,
+        createdAt: "2026-03-07T09:00:00.000Z",
+        updatedAt: "2026-03-07T09:00:00.000Z"
+      }),
+      runAgentOrchestrator: async () => ({
+        runId: "run-empty",
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        messageId: "msg-force-empty",
+        status: "completed",
+        stageAnalysis: null,
+        strategy: null,
+        priority: null,
+        topReplyCard: null
+      })
+    }
+  );
+
+  assert.equal(payload.topReplyCard?.label, "Keep old");
+  assert.equal(payload.enrichmentStatus, "enriched");
+  assert.equal(payload.enrichmentError, "No new usable suggestions. Kept previous suggestions.");
+});
+
+test("force refresh timeout preserves previous cached cards", async () => {
+  const payload = await buildMobileLabLeadCards(
+    "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+    { forceRefresh: true },
+    {
+      timeoutMs: () => 25,
+      getLatestLeadMessage: async () => ({ id: "msg-force-timeout", createdAt: "2026-03-07T10:00:00.000Z" }),
+      getCachedLeadState: async () => ({
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        latestRunId: "run-old",
+        latestMessageId: "msg-old",
+        stageAnalysis: null,
+        facts: null,
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: { label: "Keep old", intent: "Fallback", messages: ["O1", "O2"] },
+        providers: null,
+        createdAt: "2026-03-07T09:00:00.000Z",
+        updatedAt: "2026-03-07T09:00:00.000Z"
+      }),
+      runAgentOrchestrator: async () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              runId: "run-timeout",
+              leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+              messageId: "msg-force-timeout",
+              status: "completed" as const,
+              stageAnalysis: null,
+              strategy: null,
+              priority: null,
+              topReplyCard: { label: "Late", intent: "Late", messages: ["L1", "L2"] }
+            });
+          }, 120);
+        })
+    }
+  );
+
+  assert.equal(payload.topReplyCard?.label, "Keep old");
+  assert.equal(payload.enrichmentStatus, "enriched");
+  assert.equal(payload.enrichmentError, "Regeneration timed out. Kept previous suggestions.");
+});
+
+test("force refresh on reactivation still uses orchestrator run", async () => {
+  let orchestratorCalls = 0;
+  let reactivationCalls = 0;
+  const payload = await buildMobileLabLeadCards(
+    "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+    { feedType: "reactivation", forceRefresh: true },
+    {
+      timeoutMs: () => 2000,
+      getLatestLeadMessage: async () => ({ id: "msg-react-force", createdAt: "2026-03-07T10:00:00.000Z" }),
+      runAgentOrchestrator: async () => {
+        orchestratorCalls += 1;
+        return {
+          runId: "run-react-force",
+          leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+          messageId: "msg-react-force",
+          status: "completed",
+          stageAnalysis: null,
+          strategy: null,
+          priority: null,
+          topReplyCard: { label: "Run card", intent: "Manual regenerate", messages: ["A", "B"] }
+        };
+      },
+      getReactivationReplies: async () => {
+        reactivationCalls += 1;
+        return {
+          shouldGenerate: true,
+          reactivationDecision: {
+            leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+            shouldReactivate: true,
+            reactivationPriority: "high",
+            reactivationReason: "stalled",
+            stalledStage: "PRICE_SENT",
+            silenceHours: 48,
+            signals: [],
+            recommendedAction: "reactivate_gently",
+            tone: "reassuring",
+            timing: "now"
+          },
+          replyOptions: [{ label: "Option 1", intent: "Reopen", messages: ["Message 1", "Message 2"] }],
+          provider: "openai",
+          model: "gpt-4.1-mini",
+          timestamp: "2026-03-07T00:00:00.000Z"
+        };
+      }
+    }
+  );
+
+  assert.equal(orchestratorCalls, 1);
+  assert.equal(reactivationCalls, 0);
+  assert.equal(payload.topReplyCard?.label, "Run card");
+  assert.equal(payload.agentRunMeta.runId, "run-react-force");
+  assert.equal(payload.enrichmentSource, "active_ai_cards");
 });
 
 test("unchanged lead does not regenerate repeatedly", async () => {
