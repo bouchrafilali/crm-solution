@@ -1,6 +1,19 @@
-import { buildPriorityDeskView, type PriorityDeskViewResponse, type PriorityDeskViewItem } from "./whatsappPriorityDeskViewService.js";
+import { listRecentMessagesByLeadIds, listWhatsAppLeads } from "../db/whatsappLeadsRepo.js";
 import {
-  buildReactivationQueueView,
+  computePriorityScoreDeterministic,
+  type PriorityDeskItem
+} from "./whatsappPriorityDeskService.js";
+import {
+  assessReactivationDeterministic,
+  type ReactivationDecision
+} from "./whatsappReactivationEngineService.js";
+import { buildAiCardsViewModel } from "./whatsappAiCardsService.js";
+import { buildLeadReactivationReplies } from "./whatsappReactivationReplyService.js";
+import {
+  type PriorityDeskViewItem,
+  type PriorityDeskViewResponse
+} from "./whatsappPriorityDeskViewService.js";
+import {
   type ReactivationQueueViewItem,
   type ReactivationQueueViewResponse
 } from "./whatsappReactivationQueueViewService.js";
@@ -65,14 +78,236 @@ export class MobileLabFeedError extends Error {
 type MobileLabFeedDeps = {
   getPriorityView: (options: { limit: number; days: number }) => Promise<PriorityDeskViewResponse>;
   getReactivationView: (options: { limit: number; days: number }) => Promise<ReactivationQueueViewResponse>;
+  enrichActiveLead: (leadId: string) => Promise<{ topReplyCard: FeedReplyCard; tone: string | null }>;
+  enrichReactivationLead: (leadId: string) => Promise<{ topReplyCard: FeedReplyCard }>;
   getActiveSkips: () => Promise<Array<{ leadId: string; feedType: FeedType; skippedUntil: string }>>;
+  enrichmentLeadLimit: (limit: number) => number;
+  enrichmentTimeoutMs: () => number;
   nowIso: () => string;
 };
 
+function normalizeUrgency(input: string): "low" | "medium" | "high" {
+  const key = String(input || "").trim().toLowerCase();
+  if (key === "high") return "high";
+  if (key === "low") return "low";
+  return "medium";
+}
+
+function deriveUrgencyFromLead(lead: Awaited<ReturnType<typeof listWhatsAppLeads>>[number]): "low" | "medium" | "high" {
+  if (lead.risk?.isAtRisk) return "high";
+  const stage = String(lead.stage || "").toUpperCase();
+  if (stage === "DEPOSIT_PENDING" || stage === "CONFIRMED") return "high";
+  if (stage === "PRICE_SENT" || stage === "QUALIFIED" || stage === "VIDEO_PROPOSED") return "medium";
+  return "low";
+}
+
+function deriveCommercialPriority(stage: string, paymentIntent: boolean): "low" | "medium" | "high" | "critical" {
+  const key = String(stage || "").trim().toUpperCase();
+  if (key === "DEPOSIT_PENDING" || key === "CONFIRMED") return "critical";
+  if (key === "PRICE_SENT" || key === "VIDEO_PROPOSED" || paymentIntent) return "high";
+  if (key === "QUALIFIED" || key === "QUALIFICATION_PENDING" || key === "STALLED") return "medium";
+  return "low";
+}
+
+function deriveRecommendedAction(stage: string, needsReply: boolean, shouldReactivate = false): string {
+  if (shouldReactivate) return "reactivate_gently";
+  const key = String(stage || "").trim().toUpperCase();
+  if (needsReply && (key === "PRICE_SENT" || key === "DEPOSIT_PENDING" || key === "CONFIRMED")) return "answer_precisely";
+  if (key === "DEPOSIT_PENDING") return "push_softly_to_deposit";
+  if (key === "PRICE_SENT") return "clarify_timing";
+  if (key === "VIDEO_PROPOSED") return "propose_video";
+  if (key === "QUALIFICATION_PENDING" || key === "NEW") return "qualify";
+  if (key === "LOST" || key === "CONVERTED") return "close_out";
+  return "answer_precisely";
+}
+
+type LatestMessageMeta = {
+  direction: "inbound" | "outbound" | null;
+  text: string | null;
+  createdAt: string | null;
+  waitingSinceMinutes: number;
+  needsReply: boolean;
+  silenceHours: number;
+};
+
+function toMs(value: string | null | undefined): number {
+  if (!value) return NaN;
+  return new Date(value).getTime();
+}
+
+function computeLatestMessageMeta(
+  messages: Array<{ direction: "IN" | "OUT"; text: string; createdAt: string }>,
+  nowMs: number
+): LatestMessageMeta {
+  const sorted = messages.slice().sort((a, b) => toMs(a.createdAt) - toMs(b.createdAt));
+  const latest = sorted.length ? sorted[sorted.length - 1] : null;
+  const latestInbound = [...sorted].reverse().find((m) => m.direction === "IN") || null;
+  const latestOutbound = [...sorted].reverse().find((m) => m.direction === "OUT") || null;
+  const latestDirection: "inbound" | "outbound" | null = latest ? (latest.direction === "IN" ? "inbound" : "outbound") : null;
+  const needsReply = latestDirection === "inbound";
+  const waitingAnchorMs = needsReply ? toMs(latest?.createdAt || null) : NaN;
+  const waitingSinceMinutes = Number.isFinite(waitingAnchorMs) ? Math.max(0, Math.round((nowMs - waitingAnchorMs) / 60000)) : 0;
+  const silenceAnchor = latestDirection === "outbound" ? latestOutbound?.createdAt : latestInbound?.createdAt || latest?.createdAt;
+  const silenceMs = toMs(silenceAnchor || null);
+  const silenceHours = Number.isFinite(silenceMs) ? Math.max(0, Math.round(((nowMs - silenceMs) / 3600000) * 10) / 10) : 0;
+
+  return {
+    direction: latestDirection,
+    text: latest ? String(latest.text || "").trim() || null : null,
+    createdAt: latest?.createdAt || null,
+    waitingSinceMinutes,
+    needsReply,
+    silenceHours
+  };
+}
+
+async function buildPriorityViewFast(options: { limit: number; days: number }): Promise<PriorityDeskViewResponse> {
+  const leads = await listWhatsAppLeads({ limit: options.limit, days: options.days, stage: "ALL" });
+  const leadIds = leads.map((lead) => lead.id);
+  const byLead = await listRecentMessagesByLeadIds(leadIds, 30);
+  const nowMs = Date.now();
+
+  const items: PriorityDeskViewItem[] = leads.map((lead) => {
+    const rows = byLead.get(lead.id) || [];
+    const latest = computeLatestMessageMeta(rows, nowMs);
+    const urgency = deriveUrgencyFromLead(lead);
+    const commercialPriority = deriveCommercialPriority(lead.stage, Boolean(lead.paymentIntent));
+    const recommendedAction = deriveRecommendedAction(lead.stage, latest.needsReply);
+    const scored = computePriorityScoreDeterministic({
+      stage: lead.stage,
+      urgency,
+      paymentIntent: Boolean(lead.paymentIntent),
+      dropoffRisk: lead.risk?.isAtRisk ? "high" : "low",
+      recommendedAction,
+      commercialPriority,
+      needsReply: latest.needsReply,
+      waitingSinceMinutes: latest.waitingSinceMinutes
+    });
+
+    return {
+      leadId: lead.id,
+      clientName: lead.clientName || null,
+      lastMessagePreview: latest.text,
+      lastMessageAt: latest.createdAt,
+      latestMessageDirection: latest.direction,
+      needsReply: latest.needsReply,
+      waitingSinceMinutes: latest.waitingSinceMinutes,
+      priorityScore: scored.priorityScore,
+      priorityBand: scored.priorityBand,
+      estimatedHeat: scored.estimatedHeat,
+      stage: lead.stage,
+      urgency,
+      paymentIntent: Boolean(lead.paymentIntent),
+      dropoffRisk: lead.risk?.isAtRisk ? "high" : "low",
+      recommendedAction,
+      commercialPriority,
+      tone: null,
+      reasons: scored.reasons,
+      topReplyCard: null
+    };
+  });
+
+  return {
+    items,
+    meta: {
+      count: items.length,
+      limit: options.limit,
+      days: options.days,
+      generatedAt: new Date().toISOString()
+    }
+  };
+}
+
+async function buildReactivationViewFast(options: { limit: number; days: number }): Promise<ReactivationQueueViewResponse> {
+  const leads = await listWhatsAppLeads({ limit: options.limit, days: options.days, stage: "ALL" });
+  const leadIds = leads.map((lead) => lead.id);
+  const byLead = await listRecentMessagesByLeadIds(leadIds, 30);
+  const nowMs = Date.now();
+
+  const items: ReactivationQueueViewItem[] = leads
+    .map((lead) => {
+      const rows = byLead.get(lead.id) || [];
+      const latest = computeLatestMessageMeta(rows, nowMs);
+      const urgency = deriveUrgencyFromLead(lead);
+      const recommendedAction = deriveRecommendedAction(lead.stage, latest.needsReply, true);
+      const decision: ReactivationDecision = assessReactivationDeterministic(
+        {
+          leadId: lead.id,
+          stage: lead.stage,
+          urgency,
+          paymentIntent: Boolean(lead.paymentIntent),
+          recommendedAction,
+          eventDate: lead.eventDate,
+          latestDirection: latest.direction === "inbound" ? "IN" : latest.direction === "outbound" ? "OUT" : null,
+          silenceHours: latest.silenceHours,
+          needsReply: latest.needsReply
+        },
+        nowMs
+      );
+      return {
+        leadId: lead.id,
+        clientName: lead.clientName || null,
+        lastMessagePreview: latest.text,
+        lastMessageAt: latest.createdAt,
+        latestMessageDirection: latest.direction,
+        silenceHours: latest.silenceHours,
+        stalledStage: decision.stalledStage,
+        shouldReactivate: decision.shouldReactivate,
+        reactivationPriority: decision.reactivationPriority,
+        reactivationReason: decision.reactivationReason,
+        recommendedAction: decision.recommendedAction,
+        tone: decision.tone,
+        timing: decision.timing,
+        signals: decision.signals,
+        topReplyCard: null
+      };
+    })
+    .filter((item) => item.shouldReactivate);
+
+  return {
+    items,
+    meta: {
+      count: items.length,
+      limit: options.limit,
+      days: options.days,
+      generatedAt: new Date().toISOString()
+    }
+  };
+}
+
 function defaultDeps(): MobileLabFeedDeps {
   return {
-    getPriorityView: (options) => buildPriorityDeskView(options),
-    getReactivationView: (options) => buildReactivationQueueView(options),
+    getPriorityView: (options) => buildPriorityViewFast(options),
+    getReactivationView: (options) => buildReactivationViewFast(options),
+    enrichActiveLead: async (leadId: string) => {
+      const aiCards = await buildAiCardsViewModel(leadId);
+      const top = aiCards.replyCards && aiCards.replyCards.length > 0 ? aiCards.replyCards[0] : null;
+      return {
+        topReplyCard: top
+          ? {
+              label: String(top.label || "").trim(),
+              intent: String(top.intent || "").trim(),
+              messages: Array.isArray(top.messages) ? top.messages.map((msg) => String(msg || "")).filter(Boolean) : []
+            }
+          : null,
+        tone: aiCards.strategy?.tone ? String(aiCards.strategy.tone) : null
+      };
+    },
+    enrichReactivationLead: async (leadId: string) => {
+      const replies = await buildLeadReactivationReplies(leadId);
+      const top = replies.shouldGenerate && Array.isArray(replies.replyOptions) && replies.replyOptions.length > 0
+        ? replies.replyOptions[0]
+        : null;
+      return {
+        topReplyCard: top
+          ? {
+              label: String(top.label || "").trim(),
+              intent: String(top.intent || "").trim(),
+              messages: Array.isArray(top.messages) ? top.messages.map((msg) => String(msg || "")).filter(Boolean) : []
+            }
+          : null
+      };
+    },
     getActiveSkips: async () => {
       const rows = await listActiveSkippedItems();
       return rows.map((row) => ({
@@ -81,12 +316,26 @@ function defaultDeps(): MobileLabFeedDeps {
         skippedUntil: row.skippedUntil
       }));
     },
+    enrichmentLeadLimit: (limit: number) => Math.max(0, Math.min(8, Math.round(Number(limit || 0)))),
+    enrichmentTimeoutMs: () => 450,
     nowIso: () => new Date().toISOString()
   };
 }
 
 function priorityWeight(value: ReactivationPriority): number {
   return value === "high" ? 3 : value === "medium" ? 2 : 1;
+}
+
+async function withTimeout<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => reject(new Error("timeout")), timeoutMs);
+    });
+    return await Promise.race([work, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function toActiveFeedItem(item: PriorityDeskViewItem): MobileLabFeedItem {
@@ -158,7 +407,7 @@ export async function buildMobileLabFeed(
     throw new MobileLabFeedError("merge", "Invalid maxReactivation: must be an integer >= 0");
   }
 
-  const sourceLimit = Math.max(limit, Math.min(100, Math.max(limit * 3, limit + 20)));
+  const sourceLimit = Math.max(limit, Math.min(40, Math.max(limit + 10, Math.round(limit * 1.5))));
   const deps: MobileLabFeedDeps = { ...defaultDeps(), ...(depsOverride || {}) };
 
   let priorityView: PriorityDeskViewResponse;
@@ -230,12 +479,34 @@ export async function buildMobileLabFeed(
       queueRank: index + 1
     }));
 
+    const enrichmentLimit = Math.max(0, Math.min(merged.length, deps.enrichmentLeadLimit(limit)));
+    const timeoutMs = Math.max(50, Math.min(2000, Math.round(deps.enrichmentTimeoutMs())));
+    const enriched = merged.slice();
+    const targets = enriched.slice(0, enrichmentLimit);
+
+    await Promise.all(
+      targets.map(async (item) => {
+        try {
+          if (item.feedType === "active") {
+            const enrichment = await withTimeout(deps.enrichActiveLead(item.leadId), timeoutMs);
+            item.topReplyCard = enrichment?.topReplyCard || null;
+            item.tone = enrichment?.tone || item.tone || null;
+            return;
+          }
+          const enrichment = await withTimeout(deps.enrichReactivationLead(item.leadId), timeoutMs);
+          item.topReplyCard = enrichment?.topReplyCard || null;
+        } catch {
+          item.topReplyCard = null;
+        }
+      })
+    );
+
     return {
-      items: merged,
+      items: enriched,
       meta: {
-        count: merged.length,
-        activeCount: merged.filter((item) => item.feedType === "active").length,
-        reactivationCount: merged.filter((item) => item.feedType === "reactivation").length,
+        count: enriched.length,
+        activeCount: enriched.filter((item) => item.feedType === "active").length,
+        reactivationCount: enriched.filter((item) => item.feedType === "reactivation").length,
         limit,
         generatedAt: new Date().toISOString()
       }

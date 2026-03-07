@@ -962,3 +962,113 @@ test("meta counts remain correct", async () => {
   assert.equal(payload.meta.reactivationCount, 2);
   assert.equal(payload.meta.count, 3);
 });
+
+test("feed returns items when AI enrichment fails", async () => {
+  const payload = await buildMobileLabFeed(
+    { mode: "active_first", limit: 10, days: 30 },
+    {
+      ...noSkipDeps,
+      getPriorityView: async () =>
+        priorityViewFixture([
+          {
+            leadId: "lead-active-err",
+            clientName: "A",
+            lastMessagePreview: "Bonjour",
+            lastMessageAt: "2026-03-07T09:00:00.000Z",
+            latestMessageDirection: "inbound",
+            needsReply: true,
+            waitingSinceMinutes: 25,
+            priorityScore: 90,
+            priorityBand: "high",
+            estimatedHeat: "hot",
+            stage: "PRICE_SENT",
+            urgency: "high",
+            paymentIntent: true,
+            dropoffRisk: "medium",
+            recommendedAction: "answer_precisely",
+            commercialPriority: "high",
+            tone: "warm_refined",
+            reasons: [],
+            topReplyCard: null
+          }
+        ]),
+      getReactivationView: async () =>
+        reactivationViewFixture([
+          {
+            leadId: "lead-react-ok",
+            clientName: "R",
+            lastMessagePreview: "Merci",
+            lastMessageAt: "2026-03-06T09:00:00.000Z",
+            latestMessageDirection: "outbound",
+            silenceHours: 48,
+            stalledStage: "VIDEO_PROPOSED",
+            shouldReactivate: true,
+            reactivationPriority: "medium",
+            reactivationReason: "No follow-up",
+            recommendedAction: "reactivate_gently",
+            tone: "reassuring",
+            timing: "later_today",
+            signals: [],
+            topReplyCard: null
+          }
+        ]),
+      enrichActiveLead: async () => {
+        throw new Error("ai failed");
+      },
+      enrichReactivationLead: async () => ({
+        topReplyCard: { label: "Option 1", intent: "Restart", messages: ["Message 1", "Message 2"] }
+      }),
+      enrichmentLeadLimit: () => 10,
+      enrichmentTimeoutMs: () => 200
+    }
+  );
+
+  assert.equal(payload.items.length, 2);
+  assert.equal(payload.items[0].leadId, "lead-active-err");
+  assert.equal(payload.items[1].leadId, "lead-react-ok");
+  assert.equal(payload.items[0].topReplyCard, null);
+});
+
+test("feed returns items when AI enrichment times out", async () => {
+  const payload = await buildMobileLabFeed(
+    { mode: "active_first", limit: 10, days: 30 },
+    {
+      ...noSkipDeps,
+      getPriorityView: async () =>
+        priorityViewFixture([
+          {
+            leadId: "lead-timeout",
+            clientName: "Timeout",
+            lastMessagePreview: "Ping",
+            lastMessageAt: "2026-03-07T09:00:00.000Z",
+            latestMessageDirection: "inbound",
+            needsReply: true,
+            waitingSinceMinutes: 30,
+            priorityScore: 88,
+            priorityBand: "high",
+            estimatedHeat: "hot",
+            stage: "QUALIFIED",
+            urgency: "medium",
+            paymentIntent: false,
+            dropoffRisk: "low",
+            recommendedAction: "answer_precisely",
+            commercialPriority: "high",
+            tone: null,
+            reasons: [],
+            topReplyCard: null
+          }
+        ]),
+      getReactivationView: async () => reactivationViewFixture([]),
+      enrichActiveLead: async () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ topReplyCard: { label: "Option 1", intent: "Late", messages: ["M1", "M2"] }, tone: "warm_refined" }), 250);
+        }),
+      enrichmentLeadLimit: () => 10,
+      enrichmentTimeoutMs: () => 60
+    }
+  );
+
+  assert.equal(payload.items.length, 1);
+  assert.equal(payload.items[0].leadId, "lead-timeout");
+  assert.equal(payload.items[0].topReplyCard, null);
+});
