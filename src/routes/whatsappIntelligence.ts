@@ -7136,8 +7136,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   ? {
                       ...lead,
                       aiDebug: old.aiDebug || null,
-                      messages: Array.isArray(old.messages) ? old.messages : [],
-                      suggestions: Array.isArray(old.suggestions) ? old.suggestions : []
+                      messages: Array.isArray(old.messages) ? old.messages : []
                     }
                   : lead;
               });
