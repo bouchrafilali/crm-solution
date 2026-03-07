@@ -6205,6 +6205,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         Number(FEED_MAX_REACTIVATION_RAW) >= 0
           ? Number(FEED_MAX_REACTIVATION_RAW)
           : null;
+      const MOBILE_LAB_PROVIDER_LABEL = "AI pipeline";
       const MOBILE_DRAWER_PEEK = 0;
       const MOBILE_DRAWER_FALLBACK_WIDTH = 340;
       const MOBILE_DRAWER_FALLBACK_CLOSED = MOBILE_DRAWER_FALLBACK_WIDTH - MOBILE_DRAWER_PEEK;
@@ -6430,6 +6431,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const safeLeadId = String(item && item.leadId ? item.leadId : "").trim();
         const stageRaw = String((item && item.stage) || "QUALIFICATION");
         const feedType = String((item && item.feedType) || "active").toLowerCase() === "reactivation" ? "reactivation" : "active";
+        const enrichmentStatus = String((item && item.enrichmentStatus) || "skipped_by_limit").trim();
+        const enrichmentSourceRaw = String((item && item.enrichmentSource) || "").trim();
+        const enrichmentSource = enrichmentSourceRaw ? enrichmentSourceRaw : null;
+        const enrichmentErrorRaw = String((item && item.enrichmentError) || "").trim();
+        const enrichmentError = enrichmentErrorRaw ? enrichmentErrorRaw : null;
         const topReplyCard = item && item.topReplyCard && typeof item.topReplyCard === "object" ? item.topReplyCard : null;
         const topMessages = topReplyCard && Array.isArray(topReplyCard.messages) ? ensureBubbleSet(topReplyCard.messages) : [];
         const hasCard = Boolean(topReplyCard && topMessages.length);
@@ -6453,6 +6459,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           queueRank: Number(item && item.queueRank) || 0,
           recommendedAction: String((item && item.recommendedAction) || "").trim(),
           tone: String((item && item.tone) || "").trim(),
+          enrichmentStatus,
+          enrichmentSource,
+          enrichmentError,
           skipAllowed: item && item.skipAllowed !== false,
           suggestions: hasCard
             ? [
@@ -6913,7 +6922,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [loadingLeads, setLoadingLeads] = React.useState(false);
         const [loadingMessages, setLoadingMessages] = React.useState(false);
         const [loadingSuggestions, setLoadingSuggestions] = React.useState(false);
-        const [aiProvider, setAiProvider] = React.useState("claude");
         const [errorText, setErrorText] = React.useState("");
         const [mobileManualText, setMobileManualText] = React.useState("");
         const [mediaViewer, setMediaViewer] = React.useState(null);
@@ -7863,17 +7871,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       {loadingSuggestions ? "…" : "✦"}
                     </button>
                   </div>
-                  <div className="filters" style={{ marginBottom: "8px" }}>
-                    {["claude", "gpt"].map((provider) => (
-                      <button
-                        key={provider}
-                        className={"pill " + (aiProvider === provider ? "active" : "")}
-                        onClick={() => setAiProvider(provider)}
-                      >
-                        {provider.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
                 </div>
                 <div className="mobile-ai-cards">
                   {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
@@ -7914,7 +7911,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                         </div>
                       );
                     })
-                    : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
+                    : (
+                      <div className="preview">
+                        {loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}
+                        {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
+                          <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.85, lineHeight: 1.45 }}>
+                            <div>enrichmentStatus: {String(selectedLead.enrichmentStatus || "-")}</div>
+                            <div>enrichmentSource: {String(selectedLead.enrichmentSource || "-")}</div>
+                            <div>enrichmentError: {String(selectedLead.enrichmentError || "-")}</div>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                 </div>
               </div>
             </>
@@ -7967,8 +7975,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 <div className="stats">
                   <div className="stat"><div className="k">AI</div><div className="v">{selectedLead ? selectedLead.suggestions.length : 0} cartes</div></div>
                   <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead ? (selectedLead.stageLabel || selectedLead.stage) : "-"}</div></div>
-                  <div className="stat"><div className="k">Provider</div><div className="v">{String(aiProvider).toUpperCase()}</div></div>
+                  <div className="stat"><div className="k">Provider</div><div className="v">{MOBILE_LAB_PROVIDER_LABEL}</div></div>
                 </div>
+                {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
+                  <div className="preview" style={{ marginBottom: "8px", fontSize: "11px" }}>
+                    enrichment: {String(selectedLead.enrichmentStatus || "-")}
+                    {" · "}source: {String(selectedLead.enrichmentSource || "-")}
+                    {selectedLead.enrichmentError ? " · err: " + String(selectedLead.enrichmentError) : ""}
+                  </div>
+                ) : null}
 
                 {draftMessages.length ? (
                   <div className="draft-stack">
@@ -8364,17 +8379,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                 {loadingSuggestions ? "…" : "✦"}
                               </button>
                             </div>
-                            <div className="filters" style={{ marginBottom: "8px" }}>
-                              {["claude", "gpt"].map((provider) => (
-                                <button
-                                  key={provider}
-                                  className={"pill " + (aiProvider === provider ? "active" : "")}
-                                  onClick={() => setAiProvider(provider)}
-                                >
-                                  {provider.toUpperCase()}
-                                </button>
-                              ))}
-                            </div>
                             <div className="cards">
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
                                 ? selectedLead.suggestions.map((card) => {
@@ -8414,7 +8418,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     </div>
                                   );
                                 })
-                                : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
+                                : (
+                                  <div className="preview">
+                                    {loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}
+                                    {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
+                                      <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.85, lineHeight: 1.45 }}>
+                                        <div>enrichmentStatus: {String(selectedLead.enrichmentStatus || "-")}</div>
+                                        <div>enrichmentSource: {String(selectedLead.enrichmentSource || "-")}</div>
+                                        <div>enrichmentError: {String(selectedLead.enrichmentError || "-")}</div>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                )}
                             </div>
                           </div>
                         </div>
@@ -8438,8 +8453,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               <div className="stats">
                                 <div className="stat"><div className="k">AI</div><div className="v">{selectedLead ? selectedLead.suggestions.length : 0} cartes</div></div>
                                 <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead ? (selectedLead.stageLabel || selectedLead.stage) : "-"}</div></div>
-                                <div className="stat"><div className="k">Provider</div><div className="v">{String(aiProvider).toUpperCase()}</div></div>
+                                <div className="stat"><div className="k">Provider</div><div className="v">{MOBILE_LAB_PROVIDER_LABEL}</div></div>
                               </div>
+                              {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
+                                <div className="preview" style={{ marginBottom: "8px", fontSize: "11px" }}>
+                                  enrichment: {String(selectedLead.enrichmentStatus || "-")}
+                                  {" · "}source: {String(selectedLead.enrichmentSource || "-")}
+                                  {selectedLead.enrichmentError ? " · err: " + String(selectedLead.enrichmentError) : ""}
+                                </div>
+                              ) : null}
 
                               {draftMessages.length ? (
                                 <div className="draft-stack">
@@ -8521,7 +8543,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             <div className="chat-head">
                               <div>
                                 <div className="n">{selectedLead ? selectedLead.name : "Lead"}</div>
-                                <div className="sub">WhatsApp API · Suggestions {String(aiProvider).toUpperCase()} · {String(MODE).toUpperCase()}</div>
+                                <div className="sub">WhatsApp API · Suggestions {MOBILE_LAB_PROVIDER_LABEL} · {String(MODE).toUpperCase()}</div>
                               </div>
                               <button
                                 className="icon-btn"
@@ -8532,17 +8554,6 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               >
                                 {loadingSuggestions ? "…" : "✦"}
                               </button>
-                            </div>
-                            <div className="filters" style={{ marginBottom: "8px" }}>
-                              {["claude", "gpt"].map((provider) => (
-                                <button
-                                  key={provider}
-                                  className={"pill " + (aiProvider === provider ? "active" : "")}
-                                  onClick={() => setAiProvider(provider)}
-                                >
-                                  {provider.toUpperCase()}
-                                </button>
-                              ))}
                             </div>
                             <div className="cards">
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
@@ -8583,7 +8594,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                     </div>
                                   );
                                 })
-                                : <div className="preview">{loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}</div>}
+                                : (
+                                  <div className="preview">
+                                    {loadingSuggestions ? "Génération suggestions..." : "Aucune suggestion disponible"}
+                                    {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
+                                      <div style={{ marginTop: "8px", fontSize: "11px", opacity: 0.85, lineHeight: 1.45 }}>
+                                        <div>enrichmentStatus: {String(selectedLead.enrichmentStatus || "-")}</div>
+                                        <div>enrichmentSource: {String(selectedLead.enrichmentSource || "-")}</div>
+                                        <div>enrichmentError: {String(selectedLead.enrichmentError || "-")}</div>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                )}
                             </div>
                           </div>
 
@@ -8599,8 +8621,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             <div className="stats">
                               <div className="stat"><div className="k">AI</div><div className="v">{selectedLead ? selectedLead.suggestions.length : 0} cartes</div></div>
                               <div className="stat"><div className="k">Stage</div><div className="v">{selectedLead ? (selectedLead.stageLabel || selectedLead.stage) : "-"}</div></div>
-                              <div className="stat"><div className="k">Provider</div><div className="v">{String(aiProvider).toUpperCase()}</div></div>
+                              <div className="stat"><div className="k">Provider</div><div className="v">{MOBILE_LAB_PROVIDER_LABEL}</div></div>
                             </div>
+                            {selectedLead && String(selectedLead.channelType || "").toUpperCase() === "MOBILE_LAB" ? (
+                              <div className="preview" style={{ marginBottom: "8px", fontSize: "11px" }}>
+                                enrichment: {String(selectedLead.enrichmentStatus || "-")}
+                                {" · "}source: {String(selectedLead.enrichmentSource || "-")}
+                                {selectedLead.enrichmentError ? " · err: " + String(selectedLead.enrichmentError) : ""}
+                              </div>
+                            ) : null}
 
                             {draftMessages.length ? (
                               <div className="draft-stack">
