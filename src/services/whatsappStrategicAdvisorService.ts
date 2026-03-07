@@ -7,6 +7,7 @@ import {
   type StageDetectionAnalysis,
   type StageDetectionResult
 } from "./whatsappStageDetectionService.js";
+import { getAiProviderForStep, type AiProvider } from "./aiProviderRouting.js";
 
 const ACTION_VALUES = [
   "qualify",
@@ -49,7 +50,7 @@ export type StrategicAdvisorResult = {
   stageAnalysis: StageDetectionAnalysis;
   transcriptLength: number;
   messageCount: number;
-  provider: "openai";
+  provider: AiProvider;
   model: string;
   timestamp: string;
 };
@@ -140,7 +141,59 @@ function buildStrategicAdvisorUserPrompt(input: { transcript: string; stageAnaly
 export async function callStrategicAdvisorModel(input: {
   systemPrompt: string;
   userPrompt: string;
-}): Promise<{ provider: "openai"; model: string; rawOutput: string }> {
+}): Promise<{ provider: AiProvider; model: string; rawOutput: string }> {
+  const provider = getAiProviderForStep("strategy");
+
+  if (provider === "claude") {
+    const apiKey = String(env.CLAUDE_API_KEY || "").trim();
+    const model = String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001";
+    if (!apiKey) {
+      throw new StrategicAdvisorError("strategic_advisor_provider_not_configured", "CLAUDE_API_KEY missing");
+    }
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 900,
+        system: input.systemPrompt,
+        messages: [{ role: "user", content: input.userPrompt }]
+      })
+    });
+
+    const rawResponseText = await response.text();
+    if (!response.ok) {
+      throw new StrategicAdvisorError(
+        "strategic_advisor_provider_error",
+        `Claude request failed (${response.status}): ${rawResponseText.slice(0, 500)}`
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(rawResponseText);
+    } catch {
+      throw new StrategicAdvisorError("strategic_advisor_provider_non_json", "Provider response is not valid JSON");
+    }
+
+    const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const contentBlocks = Array.isArray(root.content) ? root.content : [];
+    const textBlock =
+      contentBlocks.find((block) => block && typeof block === "object" && (block as Record<string, unknown>).type === "text") || null;
+    const text = textBlock && typeof textBlock === "object" ? String((textBlock as Record<string, unknown>).text || "").trim() : "";
+    if (!text) {
+      throw new StrategicAdvisorError("strategic_advisor_empty_ai_output", "Provider content is empty");
+    }
+
+    return { provider: "claude", model, rawOutput: text };
+  }
+
   const apiKey = String(env.OPENAI_API_KEY || "").trim();
   const model = String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini";
   if (!apiKey) {

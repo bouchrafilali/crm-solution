@@ -29,6 +29,15 @@ type FeedReplyCard = {
   messages: string[];
 } | null;
 
+export type MobileLabEnrichmentStatus =
+  | "enriched"
+  | "timeout"
+  | "error"
+  | "skipped_by_limit"
+  | "no_generation_needed";
+
+export type MobileLabEnrichmentSource = "active_ai_cards" | "reactivation_replies" | null;
+
 export type MobileLabFeedItem = {
   feedType: FeedType;
   leadId: string;
@@ -48,6 +57,9 @@ export type MobileLabFeedItem = {
   reactivationPriority: ReactivationPriority | null;
   timing: "now" | "later_today" | "tomorrow" | "monitor" | null;
   topReplyCard: FeedReplyCard;
+  enrichmentStatus: MobileLabEnrichmentStatus;
+  enrichmentSource: MobileLabEnrichmentSource;
+  enrichmentError: string | null;
   skipAllowed: boolean;
   skipReason: string | null;
 };
@@ -78,13 +90,45 @@ export class MobileLabFeedError extends Error {
 type MobileLabFeedDeps = {
   getPriorityView: (options: { limit: number; days: number }) => Promise<PriorityDeskViewResponse>;
   getReactivationView: (options: { limit: number; days: number }) => Promise<ReactivationQueueViewResponse>;
-  enrichActiveLead: (leadId: string) => Promise<{ topReplyCard: FeedReplyCard; tone: string | null }>;
-  enrichReactivationLead: (leadId: string) => Promise<{ topReplyCard: FeedReplyCard }>;
+  enrichActiveLead: (leadId: string) => Promise<{
+    topReplyCard: FeedReplyCard;
+    tone: string | null;
+    status: Extract<MobileLabEnrichmentStatus, "enriched">;
+  }>;
+  enrichReactivationLead: (leadId: string) => Promise<{
+    topReplyCard: FeedReplyCard;
+    status: Extract<MobileLabEnrichmentStatus, "enriched" | "no_generation_needed">;
+  }>;
   getActiveSkips: () => Promise<Array<{ leadId: string; feedType: FeedType; skippedUntil: string }>>;
   enrichmentLeadLimit: (limit: number) => number;
   enrichmentTimeoutMs: () => number;
   nowIso: () => string;
 };
+
+function parsePositiveInt(value: unknown): number | null {
+  const num = Number(value);
+  if (!Number.isFinite(num) || !Number.isInteger(num) || num <= 0) return null;
+  return num;
+}
+
+function resolveDefaultEnrichmentLeadLimit(limit: number): number {
+  const configured = parsePositiveInt(process.env.WHATSAPP_MOBILE_LAB_ENRICHMENT_LEAD_LIMIT);
+  const fallback = Math.max(0, Math.min(20, Math.round(Number(limit || 0))));
+  if (configured == null) return fallback;
+  return Math.max(0, Math.min(30, configured));
+}
+
+function resolveDefaultEnrichmentTimeoutMs(): number {
+  const configured = parsePositiveInt(process.env.WHATSAPP_MOBILE_LAB_ENRICHMENT_TIMEOUT_MS);
+  const fallback = 1500;
+  const raw = configured == null ? fallback : configured;
+  return Math.max(100, Math.min(10000, raw));
+}
+
+function toSafeError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error || "enrichment_failed");
+  return text.slice(0, 160);
+}
 
 function normalizeUrgency(input: string): "low" | "medium" | "high" {
   const key = String(input || "").trim().toLowerCase();
@@ -290,7 +334,8 @@ function defaultDeps(): MobileLabFeedDeps {
               messages: Array.isArray(top.messages) ? top.messages.map((msg) => String(msg || "")).filter(Boolean) : []
             }
           : null,
-        tone: aiCards.strategy?.tone ? String(aiCards.strategy.tone) : null
+        tone: aiCards.strategy?.tone ? String(aiCards.strategy.tone) : null,
+        status: "enriched"
       };
     },
     enrichReactivationLead: async (leadId: string) => {
@@ -305,7 +350,8 @@ function defaultDeps(): MobileLabFeedDeps {
               intent: String(top.intent || "").trim(),
               messages: Array.isArray(top.messages) ? top.messages.map((msg) => String(msg || "")).filter(Boolean) : []
             }
-          : null
+          : null,
+        status: replies.shouldGenerate ? "enriched" : "no_generation_needed"
       };
     },
     getActiveSkips: async () => {
@@ -316,8 +362,8 @@ function defaultDeps(): MobileLabFeedDeps {
         skippedUntil: row.skippedUntil
       }));
     },
-    enrichmentLeadLimit: (limit: number) => Math.max(0, Math.min(8, Math.round(Number(limit || 0)))),
-    enrichmentTimeoutMs: () => 450,
+    enrichmentLeadLimit: (limit: number) => resolveDefaultEnrichmentLeadLimit(limit),
+    enrichmentTimeoutMs: () => resolveDefaultEnrichmentTimeoutMs(),
     nowIso: () => new Date().toISOString()
   };
 }
@@ -358,6 +404,9 @@ function toActiveFeedItem(item: PriorityDeskViewItem): MobileLabFeedItem {
     reactivationPriority: null,
     timing: null,
     topReplyCard: item.topReplyCard,
+    enrichmentStatus: item.topReplyCard ? "enriched" : "skipped_by_limit",
+    enrichmentSource: "active_ai_cards",
+    enrichmentError: null,
     skipAllowed: true,
     skipReason: null
   };
@@ -383,6 +432,9 @@ function toReactivationFeedItem(item: ReactivationQueueViewItem): MobileLabFeedI
     reactivationPriority: item.reactivationPriority,
     timing: item.timing,
     topReplyCard: item.topReplyCard,
+    enrichmentStatus: item.topReplyCard ? "enriched" : "skipped_by_limit",
+    enrichmentSource: "reactivation_replies",
+    enrichmentError: null,
     skipAllowed: true,
     skipReason: null
   };
@@ -484,19 +536,31 @@ export async function buildMobileLabFeed(
     const enriched = merged.slice();
     const targets = enriched.slice(0, enrichmentLimit);
 
+    for (let index = enrichmentLimit; index < enriched.length; index += 1) {
+      enriched[index].enrichmentStatus = "skipped_by_limit";
+      enriched[index].enrichmentError = null;
+    }
+
     await Promise.all(
       targets.map(async (item) => {
+        item.enrichmentSource = item.feedType === "active" ? "active_ai_cards" : "reactivation_replies";
         try {
           if (item.feedType === "active") {
             const enrichment = await withTimeout(deps.enrichActiveLead(item.leadId), timeoutMs);
             item.topReplyCard = enrichment?.topReplyCard || null;
+            item.enrichmentStatus = enrichment?.status || (item.topReplyCard ? "enriched" : "error");
+            item.enrichmentError = null;
             item.tone = enrichment?.tone || item.tone || null;
             return;
           }
           const enrichment = await withTimeout(deps.enrichReactivationLead(item.leadId), timeoutMs);
           item.topReplyCard = enrichment?.topReplyCard || null;
-        } catch {
+          item.enrichmentStatus = enrichment?.status || (item.topReplyCard ? "enriched" : "no_generation_needed");
+          item.enrichmentError = null;
+        } catch (error) {
           item.topReplyCard = null;
+          item.enrichmentStatus = error instanceof Error && error.message === "timeout" ? "timeout" : "error";
+          item.enrichmentError = toSafeError(error);
         }
       })
     );
