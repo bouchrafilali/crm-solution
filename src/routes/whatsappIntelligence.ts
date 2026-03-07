@@ -137,6 +137,7 @@ import { buildLeadReactivationCheck, buildReactivationQueue, ReactivationEngineE
 import { buildLeadReactivationReplies, ReactivationReplyError } from "../services/whatsappReactivationReplyService.js";
 import { buildReactivationQueueView, ReactivationQueueViewError } from "../services/whatsappReactivationQueueViewService.js";
 import { buildMobileLabFeed, MobileLabFeedError } from "../services/whatsappMobileLabFeedService.js";
+import { buildMobileLabLeadCards } from "../services/whatsappMobileLabLeadCardsService.js";
 import {
   clearSkippedMobileLabItem,
   MobileLabSkipError,
@@ -4190,6 +4191,21 @@ whatsappRouter.get("/api/whatsapp/mobile-lab/feed", async (req, res) => {
   }
 });
 
+whatsappRouter.get("/api/whatsapp/mobile-lab/leads/:id/cards", async (req, res) => {
+  const leadId = String(req.params.id || "").trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leadId)) {
+    return res.status(400).json({ error: "invalid_lead_id" });
+  }
+
+  try {
+    const payload = await buildMobileLabLeadCards(leadId);
+    return res.status(200).json(payload);
+  } catch (error) {
+    console.error("[whatsapp] mobile-lab-lead-cards", error);
+    return res.status(503).json({ error: "mobile_lab_lead_cards_unavailable" });
+  }
+});
+
 whatsappRouter.post("/api/whatsapp/mobile-lab/skip", async (req, res) => {
   const parsed = z
     .object({
@@ -6477,6 +6493,25 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         };
       }
 
+      function mapSuggestionsFromLeadCardsPayload(leadId, payload) {
+        const cards = Array.isArray(payload && payload.replyCards) ? payload.replyCards : [];
+        if (!cards.length && payload && payload.topReplyCard && typeof payload.topReplyCard === "object") {
+          cards.push(payload.topReplyCard);
+        }
+        return cards
+          .map((card, index) => {
+            const topMessages = card && Array.isArray(card.messages) ? ensureBubbleSet(card.messages) : [];
+            if (!topMessages.length) return null;
+            return {
+              id: String(leadId || "") + "-on-demand-card-" + String(index + 1),
+              title: clampText(String((card && card.label) || "AI card")),
+              tag: "ACTIVE",
+              messages: topMessages
+            };
+          })
+          .filter(Boolean);
+      }
+
       function leadNeedsAttention(lead) {
         if (!lead) return false;
         const unreadInbound = Number(lead.unread || 0) > 0;
@@ -7187,16 +7222,27 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!LIVE_MODE) return;
           setLoadingSuggestions(true);
           try {
-            await loadLeads();
-            if (forceRegenerate) {
-              await loadMessages(leadId);
-            }
+            const payload = await fetchJson("/api/whatsapp/mobile-lab/leads/" + encodeURIComponent(leadId) + "/cards");
+            const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
+            patchLead(leadId, {
+              suggestions,
+              enrichmentStatus: String((payload && payload.enrichmentStatus) || "error"),
+              enrichmentSource: String((payload && payload.enrichmentSource) || "active_ai_cards"),
+              enrichmentError: payload && payload.enrichmentError ? String(payload.enrichmentError) : null
+            });
+            if (forceRegenerate) await loadMessages(leadId);
           } catch (error) {
-            console.error("[mobile-lab] feed refresh failed", { leadId, error });
+            patchLead(leadId, {
+              suggestions: [],
+              enrichmentStatus: "error",
+              enrichmentSource: "active_ai_cards",
+              enrichmentError: error instanceof Error ? error.message : String(error || "cards_failed")
+            });
+            console.error("[mobile-lab] lead cards load failed", { leadId, error });
           } finally {
             setLoadingSuggestions(false);
           }
-        }, [loadLeads, loadMessages]);
+        }, [loadMessages, patchLead]);
 
         React.useEffect(() => {
           if (!LIVE_MODE) return;
@@ -7220,6 +7266,13 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!LIVE_MODE) return;
           void loadMessages(selectedLeadId);
         }, [selectedLeadId, loadMessages]);
+
+        React.useEffect(() => {
+          if (!selectedLeadId) return;
+          if (LIVE_MODE && !isUuidValue(selectedLeadId)) return;
+          if (!LIVE_MODE) return;
+          void loadSuggestions(selectedLeadId, false);
+        }, [selectedLeadId, loadSuggestions]);
 
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;

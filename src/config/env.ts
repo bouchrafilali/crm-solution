@@ -87,7 +87,8 @@ const envSchema = z.object({
   SHOPIFY_APPOINTMENTS_METAFIELD_NAMESPACE: z.string().optional(),
   SHOPIFY_APPOINTMENTS_METAFIELD_KEY: z.string().optional(),
   ZOKO_ALLOW_INSECURE_TLS: z.string().optional(),
-  WHATSAPP_ALLOW_PLACEHOLDER_DISPATCH: z.string().optional()
+  WHATSAPP_ALLOW_PLACEHOLDER_DISPATCH: z.string().optional(),
+  WHATSAPP_MOBILE_LAB_SELECTED_CARDS_TIMEOUT_MS: z.coerce.number().optional()
 });
 
 export const env = envSchema.parse(process.env);
