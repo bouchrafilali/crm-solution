@@ -77,6 +77,7 @@ test("selected lead cards success", async () => {
   assert.equal(payload.enrichmentError, null);
   assert.equal(payload.agentRunMeta.runId, null);
   assert.equal(payload.agentRunMeta.source, "fresh_generation");
+  assert.equal(payload.agentRunMeta.reasoningSource, null);
 });
 
 test("persisted results are reused before regeneration", async () => {
@@ -114,6 +115,7 @@ test("persisted results are reused before regeneration", async () => {
         messages: ["Message 1", "Message 2"]
       },
       providers: { reply_generator: "openai" },
+      reasoningSource: "state_delta",
       createdAt: "2026-03-07T00:00:00.000Z",
       updatedAt: "2026-03-07T00:00:00.000Z"
     }),
@@ -130,6 +132,7 @@ test("persisted results are reused before regeneration", async () => {
   assert.equal(payload.cacheStatus, "hit");
   assert.equal(payload.agentRunMeta.runId, "run-1");
   assert.equal(payload.agentRunMeta.source, "cache");
+  assert.equal(payload.agentRunMeta.reasoningSource, "state_delta");
   assert.equal(activeCallCount, 0);
   assert.equal(payload.replyCards.length, 0);
 });
@@ -259,6 +262,7 @@ test("force refresh bypasses cache and stores a new orchestrator run", async () 
           brandReview: null,
           topReplyCard: { label: "New", intent: "Fresh", messages: ["N1", "N2"] },
           providers: { reply_generator: "openai" },
+          reasoningSource: "state_delta",
           createdAt: "2026-03-07T10:00:00.000Z",
           updatedAt: "2026-03-07T10:00:01.000Z"
         };
@@ -273,7 +277,8 @@ test("force refresh bypasses cache and stores a new orchestrator run", async () 
           stageAnalysis: null,
           strategy: null,
           priority: null,
-          topReplyCard: { label: "From orchestrator", intent: "Fresh run", messages: ["R1", "R2"] }
+          topReplyCard: { label: "From orchestrator", intent: "Fresh run", messages: ["R1", "R2"] },
+          reasoningSource: "state_delta"
         };
       },
       getActiveReplyContext: async () => {
@@ -288,6 +293,7 @@ test("force refresh bypasses cache and stores a new orchestrator run", async () 
   assert.equal(payload.cacheStatus, "stale");
   assert.equal(payload.topReplyCard?.label, "From orchestrator");
   assert.equal(payload.agentRunMeta.runId, "run-force-new");
+  assert.equal(payload.agentRunMeta.reasoningSource, "state_delta");
   assert.equal(payload.enrichmentStatus, "enriched");
 });
 

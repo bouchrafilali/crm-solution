@@ -30,6 +30,7 @@ export type MobileLabLeadCardsResult = {
     runId: string | null;
     generatedAt: string | null;
     source: "cache" | "fresh_generation" | "reactivation_replies";
+    reasoningSource: "state_delta" | "transcript_fallback" | null;
   };
   stageAnalysis: {
     stage: string;
@@ -235,7 +236,8 @@ export async function buildMobileLabLeadCards(
           agentRunMeta: {
             runId: null,
             generatedAt: null,
-            source: "fresh_generation"
+            source: "fresh_generation",
+            reasoningSource: null
           },
           stageAnalysis: null,
           summary: null,
@@ -317,7 +319,13 @@ export async function buildMobileLabLeadCards(
         agentRunMeta: {
           runId: regenResult.runId || (fromCurrentRun ? refreshed?.latestRunId || null : null),
           generatedAt: (fromCurrentRun ? refreshed?.updatedAt : null) || latestMessage.createdAt || null,
-          source: "fresh_generation"
+          source: "fresh_generation",
+          reasoningSource: (() => {
+            const raw = String((fromCurrentRun ? refreshed?.reasoningSource : regenResult.reasoningSource) || "").trim().toLowerCase();
+            return raw === "state_delta" || raw === "transcript_fallback"
+              ? (raw as "state_delta" | "transcript_fallback")
+              : null;
+          })()
         },
         stageAnalysis: stageSource
           ? {
@@ -420,7 +428,13 @@ export async function buildMobileLabLeadCards(
           agentRunMeta: {
             runId: cached?.latestRunId || null,
             generatedAt: cached?.updatedAt || latestMessage?.createdAt || null,
-            source: "cache"
+            source: "cache",
+            reasoningSource: (() => {
+              const raw = String(cached?.reasoningSource || "").trim().toLowerCase();
+              return raw === "state_delta" || raw === "transcript_fallback"
+                ? (raw as "state_delta" | "transcript_fallback")
+                : null;
+            })()
           },
           stageAnalysis: stage
             ? {
@@ -522,7 +536,8 @@ export async function buildMobileLabLeadCards(
         agentRunMeta: {
           runId: null,
           generatedAt: latestMessage?.createdAt || null,
-          source: "fresh_generation"
+          source: "fresh_generation",
+          reasoningSource: null
         },
         stageAnalysis: {
           stage: replyContext.stageAnalysis.stage,
@@ -584,7 +599,8 @@ export async function buildMobileLabLeadCards(
         agentRunMeta: {
           runId: null,
           generatedAt: null,
-          source: "reactivation_replies"
+          source: "reactivation_replies",
+          reasoningSource: null
         },
         stageAnalysis: null,
         summary: null,
@@ -613,7 +629,8 @@ export async function buildMobileLabLeadCards(
       agentRunMeta: {
         runId: null,
         generatedAt: null,
-        source: "fresh_generation"
+        source: "fresh_generation",
+        reasoningSource: null
       },
       stageAnalysis: null,
       summary: null,
@@ -650,7 +667,8 @@ export async function buildMobileLabLeadCards(
       agentRunMeta: {
         runId: null,
         generatedAt: null,
-        source: feedType === "reactivation" ? "reactivation_replies" : "fresh_generation"
+        source: feedType === "reactivation" ? "reactivation_replies" : "fresh_generation",
+        reasoningSource: null
       },
       stageAnalysis: null,
       summary: null,

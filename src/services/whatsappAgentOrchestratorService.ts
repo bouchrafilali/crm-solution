@@ -862,7 +862,7 @@ export function triggerWhatsAppAgentOrchestratorForInbound(
 
 export async function getLatestWhatsAppAgentRunSnapshot(
   leadId: string,
-  depsOverride?: Partial<Pick<OrchestratorDeps, "getLatestRun">>
+  depsOverride?: Partial<Pick<OrchestratorDeps, "getLatestRun" | "getLeadState">>
 ): Promise<{
   run: {
     id: string;
@@ -872,6 +872,7 @@ export async function getLatestWhatsAppAgentRunSnapshot(
     totalInputTokens: number | null;
     totalOutputTokens: number | null;
     totalEstimatedCostUsd: number | null;
+    reasoningSource: "state_delta" | "transcript_fallback" | null;
   } | null;
   steps: Array<{
     stepName: string;
@@ -884,6 +885,7 @@ export async function getLatestWhatsAppAgentRunSnapshot(
     unitInputPricePerMillion: number | null;
     unitOutputPricePerMillion: number | null;
     estimatedCostUsd: number | null;
+    source: "state_delta" | "transcript_fallback" | null;
     error: string | null;
   }>;
 }> {
@@ -892,8 +894,15 @@ export async function getLatestWhatsAppAgentRunSnapshot(
     throw new WhatsAppAgentOrchestratorError("invalid_lead_id", "latest_run", "Lead ID is required");
   }
   const getLatestRun = depsOverride?.getLatestRun || defaultDeps().getLatestRun;
+  const getLeadState = depsOverride?.getLeadState || defaultDeps().getLeadState;
   const latest = await getLatestRun(safeLeadId);
   if (!latest) return { run: null, steps: [] };
+  const leadState = await getLeadState(safeLeadId).catch(() => null);
+  const reasoningSourceRaw = String(leadState?.reasoningSource || "").trim().toLowerCase();
+  const reasoningSource =
+    reasoningSourceRaw === "state_delta" || reasoningSourceRaw === "transcript_fallback"
+      ? (reasoningSourceRaw as "state_delta" | "transcript_fallback")
+      : null;
   return {
     run: {
       id: latest.run.id,
@@ -902,7 +911,8 @@ export async function getLatestWhatsAppAgentRunSnapshot(
       finishedAt: latest.run.finishedAt,
       totalInputTokens: latest.run.totalInputTokens,
       totalOutputTokens: latest.run.totalOutputTokens,
-      totalEstimatedCostUsd: latest.run.totalEstimatedCostUsd
+      totalEstimatedCostUsd: latest.run.totalEstimatedCostUsd,
+      reasoningSource
     },
     steps: latest.steps.map((step) => ({
       stepName: step.stepName,
@@ -915,6 +925,12 @@ export async function getLatestWhatsAppAgentRunSnapshot(
       unitInputPricePerMillion: step.unitInputPricePerMillion,
       unitOutputPricePerMillion: step.unitOutputPricePerMillion,
       estimatedCostUsd: step.estimatedCostUsd,
+      source: (() => {
+        const raw = String(step.outputJson?.source || "").trim().toLowerCase();
+        return raw === "state_delta" || raw === "transcript_fallback"
+          ? (raw as "state_delta" | "transcript_fallback")
+          : null;
+      })(),
       error: step.error
     }))
   };
@@ -934,6 +950,7 @@ export async function getWhatsAppAgentRunSnapshotByRunId(
     totalInputTokens: number | null;
     totalOutputTokens: number | null;
     totalEstimatedCostUsd: number | null;
+    reasoningSource: "state_delta" | "transcript_fallback" | null;
   } | null;
   steps: Array<{
     stepName: string;
@@ -946,6 +963,7 @@ export async function getWhatsAppAgentRunSnapshotByRunId(
     unitInputPricePerMillion: number | null;
     unitOutputPricePerMillion: number | null;
     estimatedCostUsd: number | null;
+    source: "state_delta" | "transcript_fallback" | null;
     error: string | null;
   }>;
 }> {
@@ -964,7 +982,8 @@ export async function getWhatsAppAgentRunSnapshotByRunId(
       finishedAt: latest.run.finishedAt,
       totalInputTokens: latest.run.totalInputTokens,
       totalOutputTokens: latest.run.totalOutputTokens,
-      totalEstimatedCostUsd: latest.run.totalEstimatedCostUsd
+      totalEstimatedCostUsd: latest.run.totalEstimatedCostUsd,
+      reasoningSource: null
     },
     steps: latest.steps.map((step) => ({
       stepName: step.stepName,
@@ -977,6 +996,12 @@ export async function getWhatsAppAgentRunSnapshotByRunId(
       unitInputPricePerMillion: step.unitInputPricePerMillion,
       unitOutputPricePerMillion: step.unitOutputPricePerMillion,
       estimatedCostUsd: step.estimatedCostUsd,
+      source: (() => {
+        const raw = String(step.outputJson?.source || "").trim().toLowerCase();
+        return raw === "state_delta" || raw === "transcript_fallback"
+          ? (raw as "state_delta" | "transcript_fallback")
+          : null;
+      })(),
       error: step.error
     }))
   };

@@ -580,6 +580,23 @@ test("webhook trigger starts orchestrator asynchronously", async () => {
 
 test("latest run retrieval maps response", async () => {
   const payload = await getLatestWhatsAppAgentRunSnapshot("11111111-1111-4111-8111-111111111111", {
+    getLeadState: async () => ({
+      leadId: "11111111-1111-4111-8111-111111111111",
+      latestRunId: "run-latest",
+      latestMessageId: "22222222-2222-4222-8222-222222222222",
+      stageAnalysis: null,
+      facts: null,
+      structuredState: null,
+      priorityItem: null,
+      strategy: null,
+      replyOptions: null,
+      brandReview: null,
+      topReplyCard: null,
+      providers: null,
+      reasoningSource: "state_delta",
+      createdAt: "2026-03-07T10:00:00.000Z",
+      updatedAt: "2026-03-07T10:00:00.000Z"
+    }),
     getLatestRun: async () => ({
       run: {
         id: "run-latest",
@@ -610,7 +627,7 @@ test("latest run retrieval maps response", async () => {
           estimatedCostUsd: 0.0015,
           startedAt: "2026-03-07T10:00:00.000Z",
           finishedAt: "2026-03-07T10:00:01.000Z",
-          outputJson: null,
+          outputJson: { source: "state_delta" },
           error: null,
           createdAt: "2026-03-07T10:00:00.000Z"
         }
@@ -621,7 +638,9 @@ test("latest run retrieval maps response", async () => {
   assert.equal(payload.run?.id, "run-latest");
   assert.equal(payload.run?.totalInputTokens, 1200);
   assert.equal(payload.run?.totalEstimatedCostUsd, 0.0031);
+  assert.equal(payload.run?.reasoningSource, "state_delta");
   assert.equal(payload.steps.length, 1);
+  assert.equal(payload.steps[0].source, "state_delta");
   assert.equal(payload.steps[0].provider, "claude");
   assert.equal(payload.steps[0].model, "claude-haiku-4-5-20251001");
   assert.equal(payload.steps[0].estimatedCostUsd, 0.0015);
@@ -629,6 +648,7 @@ test("latest run retrieval maps response", async () => {
 
 test("latest run retrieval keeps null cost/token metrics", async () => {
   const payload = await getLatestWhatsAppAgentRunSnapshot("11111111-1111-4111-8111-111111111111", {
+    getLeadState: async () => null,
     getLatestRun: async () => ({
       run: {
         id: "run-null",
@@ -670,6 +690,7 @@ test("latest run retrieval keeps null cost/token metrics", async () => {
   assert.equal(payload.run?.totalInputTokens, null);
   assert.equal(payload.run?.totalOutputTokens, null);
   assert.equal(payload.run?.totalEstimatedCostUsd, null);
+  assert.equal(payload.run?.reasoningSource, null);
   assert.equal(payload.steps[0].inputTokens, null);
   assert.equal(payload.steps[0].outputTokens, null);
   assert.equal(payload.steps[0].estimatedCostUsd, null);

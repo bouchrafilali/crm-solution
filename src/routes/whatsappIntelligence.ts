@@ -6790,6 +6790,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             inputTokens: numberOrNull(step && step.inputTokens),
             outputTokens: numberOrNull(step && step.outputTokens),
             estimatedCostUsd: numberOrNull(step && step.estimatedCostUsd),
+            source: (() => {
+              const raw = String(step && step.source ? step.source : "").trim().toLowerCase();
+              return raw === "state_delta" || raw === "transcript_fallback" ? raw : null;
+            })(),
             error: step && step.error ? String(step.error).trim() : null
           }))
           .filter((step) => step.stepName);
@@ -6802,7 +6806,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 finishedAt: String(run.finishedAt || "").trim(),
                 totalInputTokens: numberOrNull(run.totalInputTokens),
                 totalOutputTokens: numberOrNull(run.totalOutputTokens),
-                totalEstimatedCostUsd: numberOrNull(run.totalEstimatedCostUsd)
+                totalEstimatedCostUsd: numberOrNull(run.totalEstimatedCostUsd),
+                reasoningSource: (() => {
+                  const raw = String(run.reasoningSource || "").trim().toLowerCase();
+                  return raw === "state_delta" || raw === "transcript_fallback" ? raw : null;
+                })()
               }
             : null,
           steps
@@ -6840,11 +6848,19 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const runIdRaw = String((meta && meta.runId) || "").trim();
         const generatedAtRaw = String((meta && meta.generatedAt) || "").trim();
         const sourceRaw = String((meta && meta.source) || "").trim().toLowerCase();
+        const reasoningSourceRaw = String((meta && meta.reasoningSource) || "").trim().toLowerCase();
         return {
           runId: runIdRaw || null,
           generatedAt: generatedAtRaw || null,
-          source: sourceRaw || "fresh_generation"
+          source: sourceRaw || "fresh_generation",
+          reasoningSource: reasoningSourceRaw === "state_delta" || reasoningSourceRaw === "transcript_fallback" ? reasoningSourceRaw : null
         };
+      }
+
+      function formatReasoningSource(value) {
+        const raw = String(value || "").trim().toLowerCase();
+        if (raw === "state_delta" || raw === "transcript_fallback") return raw;
+        return "—";
       }
 
       function runAiFlowUiAssertions() {
@@ -6854,6 +6870,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         console.assert(formatCompactUsdCost(0.000345) === "$0.000345", "ai-flow: compact 6-decimal formatting expected");
         const parsedUnavailable = normalizeAgentRunErrorMessage(new Error(JSON.stringify({ error: "agent_run_latest_unavailable" })));
         console.assert(parsedUnavailable === "Run details are temporarily unavailable.", "ai-flow: API unavailable should be user-friendly");
+        console.assert(formatReasoningSource("state_delta") === "state_delta", "ai-flow: should render state_delta");
+        console.assert(formatReasoningSource("transcript_fallback") === "transcript_fallback", "ai-flow: should render transcript_fallback");
+        console.assert(formatReasoningSource(null) === "—", "ai-flow: null reasoning should render dash");
       }
 
       if (URL_QUERY.get("assertAiFlowUi") === "1") {
@@ -8130,6 +8149,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const modeRaw = String(lead.generationMode || "").trim().toLowerCase();
           const modeLabel = modeRaw === "cached" ? "cached state reused" : modeRaw === "fresh" ? "fresh generation" : null;
           const shouldShowNoRunFallback = !run && modeRaw === "cached" && !lead.agentRunError;
+          const reasoningFromRun = run && run.reasoningSource ? run.reasoningSource : null;
+          const reasoningFromMeta = runMeta && runMeta.reasoningSource ? runMeta.reasoningSource : null;
+          const reasoningValue = formatReasoningSource(reasoningFromRun || reasoningFromMeta || null);
           return (
             <div className="preview" style={{ marginTop: "10px", fontSize: "11px", lineHeight: 1.45 }}>
               <div style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.78 }}>AI Flow</div>
@@ -8144,6 +8166,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   </>
                 )
                 : <div>run: none{runMeta && runMeta.runId ? " · hint: " + String(runMeta.runId) : ""}</div>}
+              <div data-testid="ai-flow-reasoning">Reasoning: {reasoningValue}</div>
               <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
               {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion. Use Regenerate suggestions to capture full step trace.</div> : null}
               {steps.length
@@ -8152,7 +8175,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     {steps.map((step, index) => (
                       <div key={String(step.stepName || "") + "-" + String(index)} style={{ marginTop: "2px" }} data-testid={"ai-flow-step-" + String(index)}>
                         <div data-testid={"ai-flow-step-head-" + String(index)}>
-                          {String(step.stepName || "step")} · {String(step.status || "-")} · {step.provider ? String(step.provider) : "—"} · {step.model ? String(step.model) : "—"} · {formatCompactUsdCost(step.estimatedCostUsd)}
+                          {String(step.stepName || "step")} · {String(step.status || "-")} · {step.provider ? String(step.provider) : "—"} · {step.model ? String(step.model) : "—"} · {step.source ? String(step.source) : "—"} · {formatCompactUsdCost(step.estimatedCostUsd)}
                         </div>
                         <div style={{ opacity: 0.82 }} data-testid={"ai-flow-step-usage-" + String(index)}>
                           in {formatCompactTokenCount(step.inputTokens)} · out {formatCompactTokenCount(step.outputTokens)}
