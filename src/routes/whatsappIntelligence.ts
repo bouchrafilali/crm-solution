@@ -5707,6 +5707,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
       .card-actions { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
       .card-actions .btn:only-child { grid-column: 1 / -1; }
+      .ai-flow-panel {
+        min-height: 150px;
+        max-height: 220px;
+        overflow: hidden;
+      }
+      .ai-flow-steps {
+        max-height: 92px;
+        overflow-y: auto;
+      }
       .btn {
         height: 36px; border-radius: 14px; cursor: pointer; font-size: 12px;
         border: 1px solid rgba(255,255,255,.12);
@@ -7071,6 +7080,139 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         return null;
       }
 
+      function flowRunSignature(flow) {
+        const run = flow && flow.run && typeof flow.run === "object" ? flow.run : null;
+        const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
+        return JSON.stringify({
+          run: run
+            ? {
+                id: String(run.id || ""),
+                status: String(run.status || ""),
+                startedAt: String(run.startedAt || ""),
+                finishedAt: String(run.finishedAt || ""),
+                totalInputTokens: numberOrNull(run.totalInputTokens),
+                totalOutputTokens: numberOrNull(run.totalOutputTokens),
+                totalEstimatedCostUsd: numberOrNull(run.totalEstimatedCostUsd),
+                reasoningSource: String(run.reasoningSource || "")
+              }
+            : null,
+          steps: steps.map((step) => ({
+            stepName: String(step && step.stepName ? step.stepName : ""),
+            status: String(step && step.status ? step.status : ""),
+            provider: String(step && step.provider ? step.provider : ""),
+            model: String(step && step.model ? step.model : ""),
+            inputTokens: numberOrNull(step && step.inputTokens),
+            outputTokens: numberOrNull(step && step.outputTokens),
+            estimatedCostUsd: numberOrNull(step && step.estimatedCostUsd),
+            source: String(step && step.source ? step.source : ""),
+            error: String(step && step.error ? step.error : "")
+          }))
+        });
+      }
+
+      function aiFlowLeadSignature(lead) {
+        if (!lead || String(lead.channelType || "").toUpperCase() !== "MOBILE_LAB") return "no-lead";
+        const runMeta = lead.agentRunMeta && typeof lead.agentRunMeta === "object" ? lead.agentRunMeta : null;
+        const fallbackMeta = lead.fallbackGenerationMeta && typeof lead.fallbackGenerationMeta === "object"
+          ? lead.fallbackGenerationMeta
+          : null;
+        return JSON.stringify({
+          flow: flowRunSignature(lead.agentRun),
+          runMeta: runMeta
+            ? {
+                runId: String(runMeta.runId || ""),
+                reasoningSource: String(runMeta.reasoningSource || "")
+              }
+            : null,
+          generationMode: String(lead.generationMode || ""),
+          generationFallbackUsed: Boolean(lead.generationFallbackUsed),
+          generationFallbackReason: String(lead.generationFallbackReason || ""),
+          fallbackMeta: fallbackMeta
+            ? {
+                path: String(fallbackMeta.path || ""),
+                provider: String(fallbackMeta.provider || ""),
+                model: String(fallbackMeta.model || ""),
+                inputTokens: numberOrNull(fallbackMeta.inputTokens),
+                outputTokens: numberOrNull(fallbackMeta.outputTokens),
+                estimatedCostUsd: numberOrNull(fallbackMeta.estimatedCostUsd)
+              }
+            : null,
+          hasSuggestions: Array.isArray(lead.suggestions) ? lead.suggestions.length : 0,
+          agentRunError: String(lead.agentRunError || "")
+        });
+      }
+
+      const AiFlowPanel = React.memo(function AiFlowPanel(props) {
+        const lead = props && props.lead ? props.lead : null;
+        if (!lead || String(lead.channelType || "").toUpperCase() !== "MOBILE_LAB") return null;
+        const flow = lead.agentRun && typeof lead.agentRun === "object" ? lead.agentRun : null;
+        const run = flow && flow.run && typeof flow.run === "object" ? flow.run : null;
+        const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
+        const runMeta = lead.agentRunMeta && typeof lead.agentRunMeta === "object" ? lead.agentRunMeta : null;
+        const hasCards = Array.isArray(lead.suggestions) && lead.suggestions.length > 0;
+        const resultLabel = hasCards ? "cards ready" : "no cards";
+        const modeRaw = String(lead.generationMode || "").trim().toLowerCase();
+        const modeLabel = modeRaw === "cached" ? "cached state reused" : modeRaw === "fresh" ? "fresh generation" : null;
+        const fallbackUsed = Boolean(lead.generationFallbackUsed);
+        const fallbackReason = String(lead.generationFallbackReason || "").trim();
+        const fallbackGenMeta = lead.fallbackGenerationMeta && typeof lead.fallbackGenerationMeta === "object"
+          ? lead.fallbackGenerationMeta
+          : null;
+        const providerFailureMessage = buildProviderFailureMessage(run, steps);
+        const shouldShowNoRunFallback = !run && modeRaw === "cached" && !lead.agentRunError;
+        const reasoningFromRun = run && run.reasoningSource ? run.reasoningSource : null;
+        const reasoningFromMeta = runMeta && runMeta.reasoningSource ? runMeta.reasoningSource : null;
+        const reasoningValue = formatReasoningSource(reasoningFromRun || reasoningFromMeta || null);
+        return (
+          <div className="preview ai-flow-panel" style={{ marginTop: "10px", fontSize: "11px", lineHeight: 1.45 }}>
+            <div style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.78 }}>AI Flow</div>
+            {run
+              ? (
+                <>
+                  <div>runId: {String(run.id || "-")}</div>
+                  <div>status: {String(run.status || "-")}</div>
+                  <div data-testid="ai-flow-run-summary">
+                    Run cost: {formatCompactUsdCost(run.totalEstimatedCostUsd)} · in: {formatCompactTokenCount(run.totalInputTokens)} · out: {formatCompactTokenCount(run.totalOutputTokens)}
+                  </div>
+                </>
+              )
+              : runMeta && runMeta.runId
+                ? <div data-testid="ai-flow-run-loading">{formatAiFlowRunLine(null, runMeta)}</div>
+                : <div>{formatAiFlowRunLine(null, null)}</div>}
+            <div data-testid="ai-flow-reasoning">Reasoning: {reasoningValue}</div>
+            <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
+            {fallbackUsed ? <div>Run trace fallback used{fallbackReason ? ": " + fallbackReason : "."}</div> : null}
+            {!run && fallbackUsed && fallbackGenMeta
+              ? (
+                <div data-testid="ai-flow-fallback-summary">
+                  {formatFallbackGenerationSummary(fallbackGenMeta)} · {fallbackGenMeta.provider ? String(fallbackGenMeta.provider) : "—"} · {fallbackGenMeta.model ? String(fallbackGenMeta.model) : "—"}
+                </div>
+              )
+              : null}
+            {providerFailureMessage ? <div data-testid="ai-flow-provider-failure">{providerFailureMessage}</div> : null}
+            {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion. Use Regenerate suggestions to capture full step trace.</div> : null}
+            {steps.length
+              ? (
+                <div className="ai-flow-steps" style={{ marginTop: "4px" }}>
+                  {steps.map((step, index) => (
+                    <div key={String(step.stepName || "") + "-" + String(index)} style={{ marginTop: "2px" }} data-testid={"ai-flow-step-" + String(index)}>
+                      <div data-testid={"ai-flow-step-head-" + String(index)}>
+                        {String(step.stepName || "step")} · {String(step.status || "-")} · {step.provider ? String(step.provider) : "—"} · {step.model ? String(step.model) : "—"} · {step.source ? String(step.source) : "—"} · {formatCompactUsdCost(step.estimatedCostUsd)}
+                      </div>
+                      <div style={{ opacity: 0.82 }} data-testid={"ai-flow-step-usage-" + String(index)}>
+                        in {formatCompactTokenCount(step.inputTokens)} · out {formatCompactTokenCount(step.outputTokens)}
+                      </div>
+                      {step.error ? <div style={{ opacity: 0.82 }}>err: {String(step.error)}</div> : null}
+                    </div>
+                  ))}
+                </div>
+              )
+              : null}
+            {lead.agentRunError ? <div>{String(lead.agentRunError)}</div> : null}
+          </div>
+        );
+      }, (prevProps, nextProps) => aiFlowLeadSignature(prevProps && prevProps.lead) === aiFlowLeadSignature(nextProps && nextProps.lead));
+
       function runAiFlowUiAssertions() {
         console.assert(formatCompactUsdCost(null) === "—", "ai-flow: null cost should render dash");
         console.assert(formatCompactTokenCount(null) === "—", "ai-flow: null tokens should render dash");
@@ -7633,11 +7775,35 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setLeads((prev) => prev.map((lead) => (String(lead.id) === String(leadId) ? { ...lead, ...patch } : lead)));
         }, []);
 
+        const patchAgentRunState = React.useCallback((leadId, nextAgentRun, nextAgentRunError) => {
+          setLeads((prev) =>
+            prev.map((lead) => {
+              if (String(lead.id) !== String(leadId)) return lead;
+              const currentFlowSig = flowRunSignature(lead.agentRun);
+              const nextFlowSig = flowRunSignature(nextAgentRun);
+              const currentError = String(lead.agentRunError || "");
+              const nextError = String(nextAgentRunError || "");
+              if (currentFlowSig === nextFlowSig && currentError === nextError) return lead;
+              return {
+                ...lead,
+                agentRun: nextAgentRun,
+                agentRunError: nextAgentRunError
+              };
+            })
+          );
+        }, []);
+
         const loadAgentRun = React.useCallback(async (leadId, runHintId) => {
           if (!LIVE_MODE || !leadId || !isUuidValue(leadId)) return;
           const requestId = agentRunRequestRef.current + 1;
           agentRunRequestRef.current = requestId;
-          patchLead(leadId, { agentRunError: null });
+          setLeads((prev) =>
+            prev.map((lead) => {
+              if (String(lead.id) !== String(leadId)) return lead;
+              if (!lead.agentRunError) return lead;
+              return { ...lead, agentRunError: null };
+            })
+          );
           const fallbackRunId = String(runHintId || "").trim();
           const fetchPlan = buildAgentRunFetchPlan(fallbackRunId);
           const maxAttempts = 2;
@@ -7650,10 +7816,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   const byIdPayload = await fetchJson("/api/whatsapp/agent-runs/" + encodeURIComponent(fallbackRunId) + "/snapshot");
                   if (requestId !== agentRunRequestRef.current) return;
                   const byIdNormalized = normalizeAgentRunSnapshot(byIdPayload);
-                  patchLead(leadId, {
-                    agentRun: byIdNormalized,
-                    agentRunError: byIdNormalized.run ? null : "Run details are temporarily unavailable."
-                  });
+                  patchAgentRunState(leadId, byIdNormalized, byIdNormalized.run ? null : "Run details are temporarily unavailable.");
                   if (byIdNormalized.run) return;
                 } catch (error) {
                   latestError = error;
@@ -7667,10 +7830,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/agent-run/latest");
                 if (requestId !== agentRunRequestRef.current) return;
                 const normalized = normalizeAgentRunSnapshot(payload);
-                patchLead(leadId, {
-                  agentRun: normalized,
-                  agentRunError: normalized.run ? null : "Run details are temporarily unavailable."
-                });
+                patchAgentRunState(leadId, normalized, normalized.run ? null : "Run details are temporarily unavailable.");
                 if (normalized.run) return;
               } catch (error) {
                 latestError = error;
@@ -7685,27 +7845,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 const payloadById = await fetchJson("/api/whatsapp/agent-runs/" + encodeURIComponent(fallbackRunId) + "/snapshot");
                 if (requestId !== agentRunRequestRef.current) return;
                 const byId = normalizeAgentRunSnapshot(payloadById);
-                patchLead(leadId, {
-                  agentRun: byId,
-                  agentRunError: byId.run ? null : "No detailed run available for this cached suggestion."
-                });
+                patchAgentRunState(leadId, byId, byId.run ? null : "No detailed run available for this cached suggestion.");
                 return;
               } catch (byIdError) {
                 if (requestId !== agentRunRequestRef.current) return;
-                patchLead(leadId, {
-                  agentRun: { run: null, steps: [] },
-                  agentRunError: normalizeAgentRunErrorMessage(byIdError) || latestErrorMessage
-                });
+                patchAgentRunState(leadId, { run: null, steps: [] }, normalizeAgentRunErrorMessage(byIdError) || latestErrorMessage);
                 return;
               }
             }
             if (requestId !== agentRunRequestRef.current) return;
-            patchLead(leadId, {
-              agentRun: { run: null, steps: [] },
-              agentRunError: latestErrorMessage
-            });
+            patchAgentRunState(leadId, { run: null, steps: [] }, latestErrorMessage);
           }
-        }, [patchLead]);
+        }, [patchAgentRunState]);
 
         const loadLeads = React.useCallback(async () => {
           if (!LIVE_MODE) return;
@@ -7901,6 +8052,33 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!LIVE_MODE) return;
           void loadSuggestions(selectedLeadId, false);
         }, [selectedLeadId, loadSuggestions]);
+
+        React.useEffect(() => {
+          if (!LIVE_MODE || !selectedLeadId || !isUuidValue(selectedLeadId)) return;
+          const lead = leads.find((item) => String(item.id) === String(selectedLeadId)) || null;
+          if (!lead) return;
+          const run = lead.agentRun && lead.agentRun.run && typeof lead.agentRun.run === "object"
+            ? lead.agentRun.run
+            : null;
+          const runStatus = String(run && run.status ? run.status : "").trim().toLowerCase();
+          if (runStatus !== "running") return;
+          const runHintId = String((run && run.id) || (lead.agentRunMeta && lead.agentRunMeta.runId) || "").trim() || null;
+          let cancelled = false;
+          const tick = async () => {
+            if (cancelled) return;
+            await loadAgentRun(selectedLeadId, runHintId);
+          };
+          const timer = setInterval(() => { void tick(); }, 3000);
+          return () => {
+            cancelled = true;
+            clearInterval(timer);
+          };
+        }, [
+          LIVE_MODE,
+          selectedLeadId,
+          leads,
+          loadAgentRun
+        ]);
 
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;
@@ -8428,73 +8606,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function renderAiFlowPanel(lead) {
-          if (!lead || String(lead.channelType || "").toUpperCase() !== "MOBILE_LAB") return null;
-          const flow = lead.agentRun && typeof lead.agentRun === "object" ? lead.agentRun : null;
-          const run = flow && flow.run && typeof flow.run === "object" ? flow.run : null;
-          const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
-          const runMeta = lead.agentRunMeta && typeof lead.agentRunMeta === "object" ? lead.agentRunMeta : null;
-          const hasCards = Array.isArray(lead.suggestions) && lead.suggestions.length > 0;
-          const resultLabel = hasCards ? "cards ready" : "no cards";
-          const modeRaw = String(lead.generationMode || "").trim().toLowerCase();
-          const modeLabel = modeRaw === "cached" ? "cached state reused" : modeRaw === "fresh" ? "fresh generation" : null;
-          const fallbackUsed = Boolean(lead.generationFallbackUsed);
-          const fallbackReason = String(lead.generationFallbackReason || "").trim();
-          const fallbackGenMeta = lead.fallbackGenerationMeta && typeof lead.fallbackGenerationMeta === "object"
-            ? lead.fallbackGenerationMeta
-            : null;
-          const providerFailureMessage = buildProviderFailureMessage(run, steps);
-          const shouldShowNoRunFallback = !run && modeRaw === "cached" && !lead.agentRunError;
-          const reasoningFromRun = run && run.reasoningSource ? run.reasoningSource : null;
-          const reasoningFromMeta = runMeta && runMeta.reasoningSource ? runMeta.reasoningSource : null;
-          const reasoningValue = formatReasoningSource(reasoningFromRun || reasoningFromMeta || null);
-          return (
-            <div className="preview" style={{ marginTop: "10px", fontSize: "11px", lineHeight: 1.45 }}>
-              <div style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.78 }}>AI Flow</div>
-              {run
-                ? (
-                  <>
-                    <div>runId: {String(run.id || "-")}</div>
-                    <div>status: {String(run.status || "-")}</div>
-                    <div data-testid="ai-flow-run-summary">
-                      Run cost: {formatCompactUsdCost(run.totalEstimatedCostUsd)} · in: {formatCompactTokenCount(run.totalInputTokens)} · out: {formatCompactTokenCount(run.totalOutputTokens)}
-                    </div>
-                  </>
-                )
-                : runMeta && runMeta.runId
-                  ? <div data-testid="ai-flow-run-loading">{formatAiFlowRunLine(null, runMeta)}</div>
-                  : <div>{formatAiFlowRunLine(null, null)}</div>}
-              <div data-testid="ai-flow-reasoning">Reasoning: {reasoningValue}</div>
-              <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
-              {fallbackUsed ? <div>Run trace fallback used{fallbackReason ? ": " + fallbackReason : "."}</div> : null}
-              {!run && fallbackUsed && fallbackGenMeta
-                ? (
-                  <div data-testid="ai-flow-fallback-summary">
-                    {formatFallbackGenerationSummary(fallbackGenMeta)} · {fallbackGenMeta.provider ? String(fallbackGenMeta.provider) : "—"} · {fallbackGenMeta.model ? String(fallbackGenMeta.model) : "—"}
-                  </div>
-                )
-                : null}
-              {providerFailureMessage ? <div data-testid="ai-flow-provider-failure">{providerFailureMessage}</div> : null}
-              {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion. Use Regenerate suggestions to capture full step trace.</div> : null}
-              {steps.length
-                ? (
-                  <div style={{ marginTop: "4px" }}>
-                    {steps.map((step, index) => (
-                      <div key={String(step.stepName || "") + "-" + String(index)} style={{ marginTop: "2px" }} data-testid={"ai-flow-step-" + String(index)}>
-                        <div data-testid={"ai-flow-step-head-" + String(index)}>
-                          {String(step.stepName || "step")} · {String(step.status || "-")} · {step.provider ? String(step.provider) : "—"} · {step.model ? String(step.model) : "—"} · {step.source ? String(step.source) : "—"} · {formatCompactUsdCost(step.estimatedCostUsd)}
-                        </div>
-                        <div style={{ opacity: 0.82 }} data-testid={"ai-flow-step-usage-" + String(index)}>
-                          in {formatCompactTokenCount(step.inputTokens)} · out {formatCompactTokenCount(step.outputTokens)}
-                        </div>
-                        {step.error ? <div style={{ opacity: 0.82 }}>err: {String(step.error)}</div> : null}
-                      </div>
-                    ))}
-                  </div>
-                )
-                : null}
-              {lead.agentRunError ? <div>{String(lead.agentRunError)}</div> : null}
-            </div>
-          );
+          return <AiFlowPanel lead={lead} />;
         }
 
         function renderMobileInboxView(device) {

@@ -85,7 +85,7 @@ test("fresh selected lead generation uses orchestrator first and returns run met
   assert.equal(payload.enrichmentSource, "active_ai_cards");
   assert.equal(payload.status, "enriched");
   assert.equal(payload.source, "fresh_generation");
-  assert.equal(payload.cacheStatus, "miss");
+  assert.equal(payload.cacheStatus, "stale");
   assert.equal(payload.pipelineSource, "active_ai_cards");
   assert.equal(payload.basedOnMessageId, "msg-1");
   assert.equal(payload.error, null);
@@ -170,7 +170,7 @@ test("selected lead cards fallback path still returns cards safely", async () =>
   assert.equal(payload.enrichmentSource, "active_ai_cards");
   assert.equal(payload.status, "enriched");
   assert.equal(payload.source, "fresh_generation");
-  assert.equal(payload.cacheStatus, "miss");
+  assert.equal(payload.cacheStatus, "stale");
   assert.equal(payload.pipelineSource, "active_ai_cards");
   assert.equal(payload.basedOnMessageId, "msg-1");
   assert.equal(payload.error, null);
@@ -421,6 +421,7 @@ test("fallback generation is reused from fallback cache for unchanged latest mes
 
 test("persisted results are reused before regeneration", async () => {
   let activeCallCount = 0;
+  let orchestratorCalls = 0;
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
     getLatestLeadMessage: async () => ({ id: "message-1", createdAt: "2026-03-06T23:59:00.000Z" }),
@@ -453,11 +454,15 @@ test("persisted results are reused before regeneration", async () => {
         intent: "Clarify",
         messages: ["Message 1", "Message 2"]
       },
-      providers: { reply_generator: "openai" },
+      providers: { reply_generator: "openai", based_on_message_id: "message-1", cards_generated_at: "2026-03-07T00:00:00.000Z" },
       reasoningSource: "state_delta",
       createdAt: "2026-03-07T00:00:00.000Z",
       updatedAt: "2026-03-07T00:00:00.000Z"
     }),
+    runAgentOrchestrator: async () => {
+      orchestratorCalls += 1;
+      throw new Error("should_not_run_orchestrator_when_anchor_matches");
+    },
     getActiveReplyContext: async () => {
       activeCallCount += 1;
       throw new Error("should_not_regenerate_when_cached");
@@ -473,92 +478,79 @@ test("persisted results are reused before regeneration", async () => {
   assert.equal(payload.agentRunMeta.source, "cache");
   assert.equal(payload.agentRunMeta.reasoningSource, "state_delta");
   assert.equal(activeCallCount, 0);
+  assert.equal(orchestratorCalls, 0);
   assert.equal(payload.replyCards.length, 0);
+  assert.equal(payload.currentLatestMessageId, "message-1");
 });
 
-test("stale cache triggers regeneration", async () => {
+test("new inbound message triggers fresh orchestrator run", async () => {
   let activeCallCount = 0;
+  let orchestratorCalls = 0;
+  let cachedReadCount = 0;
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
     getLatestLeadMessage: async () => ({ id: "msg-new", createdAt: "2026-03-07T01:00:00.000Z" }),
-    getCachedLeadState: async () => ({
-      leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
-      latestRunId: "run-1",
-      latestMessageId: "msg-old",
-      stageAnalysis: null,
-      facts: null,
-      priorityItem: null,
-      strategy: null,
-      replyOptions: null,
-      brandReview: null,
-      topReplyCard: { label: "Old", intent: "Old", messages: ["A", "B"] },
-      providers: null,
-      createdAt: "2026-03-06T00:00:00.000Z",
-      updatedAt: "2026-03-06T00:00:00.000Z"
-    }),
-    persistCachedLeadState: async () => {
-      throw new Error("ignore_persist_for_test");
+    getCachedLeadState: async () => {
+      cachedReadCount += 1;
+      if (cachedReadCount === 1) {
+        return {
+          leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+          latestRunId: "run-1",
+          latestMessageId: "msg-old",
+          stageAnalysis: null,
+          facts: null,
+          priorityItem: null,
+          strategy: null,
+          replyOptions: null,
+          brandReview: null,
+          topReplyCard: { label: "Old", intent: "Old", messages: ["A", "B"] },
+          providers: { based_on_message_id: "msg-old", cards_generated_at: "2026-03-06T00:00:00.000Z" },
+          createdAt: "2026-03-06T00:00:00.000Z",
+          updatedAt: "2026-03-06T00:00:00.000Z"
+        };
+      }
+      return {
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        latestRunId: "run-2",
+        latestMessageId: "msg-new",
+        stageAnalysis: null,
+        facts: null,
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: { label: "Fresh from run", intent: "Guide", messages: ["N1", "N2"] },
+        providers: { reply_generator: "openai", based_on_message_id: "msg-new", cards_generated_at: "2026-03-07T01:00:00.000Z" },
+        createdAt: "2026-03-07T01:00:00.000Z",
+        updatedAt: "2026-03-07T01:00:01.000Z"
+      };
+    },
+    runAgentOrchestrator: async () => {
+      orchestratorCalls += 1;
+      return {
+        runId: "run-2",
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        messageId: "msg-new",
+        status: "completed",
+        stageAnalysis: null,
+        strategy: null,
+        priority: null,
+        topReplyCard: { label: "Fresh from run", intent: "Guide", messages: ["N1", "N2"] },
+        reasoningSource: "state_delta"
+      };
     },
     getActiveReplyContext: async () => {
       activeCallCount += 1;
-      return {
-        replyOptions: {
-          reply_options: [
-            { label: "Fresh 1", intent: "Clarify", messages: ["Message 1", "Message 2"] },
-            { label: "Fresh 2", intent: "Guide", messages: ["Message 1", "Message 2"] },
-            { label: "Fresh 3", intent: "Close", messages: ["Message 1", "Message 2"] }
-          ]
-        },
-        strategy: {
-          recommended_action: "answer_precisely",
-          action_confidence: 0.9,
-          commercial_priority: "high",
-          tone: "warm_refined",
-          pressure_level: "low",
-          primary_goal: "Clarify options",
-          secondary_goal: "Move to next step",
-          missed_opportunities: [],
-          strategy_rationale: [],
-          do_now: [],
-          avoid: []
-        },
-        stageAnalysis: {
-          stage: "QUALIFIED",
-          stage_confidence: 0.91,
-          priority_score: 71,
-          urgency: "medium",
-          payment_intent: false,
-          dropoff_risk: "low",
-          signals: [],
-          facts: {
-            products_of_interest: [],
-            event_date: null,
-            delivery_deadline: null,
-            destination_country: null,
-            budget: null,
-            price_points_detected: [],
-            customization_requests: [],
-            preferred_colors: [],
-            preferred_fabrics: [],
-            payment_method_preference: null
-          },
-          objections: [],
-          recommended_next_action: "answer_precisely",
-          reasoning_summary: []
-        },
-        transcriptLength: 120,
-        messageCount: 3,
-        provider: "openai",
-        model: "gpt-4.1-mini",
-        timestamp: "2026-03-07T00:00:00.000Z"
-      };
+      throw new Error("should_not_use_direct_generator_when_orchestrator_path_available");
     }
   });
 
-  assert.equal(activeCallCount, 1);
+  assert.equal(orchestratorCalls, 1);
+  assert.equal(activeCallCount, 0);
   assert.equal(payload.source, "fresh_generation");
   assert.equal(payload.cacheStatus, "stale");
-  assert.equal(payload.topReplyCard?.label, "Fresh 1");
+  assert.equal(payload.topReplyCard?.label, "Fresh from run");
+  assert.equal(payload.currentLatestMessageId, "msg-new");
 });
 
 test("force refresh bypasses cache and stores a new orchestrator run", async () => {
@@ -629,7 +621,7 @@ test("force refresh bypasses cache and stores a new orchestrator run", async () 
   assert.equal(orchestratorCalls, 1);
   assert.equal(payload.generationMode, "fresh");
   assert.equal(payload.source, "fresh_generation");
-  assert.equal(payload.cacheStatus, "stale");
+  assert.equal(payload.cacheStatus, "forced_refresh");
   assert.equal(payload.topReplyCard?.label, "From orchestrator");
   assert.equal(payload.agentRunMeta.runId, "run-force-new");
   assert.equal(payload.agentRunMeta.reasoningSource, "state_delta");
@@ -857,6 +849,7 @@ test("force refresh on reactivation still uses orchestrator run", async () => {
 
 test("unchanged lead does not regenerate repeatedly", async () => {
   let activeCallCount = 0;
+  let orchestratorCalls = 0;
   const deps = {
     timeoutMs: () => 5000,
     getLatestLeadMessage: async () => ({ id: "msg-same", createdAt: "2026-03-07T00:00:00.000Z" }),
@@ -871,10 +864,14 @@ test("unchanged lead does not regenerate repeatedly", async () => {
       replyOptions: null,
       brandReview: null,
       topReplyCard: { label: "Stable", intent: "Stable", messages: ["A", "B"] },
-      providers: null,
+      providers: { based_on_message_id: "msg-same", cards_generated_at: "2026-03-07T00:00:01.000Z" },
       createdAt: "2026-03-06T00:00:00.000Z",
       updatedAt: "2026-03-07T00:00:01.000Z"
     }),
+    runAgentOrchestrator: async () => {
+      orchestratorCalls += 1;
+      throw new Error("should_not_run_orchestrator_on_reopen");
+    },
     getActiveReplyContext: async () => {
       activeCallCount += 1;
       throw new Error("should_not_call_on_unchanged");
@@ -889,6 +886,7 @@ test("unchanged lead does not regenerate repeatedly", async () => {
   assert.equal(first.cacheStatus, "hit");
   assert.equal(second.cacheStatus, "hit");
   assert.equal(activeCallCount, 0);
+  assert.equal(orchestratorCalls, 0);
 });
 
 test("selected lead cards timeout", async () => {

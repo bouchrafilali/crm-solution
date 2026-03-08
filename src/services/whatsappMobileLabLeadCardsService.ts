@@ -37,8 +37,9 @@ export type MobileLabLeadCardsResult = {
   generationFallbackReason?: string | null;
   fallbackGenerationMeta?: FallbackGenerationMeta | null;
   source: "cache" | "fresh_generation";
-  cacheStatus: "hit" | "miss" | "stale";
+  cacheStatus: "hit" | "stale" | "forced_refresh";
   basedOnMessageId: string | null;
+  currentLatestMessageId: string | null;
   basedOnTimestamp: string | null;
   agentRunMeta: {
     runId: string | null;
@@ -295,22 +296,36 @@ function fallbackMetaFromReplyContext(replyContext: ReplyGeneratorResult): Fallb
   };
 }
 
+function generationAnchorFromProviders(input: {
+  providers: Record<string, unknown> | null | undefined;
+  fallbackBasedOnMessageId: string | null | undefined;
+  fallbackCardsGeneratedAt: string | null | undefined;
+}): {
+  basedOnMessageId: string | null;
+  cardsGeneratedAt: string | null;
+} {
+  const providers = input.providers && typeof input.providers === "object" ? input.providers : null;
+  const basedOnMessageIdRaw = String((providers && (providers as Record<string, unknown>).based_on_message_id) || "").trim();
+  const cardsGeneratedAtRaw = String((providers && (providers as Record<string, unknown>).cards_generated_at) || "").trim();
+  return {
+    basedOnMessageId: basedOnMessageIdRaw || (input.fallbackBasedOnMessageId ? String(input.fallbackBasedOnMessageId).trim() : "") || null,
+    cardsGeneratedAt: cardsGeneratedAtRaw || (input.fallbackCardsGeneratedAt ? String(input.fallbackCardsGeneratedAt).trim() : "") || null
+  };
+}
+
 function resolveCacheStatus(input: {
   forceRefresh: boolean;
   hasCachedTopCard: boolean;
-  cachedLatestMessageId: string | null;
-  cachedUpdatedAt: string | null;
+  basedOnMessageId: string | null;
   latestMessageId: string | null;
-  latestMessageAt: string | null;
-}): "hit" | "miss" | "stale" {
-  if (input.forceRefresh) return "stale";
-  if (!input.hasCachedTopCard) return "miss";
-  if (!input.latestMessageId && !input.latestMessageAt) return "hit";
-  if (input.cachedLatestMessageId && input.latestMessageId && input.cachedLatestMessageId !== input.latestMessageId) return "stale";
-  const latestMs = toMs(input.latestMessageAt);
-  const cachedMs = toMs(input.cachedUpdatedAt);
-  if (Number.isFinite(latestMs) && Number.isFinite(cachedMs) && latestMs > cachedMs) return "stale";
-  return "hit";
+}): "hit" | "stale" | "forced_refresh" {
+  if (input.forceRefresh) return "forced_refresh";
+  if (!input.hasCachedTopCard) return "stale";
+  const latestMessageId = String(input.latestMessageId || "").trim();
+  const basedOnMessageId = String(input.basedOnMessageId || "").trim();
+  if (!latestMessageId && !basedOnMessageId) return "hit";
+  if (latestMessageId && basedOnMessageId && latestMessageId === basedOnMessageId) return "hit";
+  return "stale";
 }
 
 export async function buildMobileLabLeadCards(
@@ -352,8 +367,9 @@ export async function buildMobileLabLeadCards(
           topReplyCard: null,
           generationMode: "fresh",
           source: "fresh_generation",
-          cacheStatus: "stale",
+          cacheStatus: "forced_refresh",
           basedOnMessageId: null,
+          currentLatestMessageId: null,
           basedOnTimestamp: null,
           agentRunMeta: {
             runId: null,
@@ -435,18 +451,36 @@ export async function buildMobileLabLeadCards(
               ? "Regeneration partially failed. Kept previous suggestions."
               : "No new usable suggestions. Kept previous suggestions.")
         : (failed ? "provider_failed" : partialError);
+      const cardsGeneratedAt = (fromCurrentRun ? refreshed?.updatedAt : null) || latestMessage.createdAt || new Date().toISOString();
+      try {
+        await deps.persistCachedLeadState({
+          leadId: safeLeadId,
+          latestMessageId: latestMessage.id,
+          providers: {
+            ...((providers && typeof providers === "object") ? providers : {}),
+            based_on_message_id: latestMessage.id,
+            cards_generated_at: cardsGeneratedAt
+          }
+        });
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] persist_anchor_failed_on_force_refresh", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
       return {
         leadId: safeLeadId,
         replyCards: [],
         topReplyCard,
         generationMode: "fresh",
         source: "fresh_generation",
-        cacheStatus: "stale",
+        cacheStatus: "forced_refresh",
         basedOnMessageId: latestMessage.id,
-        basedOnTimestamp: latestMessage.createdAt || null,
+        currentLatestMessageId: latestMessage.id,
+        basedOnTimestamp: cardsGeneratedAt,
         agentRunMeta: {
           runId: regenResult.runId || (fromCurrentRun ? refreshed?.latestRunId || null : null),
-          generatedAt: (fromCurrentRun ? refreshed?.updatedAt : null) || latestMessage.createdAt || null,
+          generatedAt: cardsGeneratedAt,
           source: "fresh_generation",
           reasoningSource: (() => {
             const raw = String((fromCurrentRun ? refreshed?.reasoningSource : regenResult.reasoningSource) || "").trim().toLowerCase();
@@ -521,13 +555,19 @@ export async function buildMobileLabLeadCards(
       const cachedMessages = cachedTop && Array.isArray(cachedTop.messages)
         ? cachedTop.messages.map((m) => String(m || "")).filter(Boolean)
         : [];
+      const cachedProviders = cached?.providers && typeof cached.providers === "object"
+        ? (cached.providers as Record<string, unknown>)
+        : null;
+      const anchorMeta = generationAnchorFromProviders({
+        providers: cachedProviders,
+        fallbackBasedOnMessageId: cached?.latestMessageId || null,
+        fallbackCardsGeneratedAt: cached?.updatedAt || null
+      });
       const cacheStatus = resolveCacheStatus({
         forceRefresh,
         hasCachedTopCard: Boolean(cachedTop && cachedMessages.length > 0),
-        cachedLatestMessageId: cached?.latestMessageId || null,
-        cachedUpdatedAt: cached?.updatedAt || null,
-        latestMessageId: latestMessage?.id || null,
-        latestMessageAt: latestMessage?.createdAt || null
+        basedOnMessageId: anchorMeta.basedOnMessageId,
+        latestMessageId: latestMessage?.id || null
       });
       if (cacheStatus === "hit" && cachedTop && cachedMessages.length > 0) {
         const topReplyCard = {
@@ -572,11 +612,12 @@ export async function buildMobileLabLeadCards(
           source: "cache",
           fallbackGenerationMeta: fallbackMetaFromCache,
           cacheStatus: "hit",
-          basedOnMessageId: cached?.latestMessageId || latestMessage?.id || null,
-          basedOnTimestamp: latestMessage?.createdAt || cached?.updatedAt || null,
+          basedOnMessageId: anchorMeta.basedOnMessageId,
+          currentLatestMessageId: latestMessage?.id || null,
+          basedOnTimestamp: anchorMeta.cardsGeneratedAt || latestMessage?.createdAt || cached?.updatedAt || null,
           agentRunMeta: {
             runId: cached?.latestRunId || null,
-            generatedAt: cached?.updatedAt || latestMessage?.createdAt || null,
+            generatedAt: anchorMeta.cardsGeneratedAt || cached?.updatedAt || latestMessage?.createdAt || null,
             source: "cache",
             reasoningSource: (() => {
               const raw = String(cached?.reasoningSource || "").trim().toLowerCase();
@@ -638,6 +679,7 @@ export async function buildMobileLabLeadCards(
             cacheStatus: "hit",
             source: "cache",
             basedOnMessageId: latestMessage?.id || fallbackCached.basedOnMessageId,
+            currentLatestMessageId: latestMessage?.id || null,
             basedOnTimestamp: latestMessage?.createdAt || fallbackCached.basedOnTimestamp
           };
         }
@@ -702,6 +744,24 @@ export async function buildMobileLabLeadCards(
           const reasoningSource = reasoningSourceRaw === "state_delta" || reasoningSourceRaw === "transcript_fallback"
             ? (reasoningSourceRaw as "state_delta" | "transcript_fallback")
             : null;
+          const cardsGeneratedAt = refreshed?.updatedAt || latestMessage.createdAt || new Date().toISOString();
+          const providersForPersistence = {
+            ...((providers && typeof providers === "object") ? providers : {}),
+            based_on_message_id: latestMessage.id,
+            cards_generated_at: cardsGeneratedAt
+          };
+          try {
+            await deps.persistCachedLeadState({
+              leadId: safeLeadId,
+              latestMessageId: latestMessage.id,
+              providers: providersForPersistence
+            });
+          } catch (error) {
+            console.warn("[mobile-lab-lead-cards] persist_anchor_failed_after_orchestrator", {
+              leadId: safeLeadId,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
           return {
             leadId: safeLeadId,
             replyCards: [],
@@ -712,10 +772,11 @@ export async function buildMobileLabLeadCards(
             source: "fresh_generation",
             cacheStatus,
             basedOnMessageId: latestMessage.id,
-            basedOnTimestamp: latestMessage.createdAt || null,
+            currentLatestMessageId: latestMessage.id,
+            basedOnTimestamp: cardsGeneratedAt,
             agentRunMeta: {
               runId: regenResult.runId || refreshed?.latestRunId || null,
-              generatedAt: refreshed?.updatedAt || latestMessage.createdAt || null,
+              generatedAt: cardsGeneratedAt,
               source: "fresh_generation",
               reasoningSource
             },
@@ -799,6 +860,7 @@ export async function buildMobileLabLeadCards(
           error: error instanceof Error ? error.message : String(error)
         });
       }
+      const cardsGeneratedAt = latestMessage?.createdAt || String(replyContext.timestamp || "").trim() || new Date().toISOString();
       try {
         await deps.persistCachedLeadState({
           leadId: safeLeadId,
@@ -810,7 +872,9 @@ export async function buildMobileLabLeadCards(
           topReplyCard: topReplyCard as unknown as Record<string, unknown> | null,
           providers: {
             reply_generator: replyContext.provider,
-            fallback_generation: fallbackMeta
+            fallback_generation: fallbackMeta,
+            based_on_message_id: latestMessage?.id || null,
+            cards_generated_at: cardsGeneratedAt
           }
         });
       } catch (error) {
@@ -830,10 +894,11 @@ export async function buildMobileLabLeadCards(
         source: "fresh_generation",
         cacheStatus,
         basedOnMessageId: latestMessage?.id || null,
-        basedOnTimestamp: latestMessage?.createdAt || null,
+        currentLatestMessageId: latestMessage?.id || null,
+        basedOnTimestamp: cardsGeneratedAt,
         agentRunMeta: {
           runId: null,
-          generatedAt: latestMessage?.createdAt || null,
+          generatedAt: cardsGeneratedAt,
           source: "fresh_generation",
           reasoningSource: null
         },
@@ -897,8 +962,9 @@ export async function buildMobileLabLeadCards(
         topReplyCard,
         generationMode: "fresh",
         source: "fresh_generation",
-        cacheStatus: "miss",
+        cacheStatus: "stale",
         basedOnMessageId: null,
+        currentLatestMessageId: null,
         basedOnTimestamp: null,
         agentRunMeta: {
           runId: null,
@@ -927,8 +993,9 @@ export async function buildMobileLabLeadCards(
       topReplyCard: null,
       generationMode: null,
       source: "fresh_generation",
-      cacheStatus: "miss",
+      cacheStatus: "stale",
       basedOnMessageId: null,
+      currentLatestMessageId: null,
       basedOnTimestamp: null,
       agentRunMeta: {
         runId: null,
@@ -967,8 +1034,9 @@ export async function buildMobileLabLeadCards(
       generationFallbackUsed: feedType === "active",
       generationFallbackReason: feedType === "active" ? "direct_generation_fallback_error" : null,
       source: "fresh_generation",
-      cacheStatus: "stale",
+      cacheStatus: forceRefresh ? "forced_refresh" : "stale",
       basedOnMessageId: null,
+      currentLatestMessageId: null,
       basedOnTimestamp: null,
       agentRunMeta: {
         runId: null,
