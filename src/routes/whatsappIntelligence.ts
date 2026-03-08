@@ -5711,6 +5711,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         min-height: 150px;
         max-height: 220px;
         overflow: hidden;
+        contain: layout paint;
+      }
+      .ai-flow-panel,
+      .ai-flow-panel * {
+        animation: none !important;
+        transition: none !important;
       }
       .ai-flow-steps {
         max-height: 92px;
@@ -6860,6 +6866,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 status: String(run.status || "").trim(),
                 startedAt: String(run.startedAt || "").trim(),
                 finishedAt: String(run.finishedAt || "").trim(),
+                updatedAt: String(run.updatedAt || run.updated_at || "").trim(),
                 totalInputTokens: numberOrNull(run.totalInputTokens),
                 totalOutputTokens: numberOrNull(run.totalOutputTokens),
                 totalEstimatedCostUsd: numberOrNull(run.totalEstimatedCostUsd),
@@ -7108,6 +7115,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             error: String(step && step.error ? step.error : "")
           }))
         });
+      }
+
+      function runStateSignature(run) {
+        if (!run || typeof run !== "object") return "none";
+        const runId = String(run.id || "").trim();
+        const status = String(run.status || "").trim().toLowerCase();
+        const updatedAt = String(run.updatedAt || "").trim();
+        return runId + "|" + status + "|" + updatedAt;
       }
 
       function aiFlowLeadSignature(lead) {
@@ -7779,11 +7794,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           setLeads((prev) =>
             prev.map((lead) => {
               if (String(lead.id) !== String(leadId)) return lead;
-              const currentFlowSig = flowRunSignature(lead.agentRun);
-              const nextFlowSig = flowRunSignature(nextAgentRun);
+              const currentRun = lead.agentRun && lead.agentRun.run && typeof lead.agentRun.run === "object"
+                ? lead.agentRun.run
+                : null;
+              const nextRun = nextAgentRun && nextAgentRun.run && typeof nextAgentRun.run === "object"
+                ? nextAgentRun.run
+                : null;
+              const currentRunSig = runStateSignature(currentRun);
+              const nextRunSig = runStateSignature(nextRun);
               const currentError = String(lead.agentRunError || "");
               const nextError = String(nextAgentRunError || "");
-              if (currentFlowSig === nextFlowSig && currentError === nextError) return lead;
+              if (currentRunSig === nextRunSig && currentError === nextError) return lead;
               return {
                 ...lead,
                 agentRun: nextAgentRun,
