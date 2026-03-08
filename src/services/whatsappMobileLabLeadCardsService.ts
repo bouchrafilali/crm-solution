@@ -478,6 +478,120 @@ export async function buildMobileLabLeadCards(
         };
       }
 
+      // Fresh generation should be linked to an orchestrator run whenever possible
+      // so AI Flow can immediately resolve run details, reasoning source, and costs.
+      if (latestMessage?.id) {
+        try {
+          const regenResult = await withTimeout(
+            deps.runAgentOrchestrator({
+              leadId: safeLeadId,
+              messageId: String(latestMessage.id),
+              trigger: "mobile_lab_selected_lead_generation"
+            }),
+            timeoutMs
+          );
+          let refreshed: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
+          try {
+            refreshed = await deps.getCachedLeadState(safeLeadId);
+          } catch (error) {
+            console.warn("[mobile-lab-lead-cards] refreshed_state_unavailable_after_fresh", {
+              leadId: safeLeadId,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+          const fromRun = normalizeTopReplyCard(regenResult.topReplyCard);
+          const refreshedTop = normalizeTopReplyCard(refreshed?.topReplyCard);
+          const topReplyCard = fromRun || refreshedTop;
+          const stageSource =
+            refreshed?.stageAnalysis && typeof refreshed.stageAnalysis === "object"
+              ? refreshed.stageAnalysis
+              : regenResult.stageAnalysis && typeof regenResult.stageAnalysis === "object"
+                ? regenResult.stageAnalysis
+                : null;
+          const strategySource =
+            refreshed?.strategy && typeof refreshed.strategy === "object"
+              ? refreshed.strategy
+              : regenResult.strategy && typeof regenResult.strategy === "object"
+                ? regenResult.strategy
+                : null;
+          const providers = refreshed?.providers && typeof refreshed.providers === "object" ? refreshed.providers : null;
+          const provider =
+            String((providers && (providers.brand_guardian || providers.reply_generator || providers.strategic_advisor || providers.stage_detection)) || "").trim() ||
+            null;
+          const status = topReplyCard ? "enriched" : regenResult.status === "failed" ? "error" : "no_generation_needed";
+          const errorText = regenResult.status === "partial"
+            ? "partial_failure_some_steps_failed"
+            : regenResult.status === "failed"
+              ? "provider_failed"
+              : null;
+          const reasoningSourceRaw = String((regenResult.reasoningSource || refreshed?.reasoningSource) || "").trim().toLowerCase();
+          const reasoningSource = reasoningSourceRaw === "state_delta" || reasoningSourceRaw === "transcript_fallback"
+            ? (reasoningSourceRaw as "state_delta" | "transcript_fallback")
+            : null;
+          return {
+            leadId: safeLeadId,
+            replyCards: [],
+            topReplyCard,
+            generationMode: "fresh",
+            source: "fresh_generation",
+            cacheStatus,
+            basedOnMessageId: latestMessage.id,
+            basedOnTimestamp: latestMessage.createdAt || null,
+            agentRunMeta: {
+              runId: regenResult.runId || refreshed?.latestRunId || null,
+              generatedAt: refreshed?.updatedAt || latestMessage.createdAt || null,
+              source: "fresh_generation",
+              reasoningSource
+            },
+            stageAnalysis: stageSource
+              ? {
+                  stage: String((stageSource as Record<string, unknown>).stage || ""),
+                  stageConfidence: Number((stageSource as Record<string, unknown>).stage_confidence ?? (stageSource as Record<string, unknown>).stageConfidence ?? 0),
+                  urgency: String((stageSource as Record<string, unknown>).urgency || "low"),
+                  paymentIntent: Boolean((stageSource as Record<string, unknown>).payment_intent ?? (stageSource as Record<string, unknown>).paymentIntent),
+                  dropoffRisk: String((stageSource as Record<string, unknown>).dropoff_risk ?? (stageSource as Record<string, unknown>).dropoffRisk ?? "low"),
+                  priorityScore: Number((stageSource as Record<string, unknown>).priority_score ?? (stageSource as Record<string, unknown>).priorityScore ?? 0)
+                }
+              : null,
+            summary: stageSource
+              ? {
+                  stage: String((stageSource as Record<string, unknown>).stage || ""),
+                  stageConfidence: Number((stageSource as Record<string, unknown>).stage_confidence ?? (stageSource as Record<string, unknown>).stageConfidence ?? 0),
+                  urgency: String((stageSource as Record<string, unknown>).urgency || "low"),
+                  paymentIntent: Boolean((stageSource as Record<string, unknown>).payment_intent ?? (stageSource as Record<string, unknown>).paymentIntent),
+                  dropoffRisk: String((stageSource as Record<string, unknown>).dropoff_risk ?? (stageSource as Record<string, unknown>).dropoffRisk ?? "low"),
+                  priorityScore: Number((stageSource as Record<string, unknown>).priority_score ?? (stageSource as Record<string, unknown>).priorityScore ?? 0)
+                }
+              : null,
+            strategy: strategySource
+              ? {
+                  recommendedAction: String((strategySource as Record<string, unknown>).recommended_action ?? (strategySource as Record<string, unknown>).recommendedAction ?? ""),
+                  commercialPriority: String((strategySource as Record<string, unknown>).commercial_priority ?? (strategySource as Record<string, unknown>).commercialPriority ?? "medium"),
+                  tone: String((strategySource as Record<string, unknown>).tone || ""),
+                  pressureLevel: String((strategySource as Record<string, unknown>).pressure_level ?? (strategySource as Record<string, unknown>).pressureLevel ?? "none"),
+                  primaryGoal: String((strategySource as Record<string, unknown>).primary_goal ?? (strategySource as Record<string, unknown>).primaryGoal ?? ""),
+                  secondaryGoal: String((strategySource as Record<string, unknown>).secondary_goal ?? (strategySource as Record<string, unknown>).secondaryGoal ?? "")
+                }
+              : null,
+            enrichmentStatus: status,
+            enrichmentSource: "active_ai_cards",
+            enrichmentError: errorText,
+            status,
+            pipelineSource: "active_ai_cards",
+            error: errorText,
+            provider,
+            model: null,
+            timestamp: new Date().toISOString()
+          };
+        } catch (error) {
+          console.warn("[mobile-lab-lead-cards] fresh_orchestrator_failed_fallback_direct", {
+            leadId: safeLeadId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+
+      // Fallback path: direct generation when orchestrator path is unavailable.
       const replyContext = await withTimeout(deps.getActiveReplyContext(safeLeadId), timeoutMs);
       const replyCards = Array.isArray(replyContext.replyOptions?.reply_options) ? replyContext.replyOptions.reply_options : [];
       const topReplyCard = replyCards.length
