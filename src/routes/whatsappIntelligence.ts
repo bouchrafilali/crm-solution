@@ -5651,6 +5651,37 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         padding: 11px;
         animation: rise .22s ease-out;
       }
+      .action-lane {
+        border-radius: 14px;
+        border: 1px solid rgba(162, 210, 255, .22);
+        background: linear-gradient(180deg, rgba(122, 193, 255, .16), rgba(62, 116, 177, .12));
+        padding: 8px 9px;
+        margin-bottom: 8px;
+      }
+      .action-lane-main {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: .01em;
+        color: #e7f2ff;
+      }
+      .action-lane-fallback {
+        opacity: .9;
+      }
+      .action-lane-reasons {
+        margin-top: 6px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .action-reason-chip {
+        border-radius: 999px;
+        border: 1px solid rgba(188, 225, 255, .28);
+        background: rgba(255,255,255,.08);
+        color: rgba(233, 245, 255, .95);
+        font-size: 10px;
+        line-height: 1;
+        padding: 5px 8px;
+      }
       .card-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
       .card-title { font-size: 14px; font-weight: 600; }
       .card-tag { font-size: 11px; color: rgba(186,230,253,.9); margin-top: 2px; }
@@ -6538,6 +6569,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           generationFallbackUsed: false,
           generationFallbackReason: null,
           fallbackGenerationMeta: null,
+          recommendedAttention: null,
+          conversionProbability: null,
+          dropoffRiskScore: null,
+          reasonCodes: [],
+          primaryReasonCode: null,
           suggestions: [],
           messages: []
         };
@@ -6586,6 +6622,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           generationFallbackUsed: false,
           generationFallbackReason: null,
           fallbackGenerationMeta: null,
+          recommendedAttention: null,
+          conversionProbability: null,
+          dropoffRiskScore: null,
+          reasonCodes: [],
+          primaryReasonCode: null,
           skipAllowed: item && item.skipAllowed !== false,
           suggestions: hasCard
             ? [
@@ -6893,6 +6934,100 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         };
       }
 
+      function mapPriorityIntelligenceFromCardsPayload(payload) {
+        const row = payload && payload.priorityIntelligence && typeof payload.priorityIntelligence === "object"
+          ? payload.priorityIntelligence
+          : null;
+        if (!row) {
+          return {
+            recommendedAttention: null,
+            conversionProbability: null,
+            dropoffRisk: null,
+            reasonCodes: [],
+            primaryReasonCode: null
+          };
+        }
+        const toUnitNumber = (value) => {
+          const n = Number(value);
+          return Number.isFinite(n) && n >= 0 ? n : null;
+        };
+        const reasonsRaw = Array.isArray(row.reasonCodes) ? row.reasonCodes : Array.isArray(row.reason_codes) ? row.reason_codes : [];
+        const reasonCodes = reasonsRaw
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter(Boolean)
+          .slice(0, 6);
+        const recommendedRaw = String(row.recommendedAttention || row.recommended_attention || "").trim().toLowerCase();
+        const primaryRaw = String(row.primaryReasonCode || row.primary_reason_code || "").trim().toLowerCase();
+        return {
+          recommendedAttention: recommendedRaw || null,
+          conversionProbability: toUnitNumber(row.conversionProbability ?? row.conversion_probability),
+          dropoffRisk: toUnitNumber(row.dropoffRisk ?? row.dropoff_risk),
+          reasonCodes,
+          primaryReasonCode: primaryRaw || null
+        };
+      }
+
+      function formatRecommendedAttention(value) {
+        const raw = String(value || "").trim().toLowerCase();
+        if (raw === "reply_now") return "Reply now";
+        if (raw === "reactivate_now") return "Reactivate now";
+        if (raw === "monitor") return "Monitor";
+        if (raw === "wait") return "Wait";
+        return "";
+      }
+
+      function formatRiskBand(value) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return "";
+        if (n >= 0.67) return "high";
+        if (n >= 0.34) return "medium";
+        return "low";
+      }
+
+      function readableReasonCode(value) {
+        const key = String(value || "").trim().toLowerCase();
+        const labels = {
+          product_interest_detected: "Product interest",
+          price_request_detected: "Price request",
+          payment_intent_detected: "Payment intent",
+          shipping_question_detected: "Shipping question",
+          event_date_detected: "Event date",
+          event_date_near: "Event date near",
+          awaiting_reply: "Awaiting reply",
+          long_silence_detected: "Long silence",
+          price_sent_then_silence: "Price sent then silence",
+          deposit_pending_then_silence: "Deposit pending silence",
+          high_ticket_context: "High ticket",
+          repeat_customer_detected: "Repeat customer",
+          dropoff_risk_high: "Dropoff risk high",
+          stage_deposit_pending: "Deposit pending",
+          stage_stalled: "Stage stalled"
+        };
+        return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+      }
+
+      function buildActionLaneSummary(lead) {
+        const recommended = formatRecommendedAttention(lead && lead.recommendedAttention);
+        const convertValue = Number(lead && lead.conversionProbability);
+        const riskBand = formatRiskBand(lead && lead.dropoffRiskScore);
+        const reasonsRaw = Array.isArray(lead && lead.reasonCodes) ? lead.reasonCodes : [];
+        const reasonCodes = reasonsRaw
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter(Boolean)
+          .slice(0, 3);
+        if (!recommended && !Number.isFinite(convertValue) && !riskBand && !reasonCodes.length) {
+          return null;
+        }
+        const parts = [];
+        if (recommended) parts.push(recommended);
+        if (Number.isFinite(convertValue)) parts.push(Math.round(Math.max(0, Math.min(1, convertValue)) * 100) + "% convert");
+        if (riskBand) parts.push("Risk " + riskBand);
+        return {
+          headline: parts.join(" · "),
+          reasons: reasonCodes.map((code) => readableReasonCode(code))
+        };
+      }
+
       function formatReasoningSource(value) {
         const raw = String(value || "").trim().toLowerCase();
         if (raw === "state_delta" || raw === "transcript_fallback") return raw;
@@ -6953,6 +7088,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         console.assert(buildAgentRunFetchPlan("").join(",") === "latest", "ai-flow: should fetch latest when run hint is missing");
         console.assert(formatFallbackGenerationSummary({ estimatedCostUsd: 0.0123, inputTokens: 1000, outputTokens: 300 }).includes("$0.0123"), "ai-flow: fallback summary should include cost");
         console.assert(formatFallbackGenerationSummary({ estimatedCostUsd: 0.0123, inputTokens: 1000, outputTokens: 300 }).includes("in: 1,000"), "ai-flow: fallback summary should include input tokens");
+        console.assert(formatRecommendedAttention("reply_now") === "Reply now", "action-lane: should map reply_now label");
+        console.assert(formatRiskBand(0.58) === "medium", "action-lane: should map medium risk");
+        console.assert(readableReasonCode("event_date_detected") === "Event date", "action-lane: should map readable reason");
+        const emptyActionLane = buildActionLaneSummary({ recommendedAttention: null, conversionProbability: null, dropoffRiskScore: null, reasonCodes: [] });
+        console.assert(emptyActionLane === null, "action-lane: null-safe fallback should return null summary");
         console.assert(
           buildProviderFailureMessage(
             { status: "partial" },
@@ -7602,6 +7742,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       generationFallbackUsed: Boolean(old.generationFallbackUsed),
                       generationFallbackReason: old.generationFallbackReason || null,
                       fallbackGenerationMeta: old.fallbackGenerationMeta || null,
+                      recommendedAttention: old.recommendedAttention || null,
+                      conversionProbability: old.conversionProbability != null ? Number(old.conversionProbability) : null,
+                      dropoffRiskScore: old.dropoffRiskScore != null ? Number(old.dropoffRiskScore) : null,
+                      reasonCodes: Array.isArray(old.reasonCodes) ? old.reasonCodes : [],
+                      primaryReasonCode: old.primaryReasonCode || null,
                       messages: Array.isArray(old.messages) ? old.messages : []
                     }
                   : lead;
@@ -7665,6 +7810,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             const agentRunMeta = mapAgentRunMetaFromCardsPayload(payload);
             const fallbackMeta = mapGenerationFallbackFromCardsPayload(payload);
             const fallbackGenerationMeta = mapFallbackGenerationMetaFromCardsPayload(payload);
+            const priorityIntelligence = mapPriorityIntelligenceFromCardsPayload(payload);
             const statusRaw = String((payload && (payload.status || payload.enrichmentStatus)) || "").trim().toLowerCase();
             const preservePrevious = Boolean(forceRegenerate && previousSuggestions.length && !suggestions.length);
             const suggestionNotice = preservePrevious
@@ -7687,7 +7833,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 : null,
               generationFallbackUsed: fallbackMeta.used,
               generationFallbackReason: fallbackMeta.reason,
-              fallbackGenerationMeta
+              fallbackGenerationMeta,
+              recommendedAttention: priorityIntelligence.recommendedAttention,
+              conversionProbability: priorityIntelligence.conversionProbability,
+              dropoffRiskScore: priorityIntelligence.dropoffRisk,
+              reasonCodes: priorityIntelligence.reasonCodes,
+              primaryReasonCode: priorityIntelligence.primaryReasonCode
             });
             await loadAgentRun(leadId, agentRunMeta.runId);
             if (forceRegenerate) await loadMessages(leadId);
@@ -8472,10 +8623,31 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 </div>
                 <div className="mobile-ai-cards">
                   {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
-                    ? selectedLead.suggestions.map((card) => {
+                  ? selectedLead.suggestions.map((card) => {
                       const selectedForCard = selectedMessagesForCard(card);
+                      const actionLane = buildActionLaneSummary(selectedLead);
                       return (
                         <div key={card.id} className="card">
+                          <div className="action-lane" data-testid="action-lane">
+                            {actionLane
+                              ? (
+                                <>
+                                  <div className="action-lane-main">{actionLane.headline}</div>
+                                  {actionLane.reasons.length
+                                    ? (
+                                      <div className="action-lane-reasons">
+                                        {actionLane.reasons.slice(0, 3).map((reason, index) => (
+                                          <span key={String(reason) + "-" + String(index)} className="action-reason-chip">
+                                            {reason}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )
+                                    : null}
+                                </>
+                              )
+                              : <div className="action-lane-main action-lane-fallback">AI suggestion ready</div>}
+                          </div>
                           <div className="card-top">
                             <div>
                               <div className="card-title">{card.title}</div>
@@ -8496,6 +8668,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                           </div>
                           <div className="card-actions">
                             <button
+                              className="btn insert"
+                              disabled={sending || !selectedForCard.length}
+                              onClick={() => {
+                                const selectedNow = selectedMessagesForCard(card);
+                                setDraftMessages(selectedNow);
+                              }}
+                            >
+                              Insert
+                            </button>
+                            <button
                               className="btn send"
                               disabled={sending || !selectedForCard.length}
                               onClick={() => {
@@ -8503,7 +8685,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                 void sendMessages(selectedNow, card.id);
                               }}
                             >
-                              Envoyer
+                              Send
                             </button>
                           </div>
                         </div>
@@ -8984,8 +9166,29 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
                                 ? selectedLead.suggestions.map((card) => {
                                   const selectedForCard = selectedMessagesForCard(card);
+                                  const actionLane = buildActionLaneSummary(selectedLead);
                                   return (
                                     <div key={card.id} className="card">
+                                      <div className="action-lane" data-testid="action-lane">
+                                        {actionLane
+                                          ? (
+                                            <>
+                                              <div className="action-lane-main">{actionLane.headline}</div>
+                                              {actionLane.reasons.length
+                                                ? (
+                                                  <div className="action-lane-reasons">
+                                                    {actionLane.reasons.slice(0, 3).map((reason, index) => (
+                                                      <span key={String(reason) + "-" + String(index)} className="action-reason-chip">
+                                                        {reason}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )
+                                                : null}
+                                            </>
+                                          )
+                                          : <div className="action-lane-main action-lane-fallback">AI suggestion ready</div>}
+                                      </div>
                                       <div className="card-top">
                                         <div>
                                           <div className="card-title">{card.title}</div>
@@ -9006,6 +9209,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                       </div>
                                       <div className="card-actions">
                                         <button
+                                          className="btn insert"
+                                          disabled={sending || !selectedForCard.length}
+                                          onClick={() => {
+                                            const selectedNow = selectedMessagesForCard(card);
+                                            setDraftMessages(selectedNow);
+                                          }}
+                                        >
+                                          Insert
+                                        </button>
+                                        <button
                                           className="btn send"
                                           disabled={sending || !selectedForCard.length}
                                           onClick={() => {
@@ -9013,7 +9226,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                             void sendMessages(selectedNow, card.id);
                                           }}
                                         >
-                                          Envoyer
+                                          Send
                                         </button>
                                       </div>
                                     </div>
@@ -9164,8 +9377,29 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
                                 ? selectedLead.suggestions.map((card) => {
                                   const selectedForCard = selectedMessagesForCard(card);
+                                  const actionLane = buildActionLaneSummary(selectedLead);
                                   return (
                                     <div key={card.id} className="card">
+                                      <div className="action-lane" data-testid="action-lane">
+                                        {actionLane
+                                          ? (
+                                            <>
+                                              <div className="action-lane-main">{actionLane.headline}</div>
+                                              {actionLane.reasons.length
+                                                ? (
+                                                  <div className="action-lane-reasons">
+                                                    {actionLane.reasons.slice(0, 3).map((reason, index) => (
+                                                      <span key={String(reason) + "-" + String(index)} className="action-reason-chip">
+                                                        {reason}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )
+                                                : null}
+                                            </>
+                                          )
+                                          : <div className="action-lane-main action-lane-fallback">AI suggestion ready</div>}
+                                      </div>
                                       <div className="card-top">
                                         <div>
                                           <div className="card-title">{card.title}</div>
@@ -9186,6 +9420,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                       </div>
                                       <div className="card-actions">
                                         <button
+                                          className="btn insert"
+                                          disabled={sending || !selectedForCard.length}
+                                          onClick={() => {
+                                            const selectedNow = selectedMessagesForCard(card);
+                                            setDraftMessages(selectedNow);
+                                          }}
+                                        >
+                                          Insert
+                                        </button>
+                                        <button
                                           className="btn send"
                                           disabled={sending || !selectedForCard.length}
                                           onClick={() => {
@@ -9193,7 +9437,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                             void sendMessages(selectedNow, card.id);
                                           }}
                                         >
-                                          Envoyer
+                                          Send
                                         </button>
                                       </div>
                                     </div>

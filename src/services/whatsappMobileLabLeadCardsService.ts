@@ -46,6 +46,14 @@ export type MobileLabLeadCardsResult = {
     source: "cache" | "fresh_generation" | "reactivation_replies";
     reasoningSource: "state_delta" | "transcript_fallback" | null;
   };
+  priorityIntelligence?: {
+    recommendedAttention: string | null;
+    conversionProbability: number | null;
+    dropoffRisk: number | null;
+    priorityScore: number | null;
+    reasonCodes: string[];
+    primaryReasonCode: string | null;
+  } | null;
   stageAnalysis: {
     stage: string;
     stageConfidence: number;
@@ -223,6 +231,46 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 }
 
+function decimalOrNull(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Number(n.toFixed(6)) : null;
+}
+
+function normalizeReasonCodes(value: unknown): string[] {
+  const list = Array.isArray(value) ? value : [];
+  const out: string[] = [];
+  for (const raw of list) {
+    const code = String(raw || "").trim().toLowerCase();
+    if (!code || out.includes(code)) continue;
+    out.push(code);
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+function normalizePriorityIntelligence(value: unknown): MobileLabLeadCardsResult["priorityIntelligence"] {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const recommendedAttentionRaw = String(row.recommended_attention ?? row.recommendedAttention ?? "").trim().toLowerCase();
+  const recommendedAttention = recommendedAttentionRaw || null;
+  const conversionProbability = decimalOrNull(row.conversion_probability ?? row.conversionProbability);
+  const dropoffRisk = decimalOrNull(row.dropoff_risk ?? row.dropoffRisk);
+  const priorityScoreRaw = row.priority_score ?? row.priorityScore;
+  const priorityScoreNum = Number(priorityScoreRaw);
+  const priorityScore = Number.isFinite(priorityScoreNum) && priorityScoreNum >= 0 ? Math.round(priorityScoreNum) : null;
+  const reasonCodes = normalizeReasonCodes(row.reason_codes ?? row.reasonCodes ?? []);
+  const primaryReasonCodeRaw = String(row.primary_reason_code ?? row.primaryReasonCode ?? "").trim().toLowerCase();
+  const primaryReasonCode = primaryReasonCodeRaw || null;
+  return {
+    recommendedAttention,
+    conversionProbability,
+    dropoffRisk,
+    priorityScore,
+    reasonCodes,
+    primaryReasonCode
+  };
+}
+
 function fallbackMetaFromReplyContext(replyContext: ReplyGeneratorResult): FallbackGenerationMeta {
   const provider = String(replyContext.provider || "").trim() || null;
   const model = String(replyContext.model || "").trim() || null;
@@ -363,6 +411,12 @@ export async function buildMobileLabLeadCards(
             ? regenResult.strategy
             : null;
       const providers = fromCurrentRun && refreshed?.providers && typeof refreshed.providers === "object" ? refreshed.providers : null;
+      const prioritySource =
+        fromCurrentRun && refreshed?.priorityItem && typeof refreshed.priorityItem === "object"
+          ? refreshed.priorityItem
+          : regenResult.priority && typeof regenResult.priority === "object"
+            ? regenResult.priority
+            : null;
       const provider =
         String((providers && (providers.brand_guardian || providers.reply_generator || providers.strategic_advisor || providers.stage_detection)) || "").trim() ||
         null;
@@ -401,6 +455,7 @@ export async function buildMobileLabLeadCards(
               : null;
           })()
         },
+        priorityIntelligence: normalizePriorityIntelligence(prioritySource),
         stageAnalysis: stageSource
           ? {
               stage: String((stageSource as Record<string, unknown>).stage || ""),
@@ -530,6 +585,7 @@ export async function buildMobileLabLeadCards(
                 : null;
             })()
           },
+          priorityIntelligence: normalizePriorityIntelligence(cached?.priorityItem || null),
           stageAnalysis: stage
             ? {
                 stage: String(stage.stage || ""),
@@ -627,6 +683,12 @@ export async function buildMobileLabLeadCards(
                 ? regenResult.strategy
                 : null;
           const providers = refreshed?.providers && typeof refreshed.providers === "object" ? refreshed.providers : null;
+          const prioritySource =
+            refreshed?.priorityItem && typeof refreshed.priorityItem === "object"
+              ? refreshed.priorityItem
+              : regenResult.priority && typeof regenResult.priority === "object"
+                ? regenResult.priority
+                : null;
           const provider =
             String((providers && (providers.brand_guardian || providers.reply_generator || providers.strategic_advisor || providers.stage_detection)) || "").trim() ||
             null;
@@ -657,6 +719,7 @@ export async function buildMobileLabLeadCards(
               source: "fresh_generation",
               reasoningSource
             },
+            priorityIntelligence: normalizePriorityIntelligence(prioritySource),
             stageAnalysis: stageSource
               ? {
                   stage: String((stageSource as Record<string, unknown>).stage || ""),
@@ -774,6 +837,7 @@ export async function buildMobileLabLeadCards(
           source: "fresh_generation",
           reasoningSource: null
         },
+        priorityIntelligence: normalizePriorityIntelligence(priorityItem),
         stageAnalysis: {
           stage: replyContext.stageAnalysis.stage,
           stageConfidence: replyContext.stageAnalysis.stage_confidence,
