@@ -10,11 +10,22 @@ import { buildLeadTranscript } from "./whatsappTranscriptFormatter.js";
 import { buildLeadReactivationReplies } from "./whatsappReactivationReplyService.js";
 import { listWhatsAppLeadMessages } from "../db/whatsappLeadsRepo.js";
 import { buildLeadPriorityIntelligence } from "./whatsappPriorityIntelligenceService.js";
+import { estimateAiCostUsd } from "./aiPricing.js";
 
 type Card = {
   label: string;
   intent: string;
   messages: string[];
+};
+
+type FallbackGenerationMeta = {
+  path: "direct_generation_fallback";
+  provider: string | null;
+  model: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostUsd: number | null;
+  generatedAt: string | null;
 };
 
 export type MobileLabLeadCardsResult = {
@@ -24,6 +35,7 @@ export type MobileLabLeadCardsResult = {
   generationMode: "cached" | "fresh" | null;
   generationFallbackUsed?: boolean;
   generationFallbackReason?: string | null;
+  fallbackGenerationMeta?: FallbackGenerationMeta | null;
   source: "cache" | "fresh_generation";
   cacheStatus: "hit" | "miss" | "stale";
   basedOnMessageId: string | null;
@@ -85,8 +97,13 @@ type MobileLabLeadCardsDeps = {
   getActiveReplyContext: (leadId: string) => Promise<ReplyGeneratorResult>;
   runAgentOrchestrator: (input: { leadId: string; messageId: string; trigger?: string | null }) => ReturnType<typeof runWhatsAppAgentOrchestrator>;
   getReactivationReplies: (leadId: string) => ReturnType<typeof buildLeadReactivationReplies>;
+  getFallbackCache: (key: string) => MobileLabLeadCardsResult | null;
+  setFallbackCache: (key: string, payload: MobileLabLeadCardsResult) => void;
   timeoutMs: () => number;
 };
+
+const fallbackCardsMemoryCache = new Map<string, { payload: MobileLabLeadCardsResult; createdAtMs: number }>();
+const FALLBACK_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function parsePositiveInt(value: unknown): number | null {
   const num = Number(value);
@@ -138,6 +155,21 @@ function defaultDeps(): MobileLabLeadCardsDeps {
     },
     runAgentOrchestrator: (input) => runWhatsAppAgentOrchestrator(input),
     getReactivationReplies: (leadId: string) => buildLeadReactivationReplies(leadId),
+    getFallbackCache: (key: string) => {
+      const hit = fallbackCardsMemoryCache.get(String(key || ""));
+      if (!hit) return null;
+      if (Date.now() - hit.createdAtMs > FALLBACK_CACHE_TTL_MS) {
+        fallbackCardsMemoryCache.delete(String(key || ""));
+        return null;
+      }
+      return hit.payload;
+    },
+    setFallbackCache: (key: string, payload: MobileLabLeadCardsResult) => {
+      fallbackCardsMemoryCache.set(String(key || ""), {
+        payload,
+        createdAtMs: Date.now()
+      });
+    },
     timeoutMs: () => resolveTimeoutMs()
   };
 }
@@ -176,6 +208,45 @@ function normalizeTopReplyCard(value: unknown): Card | null {
   return { label, intent, messages };
 }
 
+function buildFallbackCacheKey(leadId: string, latestMessage: { id: string; createdAt: string } | null): string {
+  if (!latestMessage?.id) return "";
+  return [
+    "fallback",
+    String(leadId || "").trim(),
+    String(latestMessage.id || "").trim(),
+    String(latestMessage.createdAt || "").trim()
+  ].join(":");
+}
+
+function numberOrNull(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+}
+
+function fallbackMetaFromReplyContext(replyContext: ReplyGeneratorResult): FallbackGenerationMeta {
+  const provider = String(replyContext.provider || "").trim() || null;
+  const model = String(replyContext.model || "").trim() || null;
+  const inputTokens = numberOrNull(replyContext.usage?.inputTokens);
+  const outputTokens = numberOrNull(replyContext.usage?.outputTokens);
+  const estimated = estimateAiCostUsd({
+    provider: provider || "",
+    model: model || "",
+    usage: replyContext.usage || null
+  });
+  return {
+    path: "direct_generation_fallback",
+    provider,
+    model,
+    inputTokens,
+    outputTokens,
+    estimatedCostUsd:
+      typeof estimated.estimatedCostUsd === "number" && Number.isFinite(estimated.estimatedCostUsd)
+        ? Number(estimated.estimatedCostUsd.toFixed(6))
+        : null,
+    generatedAt: String(replyContext.timestamp || "").trim() || null
+  };
+}
+
 function resolveCacheStatus(input: {
   forceRefresh: boolean;
   hasCachedTopCard: boolean;
@@ -201,6 +272,7 @@ export async function buildMobileLabLeadCards(
 ): Promise<MobileLabLeadCardsResult> {
   const safeLeadId = String(leadId || "").trim();
   const deps: MobileLabLeadCardsDeps = { ...defaultDeps(), ...(depsOverride || {}) };
+  const useFallbackCache = !depsOverride || (Object.prototype.hasOwnProperty.call(depsOverride, "getFallbackCache") || Object.prototype.hasOwnProperty.call(depsOverride, "setFallbackCache"));
   const timeoutMs = deps.timeoutMs();
   const feedType = input?.feedType === "reactivation" ? "reactivation" : "active";
   const forceRefresh = Boolean(input?.forceRefresh);
@@ -408,6 +480,23 @@ export async function buildMobileLabLeadCards(
           intent: String(cachedTop.intent || "").trim(),
           messages: cachedMessages
         };
+        const fallbackMetaFromCache = (() => {
+          const providers = cached?.providers && typeof cached.providers === "object" ? cached.providers : null;
+          const row = providers && typeof (providers as Record<string, unknown>).fallback_generation === "object"
+            ? ((providers as Record<string, unknown>).fallback_generation as Record<string, unknown>)
+            : null;
+          if (!row) return null;
+          const estimatedNum = Number(row.estimatedCostUsd);
+          return {
+            path: "direct_generation_fallback" as const,
+            provider: String(row.provider || "").trim() || null,
+            model: String(row.model || "").trim() || null,
+            inputTokens: numberOrNull(row.inputTokens),
+            outputTokens: numberOrNull(row.outputTokens),
+            estimatedCostUsd: Number.isFinite(estimatedNum) ? estimatedNum : null,
+            generatedAt: String(row.generatedAt || "").trim() || null
+          };
+        })();
         const stage = cached?.stageAnalysis && typeof cached.stageAnalysis === "object"
           ? cached.stageAnalysis
           : null;
@@ -423,7 +512,10 @@ export async function buildMobileLabLeadCards(
           replyCards: [],
           topReplyCard,
           generationMode: "cached",
+          generationFallbackUsed: Boolean(fallbackMetaFromCache),
+          generationFallbackReason: fallbackMetaFromCache ? "direct_generation_fallback" : null,
           source: "cache",
+          fallbackGenerationMeta: fallbackMetaFromCache,
           cacheStatus: "hit",
           basedOnMessageId: cached?.latestMessageId || latestMessage?.id || null,
           basedOnTimestamp: latestMessage?.createdAt || cached?.updatedAt || null,
@@ -478,6 +570,21 @@ export async function buildMobileLabLeadCards(
           model: null,
           timestamp: new Date().toISOString()
         };
+      }
+
+      const fallbackCacheKey = buildFallbackCacheKey(safeLeadId, latestMessage);
+      if (useFallbackCache && fallbackCacheKey) {
+        const fallbackCached = deps.getFallbackCache(fallbackCacheKey);
+        if (fallbackCached && fallbackCached.generationFallbackUsed && fallbackCached.topReplyCard) {
+          return {
+            ...fallbackCached,
+            generationMode: "cached",
+            cacheStatus: "hit",
+            source: "cache",
+            basedOnMessageId: latestMessage?.id || fallbackCached.basedOnMessageId,
+            basedOnTimestamp: latestMessage?.createdAt || fallbackCached.basedOnTimestamp
+          };
+        }
       }
 
       // Fresh generation should be linked to an orchestrator run whenever possible
@@ -611,6 +718,7 @@ export async function buildMobileLabLeadCards(
       const status = topReplyCard ? "enriched" : "no_generation_needed";
       const pipelineSource = "active_ai_cards" as const;
       let priorityItem: Record<string, unknown> | null = null;
+      const fallbackMeta = fallbackMetaFromReplyContext(replyContext);
       try {
         const priority = await buildLeadPriorityIntelligence(safeLeadId);
         priorityItem = {
@@ -637,7 +745,10 @@ export async function buildMobileLabLeadCards(
           strategy: replyContext.strategy as unknown as Record<string, unknown>,
           replyOptions: replyContext.replyOptions as unknown as Record<string, unknown>,
           topReplyCard: topReplyCard as unknown as Record<string, unknown> | null,
-          providers: { reply_generator: replyContext.provider }
+          providers: {
+            reply_generator: replyContext.provider,
+            fallback_generation: fallbackMeta
+          }
         });
       } catch (error) {
         console.warn("[mobile-lab-lead-cards] persist_cached_state_failed", {
@@ -645,13 +756,14 @@ export async function buildMobileLabLeadCards(
           error: error instanceof Error ? error.message : String(error)
         });
       }
-      return {
+      const fallbackResult: MobileLabLeadCardsResult = {
         leadId: safeLeadId,
         replyCards: [],
         topReplyCard,
         generationMode: "fresh",
         generationFallbackUsed: true,
         generationFallbackReason: "direct_generation_fallback",
+        fallbackGenerationMeta: fallbackMeta,
         source: "fresh_generation",
         cacheStatus,
         basedOnMessageId: latestMessage?.id || null,
@@ -696,6 +808,11 @@ export async function buildMobileLabLeadCards(
         model: replyContext.model || null,
         timestamp: new Date().toISOString()
       };
+      if (useFallbackCache) {
+        const key = buildFallbackCacheKey(safeLeadId, latestMessage);
+        if (key && fallbackResult.topReplyCard) deps.setFallbackCache(key, fallbackResult);
+      }
+      return fallbackResult;
     }
 
     if (feedType === "reactivation") {

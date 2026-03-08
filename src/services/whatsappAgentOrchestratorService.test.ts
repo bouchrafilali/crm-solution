@@ -286,6 +286,216 @@ test("partial failure preserves run log", async () => {
   assert.ok(steps.some((step) => step.stepName === "brand_guardian" && step.status === "skipped"));
 });
 
+test("reply_generator quota failure finalizes run with partial costs", async () => {
+  const steps: Array<{ stepName: string; status: string; error: string | null }> = [];
+  let finalRunPayload: { status?: string; finishedAt?: string | null; totalInputTokens?: number | null; totalOutputTokens?: number | null; totalEstimatedCostUsd?: number | null } = {};
+
+  const result = await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "99999999-9999-4999-8999-999999999999" },
+    {
+      createRun: async () => ({
+        id: "run-quota",
+        leadId: "11111111-1111-4111-8111-111111111111",
+        messageId: "99999999-9999-4999-8999-999999999999",
+        status: "running",
+        startedAt: "2026-03-07T10:00:00.000Z",
+        finishedAt: null,
+        totalInputTokens: null,
+        totalOutputTokens: null,
+        totalEstimatedCostUsd: null,
+        createdAt: "2026-03-07T10:00:00.000Z"
+      }),
+      updateRun: async (input) => {
+        finalRunPayload = {
+          status: input.status,
+          finishedAt: input.finishedAt ?? null,
+          totalInputTokens: input.totalInputTokens,
+          totalOutputTokens: input.totalOutputTokens,
+          totalEstimatedCostUsd: input.totalEstimatedCostUsd
+        };
+      },
+      updateStep: async (input) => {
+        steps.push({
+          stepName: input.stepName,
+          status: input.status,
+          error: input.error ?? null
+        });
+        return {
+          id: `${input.stepName}-id`,
+          runId: input.runId,
+          stepName: input.stepName,
+          stepOrder: input.stepOrder,
+          status: input.status,
+          provider: input.provider ?? null,
+          model: input.model ?? null,
+          inputTokens: input.inputTokens ?? null,
+          outputTokens: input.outputTokens ?? null,
+          cachedInputTokens: input.cachedInputTokens ?? null,
+          unitInputPricePerMillion: input.unitInputPricePerMillion ?? null,
+          unitOutputPricePerMillion: input.unitOutputPricePerMillion ?? null,
+          estimatedCostUsd: input.estimatedCostUsd ?? null,
+          startedAt: input.startedAt ?? null,
+          finishedAt: input.finishedAt ?? null,
+          outputJson: input.outputJson ?? null,
+          error: input.error ?? null,
+          createdAt: "2026-03-07T10:00:00.000Z"
+        };
+      },
+      upsertLeadState: async (input: any) => ({
+        leadId: input.leadId,
+        latestRunId: input.latestRunId ?? null,
+        latestMessageId: input.latestMessageId ?? null,
+        stageAnalysis: input.stageAnalysis ?? null,
+        facts: input.facts ?? null,
+        structuredState: input.structuredState ?? null,
+        priorityItem: input.priorityItem ?? null,
+        strategy: input.strategy ?? null,
+        replyOptions: input.replyOptions ?? null,
+        brandReview: input.brandReview ?? null,
+        topReplyCard: input.topReplyCard ?? null,
+        providers: input.providers ?? null,
+        reasoningSource: input.reasoningSource ?? null,
+        createdAt: "2026-03-07T10:00:00.000Z",
+        updatedAt: "2026-03-07T10:00:00.000Z"
+      }),
+      getTranscript: async () => ({
+        transcript: "[2026-03-07 10:00] CLIENT: hi",
+        messageCount: 1,
+        transcriptLength: 40
+      }),
+      detectStage: async () => ({
+        analysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "claude",
+        model: "claude-haiku-4-5-20251001",
+        usage: { inputTokens: 800, outputTokens: 80, cachedInputTokens: 0 },
+        timestamp: "2026-03-07T10:00:00.000Z"
+      }),
+      getMessages: async () => [{ direction: "IN", createdAt: "2026-03-07T09:50:00.000Z" }],
+      getStrategicAdvisor: async () => ({
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        usage: { inputTokens: 300, outputTokens: 120, cachedInputTokens: 0 },
+        timestamp: "2026-03-07T10:00:00.000Z"
+      }),
+      getReplyGenerator: async () => {
+        throw new Error("OpenAI 429 insufficient_quota for this request");
+      }
+    }
+  );
+
+  assert.equal(result.status, "partial");
+  assert.equal(finalRunPayload.status, "partial");
+  assert.ok(finalRunPayload.finishedAt && String(finalRunPayload.finishedAt).includes("T"));
+  assert.equal(finalRunPayload.totalInputTokens, 1100);
+  assert.equal(finalRunPayload.totalOutputTokens, 200);
+  assert.ok(typeof finalRunPayload.totalEstimatedCostUsd === "number" && (finalRunPayload.totalEstimatedCostUsd as number) > 0);
+  const failedReplyStep = steps.find((step) => step.stepName === "reply_generator" && step.status === "failed");
+  assert.ok(failedReplyStep);
+  assert.ok(String(failedReplyStep?.error || "").includes("provider_quota_exceeded"));
+});
+
+test("lead state write failure does not leave run running", async () => {
+  let finalRunStatus = "";
+  let finalFinishedAt = "";
+  const result = await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+    {
+      getLeadState: async () => ({
+        leadId: "11111111-1111-4111-8111-111111111111",
+        latestRunId: "previous-successful-run",
+        latestMessageId: "previous-message",
+        stageAnalysis: makeStageAnalysis(),
+        facts: null,
+        structuredState: { stage: "QUALIFIED", lastStateUpdatedAt: "2026-03-07T09:00:00.000Z" },
+        priorityItem: null,
+        strategy: makeStrategy(),
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: { label: "Previous Option" },
+        providers: { strategic_advisor: "claude" },
+        reasoningSource: "state_delta",
+        createdAt: "2026-03-07T09:00:00.000Z",
+        updatedAt: "2026-03-07T09:00:00.000Z"
+      }),
+      createRun: async () => ({
+        id: "run-upsert-fail",
+        leadId: "11111111-1111-4111-8111-111111111111",
+        messageId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        status: "running",
+        startedAt: "2026-03-07T10:00:00.000Z",
+        finishedAt: null,
+        totalInputTokens: null,
+        totalOutputTokens: null,
+        totalEstimatedCostUsd: null,
+        createdAt: "2026-03-07T10:00:00.000Z"
+      }),
+      updateRun: async (input) => {
+        finalRunStatus = input.status;
+        finalFinishedAt = String(input.finishedAt || "");
+      },
+      updateStep: async (input) => ({
+        id: `${input.stepName}-id`,
+        runId: input.runId,
+        stepName: input.stepName,
+        stepOrder: input.stepOrder,
+        status: input.status,
+        provider: input.provider ?? null,
+        model: input.model ?? null,
+        inputTokens: input.inputTokens ?? null,
+        outputTokens: input.outputTokens ?? null,
+        cachedInputTokens: input.cachedInputTokens ?? null,
+        unitInputPricePerMillion: input.unitInputPricePerMillion ?? null,
+        unitOutputPricePerMillion: input.unitOutputPricePerMillion ?? null,
+        estimatedCostUsd: input.estimatedCostUsd ?? null,
+        startedAt: input.startedAt ?? null,
+        finishedAt: input.finishedAt ?? null,
+        outputJson: input.outputJson ?? null,
+        error: input.error ?? null,
+        createdAt: "2026-03-07T10:00:00.000Z"
+      }),
+      getTranscript: async () => ({
+        transcript: "[2026-03-07 10:00] CLIENT: hi",
+        messageCount: 1,
+        transcriptLength: 40
+      }),
+      detectStage: async () => ({
+        analysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "claude",
+        model: "claude-1",
+        timestamp: "2026-03-07T10:00:00.000Z"
+      }),
+      getMessages: async () => [{ direction: "IN", createdAt: "2026-03-07T09:50:00.000Z" }],
+      getStrategicAdvisor: async () => ({
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 40,
+        messageCount: 1,
+        provider: "claude",
+        model: "claude-1",
+        timestamp: "2026-03-07T10:00:00.000Z"
+      }),
+      getReplyGenerator: async () => {
+        throw new Error("OpenAI 429 insufficient_quota");
+      },
+      upsertLeadState: async () => {
+        throw new Error("lead_state_write_failed");
+      }
+    }
+  );
+
+  assert.equal(result.status, "partial");
+  assert.equal(finalRunStatus, "partial");
+  assert.ok(finalFinishedAt.includes("T"));
+});
+
 test("mixed-provider run aggregates per-step and total costs safely", async () => {
   const completedSteps: Array<{
     stepName: string;

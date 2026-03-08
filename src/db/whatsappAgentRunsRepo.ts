@@ -500,7 +500,8 @@ export async function upsertWhatsAppAgentLeadState(input: {
         $9::jsonb,
         $10::jsonb,
         $11::jsonb,
-        nullif(trim($12::text), '')
+        $12::jsonb,
+        nullif(trim($13::text), '')
       )
       on conflict (lead_id)
       do update set

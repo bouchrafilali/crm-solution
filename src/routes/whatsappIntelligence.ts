@@ -6537,6 +6537,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           generationMode: null,
           generationFallbackUsed: false,
           generationFallbackReason: null,
+          fallbackGenerationMeta: null,
           suggestions: [],
           messages: []
         };
@@ -6584,6 +6585,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           generationMode: null,
           generationFallbackUsed: false,
           generationFallbackReason: null,
+          fallbackGenerationMeta: null,
           skipAllowed: item && item.skipAllowed !== false,
           suggestions: hasCard
             ? [
@@ -6870,6 +6872,27 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         };
       }
 
+      function mapFallbackGenerationMetaFromCardsPayload(payload) {
+        const meta = payload && payload.fallbackGenerationMeta && typeof payload.fallbackGenerationMeta === "object"
+          ? payload.fallbackGenerationMeta
+          : null;
+        if (!meta) return null;
+        const toNumber = (value) => {
+          const n = Number(value);
+          return Number.isFinite(n) && n >= 0 ? n : null;
+        };
+        const path = String(meta.path || "").trim().toLowerCase();
+        return {
+          path: path === "direct_generation_fallback" ? "direct_generation_fallback" : null,
+          provider: String(meta.provider || "").trim() || null,
+          model: String(meta.model || "").trim() || null,
+          inputTokens: toNumber(meta.inputTokens),
+          outputTokens: toNumber(meta.outputTokens),
+          estimatedCostUsd: toNumber(meta.estimatedCostUsd),
+          generatedAt: String(meta.generatedAt || "").trim() || null
+        };
+      }
+
       function formatReasoningSource(value) {
         const raw = String(value || "").trim().toLowerCase();
         if (raw === "state_delta" || raw === "transcript_fallback") return raw;
@@ -6887,6 +6910,32 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         return safeHint && isUuidValue(safeHint) ? ["snapshot_by_id", "latest"] : ["latest"];
       }
 
+      function formatFallbackGenerationSummary(meta) {
+        if (!meta || typeof meta !== "object") return "";
+        return (
+          "Generation path: direct fallback · Cost: " +
+          formatCompactUsdCost(meta.estimatedCostUsd) +
+          " · in: " +
+          formatCompactTokenCount(meta.inputTokens) +
+          " · out: " +
+          formatCompactTokenCount(meta.outputTokens)
+        );
+      }
+
+      function buildProviderFailureMessage(run, steps) {
+        if (!run || !Array.isArray(steps) || !steps.length) return null;
+        const status = String(run.status || "").trim().toLowerCase();
+        if (status !== "failed" && status !== "partial") return null;
+        const failedStep = steps.find((step) => String(step && step.status ? step.status : "").trim().toLowerCase() === "failed");
+        if (!failedStep) return null;
+        const normalizedError = String(failedStep.error || "").trim().toLowerCase();
+        const isQuotaFailure = normalizedError.includes("provider_quota_exceeded")
+          || normalizedError.includes("insufficient_quota")
+          || (normalizedError.includes("429") && normalizedError.includes("quota"));
+        if (isQuotaFailure) return "Provider quota exceeded. Run finalized with partial output.";
+        return null;
+      }
+
       function runAiFlowUiAssertions() {
         console.assert(formatCompactUsdCost(null) === "—", "ai-flow: null cost should render dash");
         console.assert(formatCompactTokenCount(null) === "—", "ai-flow: null tokens should render dash");
@@ -6902,6 +6951,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         console.assert(formatAiFlowRunLine(null, null) === "run: none", "ai-flow: should show none when no run available");
         console.assert(buildAgentRunFetchPlan("11111111-1111-4111-8111-111111111111").join(",") === "snapshot_by_id,latest", "ai-flow: should fetch snapshot first when run hint exists");
         console.assert(buildAgentRunFetchPlan("").join(",") === "latest", "ai-flow: should fetch latest when run hint is missing");
+        console.assert(formatFallbackGenerationSummary({ estimatedCostUsd: 0.0123, inputTokens: 1000, outputTokens: 300 }).includes("$0.0123"), "ai-flow: fallback summary should include cost");
+        console.assert(formatFallbackGenerationSummary({ estimatedCostUsd: 0.0123, inputTokens: 1000, outputTokens: 300 }).includes("in: 1,000"), "ai-flow: fallback summary should include input tokens");
+        console.assert(
+          buildProviderFailureMessage(
+            { status: "partial" },
+            [{ status: "failed", error: "provider_quota_exceeded: OpenAI 429 insufficient_quota" }]
+          ) === "Provider quota exceeded. Run finalized with partial output.",
+          "ai-flow: provider quota failure message expected"
+        );
         const normalized = normalizeAgentRunSnapshot({
           run: {
             id: "run-fresh-1",
@@ -7543,6 +7601,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       generationMode: old.generationMode || null,
                       generationFallbackUsed: Boolean(old.generationFallbackUsed),
                       generationFallbackReason: old.generationFallbackReason || null,
+                      fallbackGenerationMeta: old.fallbackGenerationMeta || null,
                       messages: Array.isArray(old.messages) ? old.messages : []
                     }
                   : lead;
@@ -7605,6 +7664,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
             const agentRunMeta = mapAgentRunMetaFromCardsPayload(payload);
             const fallbackMeta = mapGenerationFallbackFromCardsPayload(payload);
+            const fallbackGenerationMeta = mapFallbackGenerationMetaFromCardsPayload(payload);
             const statusRaw = String((payload && (payload.status || payload.enrichmentStatus)) || "").trim().toLowerCase();
             const preservePrevious = Boolean(forceRegenerate && previousSuggestions.length && !suggestions.length);
             const suggestionNotice = preservePrevious
@@ -7626,7 +7686,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 ? String(payload.generationMode || payload.generation_mode)
                 : null,
               generationFallbackUsed: fallbackMeta.used,
-              generationFallbackReason: fallbackMeta.reason
+              generationFallbackReason: fallbackMeta.reason,
+              fallbackGenerationMeta
             });
             await loadAgentRun(leadId, agentRunMeta.runId);
             if (forceRegenerate) await loadMessages(leadId);
@@ -7642,7 +7703,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               suggestionsNotice: preserved ? "Regeneration failed. Kept previous suggestions." : null,
               generationMode: null,
               generationFallbackUsed: false,
-              generationFallbackReason: null
+              generationFallbackReason: null,
+              fallbackGenerationMeta: null
             });
             console.error("[mobile-lab] lead cards load failed", { leadId, error });
             await loadAgentRun(leadId, null);
@@ -8226,6 +8288,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const modeLabel = modeRaw === "cached" ? "cached state reused" : modeRaw === "fresh" ? "fresh generation" : null;
           const fallbackUsed = Boolean(lead.generationFallbackUsed);
           const fallbackReason = String(lead.generationFallbackReason || "").trim();
+          const fallbackGenMeta = lead.fallbackGenerationMeta && typeof lead.fallbackGenerationMeta === "object"
+            ? lead.fallbackGenerationMeta
+            : null;
+          const providerFailureMessage = buildProviderFailureMessage(run, steps);
           const shouldShowNoRunFallback = !run && modeRaw === "cached" && !lead.agentRunError;
           const reasoningFromRun = run && run.reasoningSource ? run.reasoningSource : null;
           const reasoningFromMeta = runMeta && runMeta.reasoningSource ? runMeta.reasoningSource : null;
@@ -8249,6 +8315,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               <div data-testid="ai-flow-reasoning">Reasoning: {reasoningValue}</div>
               <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
               {fallbackUsed ? <div>Run trace fallback used{fallbackReason ? ": " + fallbackReason : "."}</div> : null}
+              {!run && fallbackUsed && fallbackGenMeta
+                ? (
+                  <div data-testid="ai-flow-fallback-summary">
+                    {formatFallbackGenerationSummary(fallbackGenMeta)} · {fallbackGenMeta.provider ? String(fallbackGenMeta.provider) : "—"} · {fallbackGenMeta.model ? String(fallbackGenMeta.model) : "—"}
+                  </div>
+                )
+                : null}
+              {providerFailureMessage ? <div data-testid="ai-flow-provider-failure">{providerFailureMessage}</div> : null}
               {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion. Use Regenerate suggestions to capture full step trace.</div> : null}
               {steps.length
                 ? (

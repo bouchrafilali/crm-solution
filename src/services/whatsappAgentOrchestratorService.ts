@@ -290,6 +290,14 @@ async function markStep(
 
 function toSafeError(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error || "unknown_error");
+  const normalized = text.toLowerCase();
+  if (
+    normalized.includes("insufficient_quota") ||
+    normalized.includes("quota") ||
+    (normalized.includes("429") && normalized.includes("openai"))
+  ) {
+    return `provider_quota_exceeded: ${text}`.slice(0, 300);
+  }
   return text.slice(0, 300);
 }
 
@@ -379,6 +387,40 @@ export async function runWhatsAppAgentOrchestrator(
   let totalOutputTokens = 0;
   let totalEstimatedCostUsd = 0;
   let structuredState: Record<string, unknown> | null = null;
+  const finalizeRunSafely = async (status: Exclude<WhatsAppAgentRunStatus, "running">): Promise<void> => {
+    try {
+      await deps.updateRun({
+        runId: run.id,
+        status,
+        finishedAt: deps.nowIso(),
+        totalInputTokens,
+        totalOutputTokens,
+        totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
+      });
+    } catch (error) {
+      console.error("[whatsapp-agent-orchestrator] run_finalize_failed", {
+        runId: run.id,
+        leadId,
+        messageId,
+        status,
+        error: toSafeError(error)
+      });
+    }
+  };
+  const persistLeadStateSafely = async (payload: Parameters<OrchestratorDeps["upsertLeadState"]>[0]): Promise<boolean> => {
+    try {
+      await deps.upsertLeadState(payload);
+      return true;
+    } catch (error) {
+      console.error("[whatsapp-agent-orchestrator] lead_state_persist_failed", {
+        runId: run.id,
+        leadId,
+        messageId,
+        error: toSafeError(error)
+      });
+      return false;
+    }
+  };
 
   let persistedLeadState: Awaited<ReturnType<OrchestratorDeps["getLeadState"]>> | null = null;
   try {
@@ -432,23 +474,11 @@ export async function runWhatsAppAgentOrchestrator(
     try {
       transcript = await deps.getTranscript(leadId);
     } catch (error) {
-      await deps.updateRun({
-        runId: run.id,
-        status: "failed",
-        totalInputTokens,
-        totalOutputTokens,
-        totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
-      });
+      await finalizeRunSafely("failed");
       throw new WhatsAppAgentOrchestratorError("transcript_failed", "transcript", toSafeError(error));
     }
     if (!transcript.transcript || transcript.transcriptLength < 30 || transcript.messageCount < 1) {
-      await deps.updateRun({
-        runId: run.id,
-        status: "failed",
-        totalInputTokens,
-        totalOutputTokens,
-        totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
-      });
+      await finalizeRunSafely("failed");
       throw new WhatsAppAgentOrchestratorError("transcript_too_short", "transcript", "Transcript too short for orchestrator");
     }
   } else {
@@ -494,13 +524,7 @@ export async function runWhatsAppAgentOrchestrator(
     await markStep(deps, run.id, "strategic_advisor", "skipped", { error: "stage_detection_failed" });
     await markStep(deps, run.id, "reply_generator", "skipped", { error: "stage_detection_failed" });
     await markStep(deps, run.id, "brand_guardian", "skipped", { error: "stage_detection_failed" });
-    await deps.updateRun({
-      runId: run.id,
-      status: "failed",
-      totalInputTokens,
-      totalOutputTokens,
-      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
-    });
+    await finalizeRunSafely("failed");
     return {
       runId: run.id,
       leadId,
@@ -671,7 +695,7 @@ export async function runWhatsAppAgentOrchestrator(
     await markStep(deps, run.id, "strategic_advisor", "failed", { error: toSafeError(error) });
     await markStep(deps, run.id, "reply_generator", "skipped", { error: "strategic_advisor_failed" });
     await markStep(deps, run.id, "brand_guardian", "skipped", { error: "strategic_advisor_failed" });
-    await deps.upsertLeadState({
+    await persistLeadStateSafely({
       leadId,
       latestRunId: run.id,
       latestMessageId: messageId,
@@ -686,13 +710,7 @@ export async function runWhatsAppAgentOrchestrator(
       providers,
       reasoningSource
     });
-    await deps.updateRun({
-      runId: run.id,
-      status: finalStatus,
-      totalInputTokens,
-      totalOutputTokens,
-      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
-    });
+    await finalizeRunSafely(finalStatus);
     return {
       runId: run.id,
       leadId,
@@ -736,7 +754,7 @@ export async function runWhatsAppAgentOrchestrator(
     await markStep(deps, run.id, "reply_generator", "failed", { error: toSafeError(error) });
     await markStep(deps, run.id, "brand_guardian", "skipped", { error: "reply_generator_failed" });
     topReplyCard = pickTopReplyCard({ brandReview: null, replyOptions });
-    await deps.upsertLeadState({
+    await persistLeadStateSafely({
       leadId,
       latestRunId: run.id,
       latestMessageId: messageId,
@@ -751,13 +769,7 @@ export async function runWhatsAppAgentOrchestrator(
       providers,
       reasoningSource
     });
-    await deps.updateRun({
-      runId: run.id,
-      status: finalStatus,
-      totalInputTokens,
-      totalOutputTokens,
-      totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
-    });
+    await finalizeRunSafely(finalStatus);
     return {
       runId: run.id,
       leadId,
@@ -803,7 +815,7 @@ export async function runWhatsAppAgentOrchestrator(
   }
 
   topReplyCard = pickTopReplyCard({ brandReview, replyOptions });
-  await deps.upsertLeadState({
+  const persistedFinalState = await persistLeadStateSafely({
     leadId,
     latestRunId: run.id,
     latestMessageId: messageId,
@@ -818,13 +830,8 @@ export async function runWhatsAppAgentOrchestrator(
     providers,
     reasoningSource
   });
-  await deps.updateRun({
-    runId: run.id,
-    status: finalStatus,
-    totalInputTokens,
-    totalOutputTokens,
-    totalEstimatedCostUsd: runCostTotal(totalEstimatedCostUsd)
-  });
+  if (!persistedFinalState && finalStatus === "completed") finalStatus = "partial";
+  await finalizeRunSafely(finalStatus);
 
   return {
     runId: run.id,
