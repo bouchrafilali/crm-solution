@@ -5722,6 +5722,66 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         max-height: 92px;
         overflow-y: auto;
       }
+      .ai-flow-trigger {
+        width: 100%;
+        margin-top: 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(142, 169, 209, .28);
+        background: rgba(16, 25, 42, .9);
+        color: #e9f1ff;
+        padding: 10px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .ai-flow-trigger:hover {
+        border-color: rgba(172, 199, 240, .5);
+        background: rgba(20, 31, 52, .94);
+      }
+      .ai-flow-trigger-title {
+        font-size: 10px;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        opacity: .8;
+      }
+      .ai-flow-trigger-line {
+        margin-top: 4px;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .ai-flow-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 8, 13, .76);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 160;
+      }
+      .ai-flow-modal {
+        width: min(740px, 94vw);
+        max-height: 86vh;
+        overflow: auto;
+        border: 1px solid #273a56;
+        border-radius: 14px;
+        background: #0d1524;
+        padding: 12px;
+      }
+      .ai-flow-modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .ai-flow-modal-close {
+        border: 1px solid rgba(142, 169, 209, .34);
+        background: rgba(16, 25, 42, .9);
+        color: #e9f1ff;
+        border-radius: 9px;
+        height: 30px;
+        padding: 0 10px;
+        cursor: pointer;
+      }
       .btn {
         height: 36px; border-radius: 14px; cursor: pointer; font-size: 12px;
         border: 1px solid rgba(255,255,255,.12);
@@ -7636,6 +7696,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [streamDraftMessagesByLead, setStreamDraftMessagesByLead] = React.useState({});
         const [streamSendingLeadId, setStreamSendingLeadId] = React.useState("");
         const [streamManualTextByLead, setStreamManualTextByLead] = React.useState({});
+        const [aiFlowPopupLeadId, setAiFlowPopupLeadId] = React.useState("");
 
         const openMediaViewer = React.useCallback((payload) => {
           if (!payload || !payload.url) return;
@@ -8100,6 +8161,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           leads,
           loadAgentRun
         ]);
+
+        React.useEffect(() => {
+          if (!aiFlowPopupLeadId) return;
+          const onKeyDown = (event) => {
+            if (String(event && event.key || "").toLowerCase() === "escape") {
+              setAiFlowPopupLeadId("");
+            }
+          };
+          window.addEventListener("keydown", onKeyDown);
+          return () => window.removeEventListener("keydown", onKeyDown);
+        }, [aiFlowPopupLeadId]);
 
         React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;
@@ -8627,7 +8699,53 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }
 
         function renderAiFlowPanel(lead) {
-          return <AiFlowPanel lead={lead} />;
+          if (!lead || String(lead.channelType || "").toUpperCase() !== "MOBILE_LAB") return null;
+          const flow = lead.agentRun && typeof lead.agentRun === "object" ? lead.agentRun : null;
+          const run = flow && flow.run && typeof flow.run === "object" ? flow.run : null;
+          const runMeta = lead.agentRunMeta && typeof lead.agentRunMeta === "object" ? lead.agentRunMeta : null;
+          const reasoning = formatReasoningSource((run && run.reasoningSource) || (runMeta && runMeta.reasoningSource) || null);
+          return (
+            <button
+              type="button"
+              className="ai-flow-trigger"
+              onClick={() => setAiFlowPopupLeadId(String(lead.id || ""))}
+              data-testid="ai-flow-open-popup"
+            >
+              <div className="ai-flow-trigger-title">AI Flow</div>
+              <div className="ai-flow-trigger-line">{formatAiFlowRunLine(run, runMeta)}</div>
+              <div className="ai-flow-trigger-line">Reasoning: {reasoning}</div>
+            </button>
+          );
+        }
+
+        function renderAiFlowPopup() {
+          const popupLeadId = String(aiFlowPopupLeadId || "").trim();
+          if (!popupLeadId) return null;
+          const lead = leads.find((item) => String(item.id) === popupLeadId) || null;
+          if (!lead) return null;
+          return (
+            <div
+              className="ai-flow-modal-backdrop"
+              onClick={() => setAiFlowPopupLeadId("")}
+              data-testid="ai-flow-popup"
+            >
+              <div className="ai-flow-modal" onClick={(event) => event.stopPropagation()}>
+                <div className="ai-flow-modal-head">
+                  <div style={{ fontSize: "12px", opacity: 0.9 }}>
+                    AI Flow · {String(lead.name || "Lead")}
+                  </div>
+                  <button
+                    type="button"
+                    className="ai-flow-modal-close"
+                    onClick={() => setAiFlowPopupLeadId("")}
+                  >
+                    Fermer
+                  </button>
+                </div>
+                <AiFlowPanel lead={lead} />
+              </div>
+            </div>
+          );
         }
 
         function renderMobileInboxView(device) {
@@ -9657,6 +9775,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                 </div>
               </div>
             ) : null}
+            {renderAiFlowPopup()}
           </div>
         );
       }
