@@ -3,10 +3,104 @@ import { test } from "node:test";
 import { buildMobileLabLeadCards } from "./whatsappMobileLabLeadCardsService.js";
 import { buildMobileLabFeed } from "./whatsappMobileLabFeedService.js";
 
-test("selected lead cards success", async () => {
+test("fresh selected lead generation uses orchestrator first and returns run metadata", async () => {
+  let directCalls = 0;
+  let cachedReadCount = 0;
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
     getLatestLeadMessage: async () => ({ id: "msg-1", createdAt: "2026-03-07T00:00:00.000Z" }),
+    runAgentOrchestrator: async () => ({
+      runId: "run-fresh-1",
+      leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+      messageId: "msg-1",
+      status: "completed",
+      topReplyCard: { label: "Run option", intent: "Guide", messages: ["From run 1", "From run 2"] },
+      stageAnalysis: {
+        stage: "QUALIFIED",
+        stage_confidence: 0.88,
+        priority_score: 72,
+        urgency: "medium",
+        payment_intent: true,
+        dropoff_risk: "low"
+      },
+      priority: null,
+      strategy: {
+        recommended_action: "answer_precisely",
+        commercial_priority: "high",
+        tone: "warm_refined",
+        pressure_level: "low",
+        primary_goal: "Clarify needs",
+        secondary_goal: "Move forward"
+      },
+      providers: { strategic_advisor: "openai" },
+      reasoningSource: "state_delta"
+    }),
+    getCachedLeadState: async () => {
+      cachedReadCount += 1;
+      if (cachedReadCount === 1) return null;
+      return {
+        leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+        latestRunId: "run-fresh-1",
+        latestMessageId: "msg-1",
+        stageAnalysis: {
+          stage: "QUALIFIED",
+          stage_confidence: 0.9,
+          urgency: "medium",
+          payment_intent: true,
+          dropoff_risk: "low",
+          priority_score: 75
+        },
+        facts: null,
+        priorityItem: null,
+        strategy: {
+          recommended_action: "answer_precisely",
+          commercial_priority: "high",
+          tone: "warm_refined",
+          pressure_level: "low",
+          primary_goal: "Clarify",
+          secondary_goal: "Advance"
+        },
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: { label: "Cached option", intent: "Guide", messages: ["A", "B"] },
+        providers: { strategic_advisor: "openai" },
+        reasoningSource: "state_delta",
+        createdAt: "2026-03-07T00:00:00.000Z",
+        updatedAt: "2026-03-07T00:02:00.000Z"
+      };
+    },
+    getActiveReplyContext: async () => {
+      directCalls += 1;
+      throw new Error("should_not_use_direct_generation_when_orchestrator_succeeds");
+    }
+  });
+
+  assert.equal(directCalls, 0);
+  assert.equal(payload.enrichmentStatus, "enriched");
+  assert.equal(payload.enrichmentSource, "active_ai_cards");
+  assert.equal(payload.status, "enriched");
+  assert.equal(payload.source, "fresh_generation");
+  assert.equal(payload.cacheStatus, "miss");
+  assert.equal(payload.pipelineSource, "active_ai_cards");
+  assert.equal(payload.basedOnMessageId, "msg-1");
+  assert.equal(payload.error, null);
+  assert.equal(payload.replyCards.length, 0);
+  assert.equal(payload.topReplyCard?.label, "Run option");
+  assert.equal(payload.generationMode, "fresh");
+  assert.equal(payload.enrichmentError, null);
+  assert.equal(payload.agentRunMeta.runId, "run-fresh-1");
+  assert.equal(payload.agentRunMeta.source, "fresh_generation");
+  assert.equal(payload.agentRunMeta.reasoningSource, "state_delta");
+  assert.equal(payload.agentRunMeta.generatedAt, "2026-03-07T00:02:00.000Z");
+});
+
+test("selected lead cards fallback path still returns cards safely", async () => {
+  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
+    timeoutMs: () => 5000,
+    getLatestLeadMessage: async () => ({ id: "msg-1", createdAt: "2026-03-07T00:00:00.000Z" }),
+    runAgentOrchestrator: async () => {
+      throw new Error("timeout");
+    },
     persistCachedLeadState: async () => {
       throw new Error("ignore_persist_for_test");
     },

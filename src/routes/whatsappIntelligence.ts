@@ -6873,6 +6873,22 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         console.assert(formatReasoningSource("state_delta") === "state_delta", "ai-flow: should render state_delta");
         console.assert(formatReasoningSource("transcript_fallback") === "transcript_fallback", "ai-flow: should render transcript_fallback");
         console.assert(formatReasoningSource(null) === "—", "ai-flow: null reasoning should render dash");
+        const normalized = normalizeAgentRunSnapshot({
+          run: {
+            id: "run-fresh-1",
+            status: "success",
+            startedAt: "2026-03-07T10:00:00.000Z",
+            finishedAt: "2026-03-07T10:00:03.000Z",
+            totalInputTokens: 1200,
+            totalOutputTokens: 340,
+            totalEstimatedCostUsd: 0.0123,
+            reasoningSource: "state_delta"
+          },
+          steps: []
+        });
+        console.assert(normalized && normalized.run && normalized.run.id === "run-fresh-1", "ai-flow: normalized run id expected");
+        console.assert(normalized && normalized.run && normalized.run.totalEstimatedCostUsd === 0.0123, "ai-flow: normalized run cost expected");
+        console.assert(normalized && normalized.run && normalized.run.reasoningSource === "state_delta", "ai-flow: normalized reasoning source expected");
       }
 
       if (URL_QUERY.get("assertAiFlowUi") === "1") {
