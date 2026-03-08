@@ -22,6 +22,8 @@ export type MobileLabLeadCardsResult = {
   replyCards: Card[];
   topReplyCard: Card | null;
   generationMode: "cached" | "fresh" | null;
+  generationFallbackUsed?: boolean;
+  generationFallbackReason?: string | null;
   source: "cache" | "fresh_generation";
   cacheStatus: "hit" | "miss" | "stale";
   basedOnMessageId: string | null;
@@ -502,6 +504,9 @@ export async function buildMobileLabLeadCards(
           const fromRun = normalizeTopReplyCard(regenResult.topReplyCard);
           const refreshedTop = normalizeTopReplyCard(refreshed?.topReplyCard);
           const topReplyCard = fromRun || refreshedTop;
+          if (!topReplyCard) {
+            throw new Error("orchestrator_unusable_result");
+          }
           const stageSource =
             refreshed?.stageAnalysis && typeof refreshed.stageAnalysis === "object"
               ? refreshed.stageAnalysis
@@ -518,7 +523,7 @@ export async function buildMobileLabLeadCards(
           const provider =
             String((providers && (providers.brand_guardian || providers.reply_generator || providers.strategic_advisor || providers.stage_detection)) || "").trim() ||
             null;
-          const status = topReplyCard ? "enriched" : regenResult.status === "failed" ? "error" : "no_generation_needed";
+          const status = "enriched";
           const errorText = regenResult.status === "partial"
             ? "partial_failure_some_steps_failed"
             : regenResult.status === "failed"
@@ -533,6 +538,8 @@ export async function buildMobileLabLeadCards(
             replyCards: [],
             topReplyCard,
             generationMode: "fresh",
+            generationFallbackUsed: false,
+            generationFallbackReason: null,
             source: "fresh_generation",
             cacheStatus,
             basedOnMessageId: latestMessage.id,
@@ -643,6 +650,8 @@ export async function buildMobileLabLeadCards(
         replyCards: [],
         topReplyCard,
         generationMode: "fresh",
+        generationFallbackUsed: true,
+        generationFallbackReason: "direct_generation_fallback",
         source: "fresh_generation",
         cacheStatus,
         basedOnMessageId: latestMessage?.id || null,
@@ -774,6 +783,8 @@ export async function buildMobileLabLeadCards(
       replyCards: [],
       topReplyCard: cachedBeforeTop,
       generationMode: forceRefresh ? "fresh" : null,
+      generationFallbackUsed: feedType === "active",
+      generationFallbackReason: feedType === "active" ? "direct_generation_fallback_error" : null,
       source: "fresh_generation",
       cacheStatus: "stale",
       basedOnMessageId: null,

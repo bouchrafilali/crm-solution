@@ -5,11 +5,14 @@ import { buildMobileLabFeed } from "./whatsappMobileLabFeedService.js";
 
 test("fresh selected lead generation uses orchestrator first and returns run metadata", async () => {
   let directCalls = 0;
+  let orchestratorCalls = 0;
   let cachedReadCount = 0;
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
     getLatestLeadMessage: async () => ({ id: "msg-1", createdAt: "2026-03-07T00:00:00.000Z" }),
-    runAgentOrchestrator: async () => ({
+    runAgentOrchestrator: async () => {
+      orchestratorCalls += 1;
+      return {
       runId: "run-fresh-1",
       leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
       messageId: "msg-1",
@@ -34,7 +37,8 @@ test("fresh selected lead generation uses orchestrator first and returns run met
       },
       providers: { strategic_advisor: "openai" },
       reasoningSource: "state_delta"
-    }),
+      };
+    },
     getCachedLeadState: async () => {
       cachedReadCount += 1;
       if (cachedReadCount === 1) return null;
@@ -75,6 +79,7 @@ test("fresh selected lead generation uses orchestrator first and returns run met
     }
   });
 
+  assert.equal(orchestratorCalls, 1);
   assert.equal(directCalls, 0);
   assert.equal(payload.enrichmentStatus, "enriched");
   assert.equal(payload.enrichmentSource, "active_ai_cards");
@@ -87,6 +92,8 @@ test("fresh selected lead generation uses orchestrator first and returns run met
   assert.equal(payload.replyCards.length, 0);
   assert.equal(payload.topReplyCard?.label, "Run option");
   assert.equal(payload.generationMode, "fresh");
+  assert.equal(payload.generationFallbackUsed, false);
+  assert.equal(payload.generationFallbackReason, null);
   assert.equal(payload.enrichmentError, null);
   assert.equal(payload.agentRunMeta.runId, "run-fresh-1");
   assert.equal(payload.agentRunMeta.source, "fresh_generation");
@@ -95,10 +102,12 @@ test("fresh selected lead generation uses orchestrator first and returns run met
 });
 
 test("selected lead cards fallback path still returns cards safely", async () => {
+  let orchestratorCalls = 0;
   const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
     timeoutMs: () => 5000,
     getLatestLeadMessage: async () => ({ id: "msg-1", createdAt: "2026-03-07T00:00:00.000Z" }),
     runAgentOrchestrator: async () => {
+      orchestratorCalls += 1;
       throw new Error("timeout");
     },
     persistCachedLeadState: async () => {
@@ -168,10 +177,90 @@ test("selected lead cards fallback path still returns cards safely", async () =>
   assert.equal(payload.replyCards.length, 0);
   assert.equal(payload.topReplyCard?.label, "Option 1");
   assert.equal(payload.generationMode, "fresh");
+  assert.equal(payload.generationFallbackUsed, true);
+  assert.equal(payload.generationFallbackReason, "direct_generation_fallback");
   assert.equal(payload.enrichmentError, null);
   assert.equal(payload.agentRunMeta.runId, null);
   assert.equal(payload.agentRunMeta.source, "fresh_generation");
   assert.equal(payload.agentRunMeta.reasoningSource, null);
+  assert.equal(orchestratorCalls, 1);
+});
+
+test("selected lead cards fallback path handles unusable orchestrator result safely", async () => {
+  let directCalls = 0;
+  const payload = await buildMobileLabLeadCards("8a4b1542-0c56-4c49-8ffd-bf5bd32164ab", undefined, {
+    timeoutMs: () => 5000,
+    getLatestLeadMessage: async () => ({ id: "msg-2", createdAt: "2026-03-07T00:10:00.000Z" }),
+    runAgentOrchestrator: async () => ({
+      runId: "run-unusable",
+      leadId: "8a4b1542-0c56-4c49-8ffd-bf5bd32164ab",
+      messageId: "msg-2",
+      status: "completed",
+      stageAnalysis: null,
+      strategy: null,
+      priority: null,
+      topReplyCard: null,
+      reasoningSource: "state_delta"
+    }),
+    getActiveReplyContext: async () => {
+      directCalls += 1;
+      return {
+        replyOptions: {
+          reply_options: [{ label: "Fallback option", intent: "Clarify", messages: ["Fallback 1", "Fallback 2"] }]
+        },
+        strategy: {
+          recommended_action: "answer_precisely",
+          action_confidence: 0.9,
+          commercial_priority: "high",
+          tone: "warm_refined",
+          pressure_level: "low",
+          primary_goal: "Clarify options",
+          secondary_goal: "Move to next step",
+          missed_opportunities: [],
+          strategy_rationale: [],
+          do_now: [],
+          avoid: []
+        },
+        stageAnalysis: {
+          stage: "QUALIFIED",
+          stage_confidence: 0.91,
+          priority_score: 71,
+          urgency: "medium",
+          payment_intent: false,
+          dropoff_risk: "low",
+          signals: [],
+          facts: {
+            products_of_interest: [],
+            event_date: null,
+            delivery_deadline: null,
+            destination_country: null,
+            budget: null,
+            price_points_detected: [],
+            customization_requests: [],
+            preferred_colors: [],
+            preferred_fabrics: [],
+            payment_method_preference: null
+          },
+          objections: [],
+          recommended_next_action: "answer_precisely",
+          reasoning_summary: []
+        },
+        transcriptLength: 120,
+        messageCount: 3,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        timestamp: "2026-03-07T00:00:00.000Z"
+      };
+    }
+  });
+
+  assert.equal(directCalls, 1);
+  assert.equal(payload.topReplyCard?.label, "Fallback option");
+  assert.equal(payload.generationFallbackUsed, true);
+  assert.equal(payload.generationFallbackReason, "direct_generation_fallback");
+  assert.equal(payload.agentRunMeta.runId, null);
+  assert.equal(payload.agentRunMeta.reasoningSource, null);
+  assert.equal(payload.source, "fresh_generation");
 });
 
 test("persisted results are reused before regeneration", async () => {

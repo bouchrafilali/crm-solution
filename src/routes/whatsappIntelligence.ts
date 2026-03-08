@@ -6535,6 +6535,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           agentRunError: null,
           suggestionsNotice: null,
           generationMode: null,
+          generationFallbackUsed: false,
+          generationFallbackReason: null,
           suggestions: [],
           messages: []
         };
@@ -6580,6 +6582,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           agentRunError: null,
           suggestionsNotice: null,
           generationMode: null,
+          generationFallbackUsed: false,
+          generationFallbackReason: null,
           skipAllowed: item && item.skipAllowed !== false,
           suggestions: hasCard
             ? [
@@ -6857,10 +6861,30 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         };
       }
 
+      function mapGenerationFallbackFromCardsPayload(payload) {
+        const usedRaw = String(payload && payload.generationFallbackUsed != null ? payload.generationFallbackUsed : "").trim().toLowerCase();
+        const reasonRaw = String((payload && payload.generationFallbackReason) || "").trim();
+        return {
+          used: usedRaw === "true" || usedRaw === "1" || usedRaw === "yes" || usedRaw === "on",
+          reason: reasonRaw || null
+        };
+      }
+
       function formatReasoningSource(value) {
         const raw = String(value || "").trim().toLowerCase();
         if (raw === "state_delta" || raw === "transcript_fallback") return raw;
         return "—";
+      }
+
+      function formatAiFlowRunLine(run, runMeta) {
+        if (run && run.id) return "runId: " + String(run.id);
+        if (runMeta && runMeta.runId) return "run: " + String(runMeta.runId) + " (loading details)";
+        return "run: none";
+      }
+
+      function buildAgentRunFetchPlan(runHintId) {
+        const safeHint = String(runHintId || "").trim();
+        return safeHint && isUuidValue(safeHint) ? ["snapshot_by_id", "latest"] : ["latest"];
       }
 
       function runAiFlowUiAssertions() {
@@ -6873,6 +6897,11 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         console.assert(formatReasoningSource("state_delta") === "state_delta", "ai-flow: should render state_delta");
         console.assert(formatReasoningSource("transcript_fallback") === "transcript_fallback", "ai-flow: should render transcript_fallback");
         console.assert(formatReasoningSource(null) === "—", "ai-flow: null reasoning should render dash");
+        console.assert(formatAiFlowRunLine({ id: "run-1" }, null) === "runId: run-1", "ai-flow: should prefer full run id");
+        console.assert(formatAiFlowRunLine(null, { runId: "run-2" }) === "run: run-2 (loading details)", "ai-flow: should show immediate run meta");
+        console.assert(formatAiFlowRunLine(null, null) === "run: none", "ai-flow: should show none when no run available");
+        console.assert(buildAgentRunFetchPlan("11111111-1111-4111-8111-111111111111").join(",") === "snapshot_by_id,latest", "ai-flow: should fetch snapshot first when run hint exists");
+        console.assert(buildAgentRunFetchPlan("").join(",") === "latest", "ai-flow: should fetch latest when run hint is missing");
         const normalized = normalizeAgentRunSnapshot({
           run: {
             id: "run-fresh-1",
@@ -7412,22 +7441,45 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           agentRunRequestRef.current = requestId;
           patchLead(leadId, { agentRunError: null });
           const fallbackRunId = String(runHintId || "").trim();
+          const fetchPlan = buildAgentRunFetchPlan(fallbackRunId);
+          const maxAttempts = 2;
+          const retryDelayMs = 220;
           try {
-            const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/agent-run/latest");
-            if (requestId !== agentRunRequestRef.current) return;
-            const normalized = normalizeAgentRunSnapshot(payload);
-            patchLead(leadId, {
-              agentRun: normalized,
-              agentRunError: null
-            });
-            if (normalized.run || !fallbackRunId || !isUuidValue(fallbackRunId)) return;
-            const byIdPayload = await fetchJson("/api/whatsapp/agent-runs/" + encodeURIComponent(fallbackRunId) + "/snapshot");
-            if (requestId !== agentRunRequestRef.current) return;
-            const byIdNormalized = normalizeAgentRunSnapshot(byIdPayload);
-            patchLead(leadId, {
-              agentRun: byIdNormalized,
-              agentRunError: byIdNormalized.run ? null : "No detailed run available for this cached suggestion."
-            });
+            let latestError = null;
+            if (fetchPlan.includes("snapshot_by_id")) {
+              for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+                try {
+                  const byIdPayload = await fetchJson("/api/whatsapp/agent-runs/" + encodeURIComponent(fallbackRunId) + "/snapshot");
+                  if (requestId !== agentRunRequestRef.current) return;
+                  const byIdNormalized = normalizeAgentRunSnapshot(byIdPayload);
+                  patchLead(leadId, {
+                    agentRun: byIdNormalized,
+                    agentRunError: byIdNormalized.run ? null : "Run details are temporarily unavailable."
+                  });
+                  if (byIdNormalized.run) return;
+                } catch (error) {
+                  latestError = error;
+                }
+                if (attempt < maxAttempts - 1) await sleep(retryDelayMs);
+              }
+            }
+
+            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+              try {
+                const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/agent-run/latest");
+                if (requestId !== agentRunRequestRef.current) return;
+                const normalized = normalizeAgentRunSnapshot(payload);
+                patchLead(leadId, {
+                  agentRun: normalized,
+                  agentRunError: normalized.run ? null : "Run details are temporarily unavailable."
+                });
+                if (normalized.run) return;
+              } catch (error) {
+                latestError = error;
+              }
+              if (attempt < maxAttempts - 1) await sleep(retryDelayMs);
+            }
+            throw latestError || new Error("agent_run_snapshot_unavailable");
           } catch (error) {
             const latestErrorMessage = normalizeAgentRunErrorMessage(error);
             if (fallbackRunId && isUuidValue(fallbackRunId)) {
@@ -7489,6 +7541,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                       agentRunError: old.agentRunError || null,
                       suggestionsNotice: old.suggestionsNotice || null,
                       generationMode: old.generationMode || null,
+                      generationFallbackUsed: Boolean(old.generationFallbackUsed),
+                      generationFallbackReason: old.generationFallbackReason || null,
                       messages: Array.isArray(old.messages) ? old.messages : []
                     }
                   : lead;
@@ -7550,6 +7604,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             if (requestId !== suggestionsRequestRef.current) return;
             const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
             const agentRunMeta = mapAgentRunMetaFromCardsPayload(payload);
+            const fallbackMeta = mapGenerationFallbackFromCardsPayload(payload);
             const statusRaw = String((payload && (payload.status || payload.enrichmentStatus)) || "").trim().toLowerCase();
             const preservePrevious = Boolean(forceRegenerate && previousSuggestions.length && !suggestions.length);
             const suggestionNotice = preservePrevious
@@ -7564,11 +7619,14 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               enrichmentStatus: String((payload && (payload.status || payload.enrichmentStatus)) || "error"),
               enrichmentSource: String((payload && (payload.enrichmentSource || payload.pipelineSource || payload.source)) || "active_ai_cards"),
               enrichmentError: payload && (payload.error || payload.enrichmentError) ? String(payload.error || payload.enrichmentError) : null,
+              agentRun: { run: null, steps: [] },
               agentRunMeta,
               suggestionsNotice: suggestionNotice,
               generationMode: payload && (payload.generationMode || payload.generation_mode)
                 ? String(payload.generationMode || payload.generation_mode)
-                : null
+                : null,
+              generationFallbackUsed: fallbackMeta.used,
+              generationFallbackReason: fallbackMeta.reason
             });
             await loadAgentRun(leadId, agentRunMeta.runId);
             if (forceRegenerate) await loadMessages(leadId);
@@ -7582,7 +7640,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               enrichmentError: error instanceof Error ? error.message : String(error || "cards_failed"),
               agentRunMeta: null,
               suggestionsNotice: preserved ? "Regeneration failed. Kept previous suggestions." : null,
-              generationMode: null
+              generationMode: null,
+              generationFallbackUsed: false,
+              generationFallbackReason: null
             });
             console.error("[mobile-lab] lead cards load failed", { leadId, error });
             await loadAgentRun(leadId, null);
@@ -8164,6 +8224,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           const resultLabel = hasCards ? "cards ready" : "no cards";
           const modeRaw = String(lead.generationMode || "").trim().toLowerCase();
           const modeLabel = modeRaw === "cached" ? "cached state reused" : modeRaw === "fresh" ? "fresh generation" : null;
+          const fallbackUsed = Boolean(lead.generationFallbackUsed);
+          const fallbackReason = String(lead.generationFallbackReason || "").trim();
           const shouldShowNoRunFallback = !run && modeRaw === "cached" && !lead.agentRunError;
           const reasoningFromRun = run && run.reasoningSource ? run.reasoningSource : null;
           const reasoningFromMeta = runMeta && runMeta.reasoningSource ? runMeta.reasoningSource : null;
@@ -8181,9 +8243,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     </div>
                   </>
                 )
-                : <div>run: none{runMeta && runMeta.runId ? " · hint: " + String(runMeta.runId) : ""}</div>}
+                : runMeta && runMeta.runId
+                  ? <div data-testid="ai-flow-run-loading">{formatAiFlowRunLine(null, runMeta)}</div>
+                  : <div>{formatAiFlowRunLine(null, null)}</div>}
               <div data-testid="ai-flow-reasoning">Reasoning: {reasoningValue}</div>
               <div>result: {resultLabel}{modeLabel ? " · " + modeLabel : ""}</div>
+              {fallbackUsed ? <div>Run trace fallback used{fallbackReason ? ": " + fallbackReason : "."}</div> : null}
               {shouldShowNoRunFallback ? <div>No detailed run available for this cached suggestion. Use Regenerate suggestions to capture full step trace.</div> : null}
               {steps.length
                 ? (
