@@ -60,6 +60,8 @@ test("successful full orchestrator run", async () => {
   const result = await runWhatsAppAgentOrchestrator(
     { leadId: "11111111-1111-4111-8111-111111111111", messageId: "22222222-2222-4222-8222-222222222222" },
     {
+      getLeadState: async () => null,
+      getRecentMessages: async () => [],
       createRun: async () => ({
         id: "run-1",
         leadId: "11111111-1111-4111-8111-111111111111",
@@ -98,7 +100,7 @@ test("successful full orchestrator run", async () => {
           createdAt: "2026-03-07T10:00:00.000Z"
         };
       },
-      upsertLeadState: async (input) => {
+      upsertLeadState: async (input: any) => {
         persistedTopCard = input.topReplyCard ? String(input.topReplyCard.label || "") : null;
         return {
           leadId: input.leadId,
@@ -234,7 +236,7 @@ test("partial failure preserves run log", async () => {
           createdAt: "2026-03-07T10:00:00.000Z"
         };
       },
-      upsertLeadState: async (input) => ({
+      upsertLeadState: async (input: any) => ({
         leadId: input.leadId,
         latestRunId: input.latestRunId ?? null,
         latestMessageId: input.latestMessageId ?? null,
@@ -345,7 +347,7 @@ test("mixed-provider run aggregates per-step and total costs safely", async () =
           createdAt: "2026-03-07T10:00:00.000Z"
         };
       },
-      upsertLeadState: async (input) => ({
+      upsertLeadState: async (input: any) => ({
         leadId: input.leadId,
         latestRunId: input.latestRunId ?? null,
         latestMessageId: input.latestMessageId ?? null,
@@ -490,7 +492,7 @@ test("webhook trigger starts orchestrator asynchronously", async () => {
         error: input.error ?? null,
         createdAt: "2026-03-07T10:00:00.000Z"
       }),
-      upsertLeadState: async (input) => ({
+      upsertLeadState: async (input: any) => ({
         leadId: input.leadId,
         latestRunId: input.latestRunId ?? null,
         latestMessageId: input.latestMessageId ?? null,
@@ -717,4 +719,278 @@ test("run snapshot by runId maps response", async () => {
   assert.equal(payload.run?.totalEstimatedCostUsd, 0.0031);
   assert.equal(payload.steps[0].stepName, "stage_detection");
   assert.equal(payload.steps[0].estimatedCostUsd, 0.0015);
+});
+
+function stateDeltaBaseDeps(overrides?: Record<string, unknown>) {
+  return {
+    createRun: async () => ({
+      id: "run-state",
+      leadId: "11111111-1111-4111-8111-111111111111",
+      messageId: "22222222-2222-4222-8222-222222222222",
+      status: "running",
+      startedAt: "2026-03-07T10:00:00.000Z",
+      finishedAt: null,
+      totalInputTokens: null,
+      totalOutputTokens: null,
+      totalEstimatedCostUsd: null,
+      createdAt: "2026-03-07T10:00:00.000Z"
+    }),
+    updateRun: async () => {},
+    updateStep: async (input: any) => ({
+      id: `${input.stepName}-id`,
+      runId: input.runId,
+      stepName: input.stepName,
+      stepOrder: input.stepOrder,
+      status: input.status,
+      provider: input.provider ?? null,
+      model: input.model ?? null,
+      inputTokens: input.inputTokens ?? null,
+      outputTokens: input.outputTokens ?? null,
+      cachedInputTokens: input.cachedInputTokens ?? null,
+      unitInputPricePerMillion: input.unitInputPricePerMillion ?? null,
+      unitOutputPricePerMillion: input.unitOutputPricePerMillion ?? null,
+      estimatedCostUsd: input.estimatedCostUsd ?? null,
+      startedAt: input.startedAt ?? null,
+      finishedAt: input.finishedAt ?? null,
+      outputJson: input.outputJson ?? null,
+      error: input.error ?? null,
+      createdAt: "2026-03-07T10:00:00.000Z"
+    }),
+    getMessages: async () => [{ direction: "IN", createdAt: "2026-03-07T09:50:00.000Z" }],
+    getReplyGenerator: async () => ({
+      replyOptions: { reply_options: [{ label: "Option 1", intent: "clarify", messages: ["A", "B"] }, { label: "Option 2", intent: "guide", messages: ["A", "B"] }, { label: "Option 3", intent: "close", messages: ["A", "B"] }] },
+      strategy: makeStrategy(),
+      stageAnalysis: makeStageAnalysis(),
+      transcriptLength: 40,
+      messageCount: 1,
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      timestamp: "2026-03-07T10:00:00.000Z"
+    }),
+    getBrandGuardian: async () => ({
+      review: { approved: true, issues: [], reply_options: [{ label: "Option 1", intent: "clarify", messages: ["A", "B"] }, { label: "Option 2", intent: "guide", messages: ["A", "B"] }, { label: "Option 3", intent: "close", messages: ["A", "B"] }] },
+      replyOptions: { reply_options: [{ label: "Option 1", intent: "clarify", messages: ["A", "B"] }, { label: "Option 2", intent: "guide", messages: ["A", "B"] }, { label: "Option 3", intent: "close", messages: ["A", "B"] }] },
+      strategy: makeStrategy(),
+      stageAnalysis: makeStageAnalysis(),
+      transcriptLength: 40,
+      messageCount: 1,
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      timestamp: "2026-03-07T10:00:00.000Z"
+    }),
+    upsertLeadState: async (input: any) => ({
+      leadId: input.leadId,
+      latestRunId: input.latestRunId ?? null,
+      latestMessageId: input.latestMessageId ?? null,
+      stageAnalysis: input.stageAnalysis ?? null,
+      facts: input.facts ?? null,
+      structuredState: input.structuredState ?? null,
+      priorityItem: input.priorityItem ?? null,
+      strategy: input.strategy ?? null,
+      replyOptions: input.replyOptions ?? null,
+      brandReview: input.brandReview ?? null,
+      topReplyCard: input.topReplyCard ?? null,
+      providers: input.providers ?? null,
+      reasoningSource: input.reasoningSource ?? null,
+      createdAt: "2026-03-07T10:00:00.000Z",
+      updatedAt: "2026-03-07T10:00:00.000Z"
+    }),
+    ...(overrides || {})
+  } as any;
+}
+
+test("first run uses transcript fallback", async () => {
+  let transcriptCalls = 0;
+  let deltaCalls = 0;
+  const result = await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "22222222-2222-4222-8222-222222222222" },
+    stateDeltaBaseDeps({
+      getLeadState: async () => null,
+      getRecentMessages: async () => [{ id: "m-1", direction: "IN", createdAt: "2026-03-07T10:00:00.000Z", text: "hi", metadata: null }],
+      getTranscript: async () => {
+        transcriptCalls += 1;
+        return { transcript: "[2026-03-07 10:00] CLIENT: hi", messageCount: 1, transcriptLength: 40 };
+      },
+      detectStage: async () => {
+        return { analysis: makeStageAnalysis(), transcriptLength: 40, messageCount: 1, source: "transcript_fallback", provider: "claude", model: "claude", timestamp: "2026-03-07T10:00:00.000Z" };
+      },
+      detectStageFromDelta: async () => {
+        deltaCalls += 1;
+        return { analysis: makeStageAnalysis(), transcriptLength: 20, messageCount: 1, source: "state_delta", provider: "claude", model: "claude", timestamp: "2026-03-07T10:00:00.000Z" };
+      }
+    })
+  );
+  assert.equal(result.reasoningSource, "transcript_fallback");
+  assert.equal(transcriptCalls, 1);
+  assert.equal(deltaCalls, 0);
+});
+
+test("missing state safely falls back", async () => {
+  const result = await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "22222222-2222-4222-8222-222222222222" },
+    stateDeltaBaseDeps({
+      getLeadState: async () => null,
+      getRecentMessages: async () => [{ id: "m-1", direction: "IN", createdAt: "2026-03-07T10:00:00.000Z", text: "hello", metadata: null }],
+      getTranscript: async () => ({ transcript: "[2026-03-07 10:00] CLIENT: hello", messageCount: 1, transcriptLength: 45 }),
+      detectStage: async () => ({ analysis: makeStageAnalysis(), transcriptLength: 45, messageCount: 1, source: "transcript_fallback", provider: "claude", model: "claude", timestamp: "2026-03-07T10:00:00.000Z" })
+    })
+  );
+
+  assert.equal(result.reasoningSource, "transcript_fallback");
+});
+
+test("repeated unchanged conversation reuses state and avoids full transcript", async () => {
+  let transcriptCalls = 0;
+  let deltaCalls = 0;
+  const result = await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "22222222-2222-4222-8222-222222222222" },
+    stateDeltaBaseDeps({
+      getLeadState: async () => ({
+        leadId: "lead-1",
+        latestRunId: "run-prev",
+        latestMessageId: "m-1",
+        stageAnalysis: null,
+        facts: null,
+        structuredState: { stage: "QUALIFIED", lastMeaningfulInboundMessageId: "m-1", lastMeaningfulOutboundMessageId: null, lastStateUpdatedAt: "2026-03-07T10:00:00.000Z" },
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: null,
+        providers: null,
+        reasoningSource: "state_delta",
+        createdAt: "2026-03-07T10:00:00.000Z",
+        updatedAt: "2026-03-07T10:00:00.000Z"
+      }),
+      getRecentMessages: async () => [{ id: "m-1", direction: "IN", createdAt: "2026-03-07T10:00:00.000Z", text: "hi", metadata: null }],
+      getTranscript: async () => {
+        transcriptCalls += 1;
+        return { transcript: "[2026-03-07 10:00] CLIENT: hi", messageCount: 1, transcriptLength: 40 };
+      },
+      detectStageFromDelta: async () => {
+        deltaCalls += 1;
+        return { analysis: makeStageAnalysis(), transcriptLength: 20, messageCount: 1, source: "state_delta", provider: "claude", model: "claude", timestamp: "2026-03-07T10:00:00.000Z" };
+      },
+      getStrategicAdvisorFromDelta: async () => ({
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 20,
+        messageCount: 1,
+        source: "state_delta",
+        provider: "claude",
+        model: "claude",
+        timestamp: "2026-03-07T10:00:00.000Z"
+      })
+    })
+  );
+  assert.equal(result.reasoningSource, "state_delta");
+  assert.equal(transcriptCalls, 0);
+  assert.equal(deltaCalls, 1);
+});
+
+test("new inbound message uses delta update path", async () => {
+  let deltaCalls = 0;
+  const result = await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "33333333-3333-4333-8333-333333333333" },
+    stateDeltaBaseDeps({
+      getLeadState: async () => ({
+        leadId: "lead-1",
+        latestRunId: "run-prev",
+        latestMessageId: "m-old",
+        stageAnalysis: null,
+        facts: null,
+        structuredState: { stage: "QUALIFIED", lastMeaningfulInboundMessageId: "m-old", lastMeaningfulOutboundMessageId: null, lastStateUpdatedAt: "2026-03-07T10:00:00.000Z" },
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: null,
+        providers: null,
+        reasoningSource: "state_delta",
+        createdAt: "2026-03-07T10:00:00.000Z",
+        updatedAt: "2026-03-07T10:00:00.000Z"
+      }),
+      getRecentMessages: async () => [{ id: "m-new", direction: "IN", createdAt: "2026-03-07T10:30:00.000Z", text: "can I get this in blue?", metadata: null }],
+      detectStageFromDelta: async () => {
+        deltaCalls += 1;
+        return { analysis: makeStageAnalysis(), transcriptLength: 80, messageCount: 1, source: "state_delta", provider: "claude", model: "claude", timestamp: "2026-03-07T10:30:00.000Z" };
+      },
+      getStrategicAdvisorFromDelta: async () => ({
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 80,
+        messageCount: 1,
+        source: "state_delta",
+        provider: "claude",
+        model: "claude",
+        timestamp: "2026-03-07T10:30:00.000Z"
+      })
+    })
+  );
+  assert.equal(result.reasoningSource, "state_delta");
+  assert.equal(deltaCalls, 1);
+});
+
+test("state persistence updates include structured state and source metadata", async () => {
+  let persisted: Record<string, unknown> | null = null;
+  await runWhatsAppAgentOrchestrator(
+    { leadId: "11111111-1111-4111-8111-111111111111", messageId: "44444444-4444-4444-8444-444444444444" },
+    stateDeltaBaseDeps({
+      getLeadState: async () => ({
+        leadId: "lead-1",
+        latestRunId: "run-prev",
+        latestMessageId: "m-prev",
+        stageAnalysis: null,
+        facts: null,
+        structuredState: { stage: "QUALIFIED", lastMeaningfulInboundMessageId: "m-prev", lastMeaningfulOutboundMessageId: null, lastStateUpdatedAt: "2026-03-07T10:00:00.000Z" },
+        priorityItem: null,
+        strategy: null,
+        replyOptions: null,
+        brandReview: null,
+        topReplyCard: null,
+        providers: null,
+        reasoningSource: "state_delta",
+        createdAt: "2026-03-07T10:00:00.000Z",
+        updatedAt: "2026-03-07T10:00:00.000Z"
+      }),
+      getRecentMessages: async () => [{ id: "m-new", direction: "IN", createdAt: "2026-03-07T10:40:00.000Z", text: "need it this week", metadata: null }],
+      upsertLeadState: async (input: any) => {
+        persisted = input as unknown as Record<string, unknown>;
+        return {
+          leadId: input.leadId,
+          latestRunId: input.latestRunId ?? null,
+          latestMessageId: input.latestMessageId ?? null,
+          stageAnalysis: input.stageAnalysis ?? null,
+          facts: input.facts ?? null,
+          structuredState: input.structuredState ?? null,
+          priorityItem: input.priorityItem ?? null,
+          strategy: input.strategy ?? null,
+          replyOptions: input.replyOptions ?? null,
+          brandReview: input.brandReview ?? null,
+          topReplyCard: input.topReplyCard ?? null,
+          providers: input.providers ?? null,
+          reasoningSource: input.reasoningSource ?? null,
+          createdAt: "2026-03-07T10:40:00.000Z",
+          updatedAt: "2026-03-07T10:40:00.000Z"
+        };
+      },
+      detectStageFromDelta: async () => {
+        return { analysis: makeStageAnalysis(), transcriptLength: 80, messageCount: 1, source: "state_delta", provider: "claude", model: "claude", timestamp: "2026-03-07T10:40:00.000Z" };
+      },
+      getStrategicAdvisorFromDelta: async () => ({
+        strategy: makeStrategy(),
+        stageAnalysis: makeStageAnalysis(),
+        transcriptLength: 80,
+        messageCount: 1,
+        source: "state_delta",
+        provider: "claude",
+        model: "claude",
+        timestamp: "2026-03-07T10:40:00.000Z"
+      })
+    })
+  );
+
+  const persistedRow = persisted as Record<string, unknown> | null;
+  assert.ok(persistedRow && typeof persistedRow.structuredState === "object");
+  assert.equal(String((persistedRow as Record<string, unknown>).reasoningSource || ""), "state_delta");
 });

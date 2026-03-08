@@ -2,17 +2,45 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
   buildLeadPriorityIntelligence,
-  type PriorityIntelligenceDecision
+  computePriorityIntelligence,
+  mapPriorityBandFromScore,
+  PRIORITY_INTELLIGENCE_REASON_CODES_V1
 } from "./whatsappPriorityIntelligenceService.js";
 
-function baseDeps(overrides?: Partial<Parameters<typeof buildLeadPriorityIntelligence>[1] extends never ? never : Record<string, unknown>>) {
+function baseDeps(overrides?: Record<string, unknown>) {
   const deps = {
     getLeadById: async () =>
       ({
         id: "lead-1",
         stage: "QUALIFIED",
         conversionScore: 55,
-        paymentIntent: false
+        paymentIntent: false,
+        ticketValue: 600,
+        hasProductInterest: false,
+        hasPriceSent: false,
+        priceIntent: false,
+        videoIntent: false,
+        depositIntent: false,
+        detectedSignals: { tags: [] },
+        eventDate: null,
+        shipCountry: null,
+        shipCity: null
+      }) as any,
+    getLeadState: async () =>
+      ({
+        stageAnalysis: {
+          signals: [],
+          objections: [],
+          facts: {
+            products_of_interest: [],
+            event_date: null,
+            delivery_deadline: null,
+            destination_country: null,
+            price_points_detected: [],
+            customization_requests: []
+          }
+        },
+        facts: null
       }) as any,
     getAiCards: async () =>
       ({
@@ -53,8 +81,6 @@ function baseDeps(overrides?: Partial<Parameters<typeof buildLeadPriorityIntelli
         timing: "monitor"
       }) as any,
     getLeadOutcome: async () => null,
-    getLeadMessages: async () => [],
-    listOperatorEventsByRange: async () => [],
     listLeads: async () => [],
     nowIso: () => "2026-03-07T10:00:00.000Z",
     nowMs: () => new Date("2026-03-07T10:00:00.000Z").getTime()
@@ -62,215 +88,220 @@ function baseDeps(overrides?: Partial<Parameters<typeof buildLeadPriorityIntelli
   return { ...deps, ...(overrides || {}) } as any;
 }
 
-test("high-intent active lead => reply_now on mobile_lab", async () => {
+test("high-intent active lead", async () => {
   const decision = await buildLeadPriorityIntelligence(
     "11111111-1111-4111-8111-111111111111",
     baseDeps({
-      getLeadById: async () => ({ id: "lead-a", stage: "DEPOSIT_PENDING", conversionScore: 82, paymentIntent: true }) as any,
-      getAiCards: async () =>
+      getLeadById: async () =>
         ({
-          summary: {
-            stage: "DEPOSIT_PENDING",
-            urgency: "high",
-            paymentIntent: true,
-            dropoffRisk: "medium"
+          id: "lead-a",
+          stage: "DEPOSIT_PENDING",
+          paymentIntent: true,
+          depositIntent: true,
+          ticketValue: 4200,
+          hasProductInterest: true,
+          hasPriceSent: true,
+          priceIntent: true,
+          videoIntent: false,
+          detectedSignals: { tags: ["repeat_customer"] },
+          eventDate: "2026-03-11",
+          shipCountry: "FR",
+          shipCity: "Paris"
+        }) as any,
+      getLeadState: async () =>
+        ({
+          stageAnalysis: {
+            signals: [
+              { type: "product_interest" },
+              { type: "price_request" },
+              { type: "payment_intent" },
+              { type: "shipping_question" },
+              { type: "deadline_risk" }
+            ],
+            objections: [],
+            facts: {
+              event_date: "2026-03-11",
+              delivery_deadline: "2026-03-12",
+              destination_country: "FR",
+              price_points_detected: [1200],
+              customization_requests: ["sleeve change"]
+            }
           }
         }) as any,
-      getPriorityScore: async () =>
-        ({
-          leadId: "lead-a",
-          priorityScore: 78,
-          priorityBand: "high",
-          needsReply: true,
-          waitingSinceMinutes: 35,
-          stage: "DEPOSIT_PENDING",
-          urgency: "high",
-          paymentIntent: true,
-          dropoffRisk: "medium",
-          recommendedAction: "push_softly_to_deposit",
-          commercialPriority: "high",
-          estimatedHeat: "hot",
-          reasons: []
-        }) as any
+      getAiCards: async () => ({ summary: { stage: "DEPOSIT_PENDING", paymentIntent: true, urgency: "high", dropoffRisk: "low" } }) as any,
+      getPriorityScore: async () => ({ needsReply: true, waitingSinceMinutes: 22 }) as any,
+      getReactivation: async () => ({ shouldReactivate: false, reactivationPriority: "low", stalledStage: null, silenceHours: 2 }) as any
     })
   );
 
   assert.equal(decision.recommendedAttention, "reply_now");
   assert.equal(decision.recommendedSurface, "mobile_lab");
-  assert.ok(decision.priorityScore >= 70);
+  assert.ok(decision.conversionProbability > 0.65);
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.awaiting_reply));
+  assert.equal(decision.primaryReasonCode, PRIORITY_INTELLIGENCE_REASON_CODES_V1.awaiting_reply);
 });
 
-test("stalled reactivation lead => reactivate_now on reactivation_queue", async () => {
+test("stalled reactivation lead", async () => {
   const decision = await buildLeadPriorityIntelligence(
     "22222222-2222-4222-8222-222222222222",
     baseDeps({
-      getLeadById: async () => ({ id: "lead-b", stage: "PRICE_SENT", conversionScore: 48, paymentIntent: false }) as any,
-      getAiCards: async () =>
+      getLeadById: async () =>
         ({
-          summary: {
-            stage: "PRICE_SENT",
-            urgency: "medium",
-            paymentIntent: false,
-            dropoffRisk: "high"
-          }
-        }) as any,
-      getPriorityScore: async () =>
-        ({
-          leadId: "lead-b",
-          priorityScore: 62,
-          priorityBand: "high",
-          needsReply: false,
-          waitingSinceMinutes: 0,
+          id: "lead-b",
           stage: "PRICE_SENT",
-          urgency: "medium",
           paymentIntent: false,
-          dropoffRisk: "high",
-          recommendedAction: "reactivate_gently",
-          commercialPriority: "medium",
-          estimatedHeat: "warm",
-          reasons: []
+          depositIntent: false,
+          ticketValue: 900,
+          hasProductInterest: true,
+          hasPriceSent: true,
+          priceIntent: true,
+          videoIntent: false,
+          detectedSignals: { tags: [] },
+          eventDate: null,
+          shipCountry: null,
+          shipCity: null
         }) as any,
+      getAiCards: async () => ({ summary: { stage: "PRICE_SENT", paymentIntent: false, urgency: "medium", dropoffRisk: "high" } }) as any,
+      getPriorityScore: async () => ({ needsReply: false, waitingSinceMinutes: 0 }) as any,
       getReactivation: async () =>
         ({
-          leadId: "lead-b",
           shouldReactivate: true,
           reactivationPriority: "high",
-          reactivationReason: "stalled after outbound",
           stalledStage: "PRICE_SENT",
-          silenceHours: 72,
-          signals: ["stalled_after_outbound"],
-          recommendedAction: "reactivate_gently",
-          tone: "reassuring",
-          timing: "now"
+          silenceHours: 72
         }) as any
     })
   );
 
   assert.equal(decision.recommendedAttention, "reactivate_now");
   assert.equal(decision.recommendedSurface, "reactivation_queue");
-  assert.ok(decision.dropoffRisk >= 70);
+  assert.ok(decision.dropoffRisk > 0.55);
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.price_sent_then_silence));
 });
 
-test("low-value low-urgency lead => wait on priority_desk", async () => {
+test("low-urgency lead", async () => {
   const decision = await buildLeadPriorityIntelligence(
     "33333333-3333-4333-8333-333333333333",
     baseDeps({
-      getLeadById: async () => ({ id: "lead-c", stage: "QUALIFIED", conversionScore: 18, paymentIntent: false }) as any,
-      getAiCards: async () =>
+      getLeadById: async () =>
         ({
-          summary: {
-            stage: "QUALIFIED",
-            urgency: "low",
-            paymentIntent: false,
-            dropoffRisk: "low"
-          }
-        }) as any,
-      getPriorityScore: async () =>
-        ({
-          leadId: "lead-c",
-          priorityScore: 22,
-          priorityBand: "low",
-          needsReply: false,
-          waitingSinceMinutes: 0,
-          stage: "QUALIFIED",
-          urgency: "low",
+          id: "lead-c",
+          stage: "NEW",
           paymentIntent: false,
-          dropoffRisk: "low",
-          recommendedAction: "wait",
-          commercialPriority: "low",
-          estimatedHeat: "cold",
-          reasons: []
+          depositIntent: false,
+          ticketValue: 200,
+          hasProductInterest: false,
+          hasPriceSent: false,
+          priceIntent: false,
+          videoIntent: false,
+          detectedSignals: { tags: [] },
+          eventDate: null,
+          shipCountry: null,
+          shipCity: null
         }) as any,
-      getReactivation: async () =>
-        ({
-          leadId: "lead-c",
-          shouldReactivate: false,
-          reactivationPriority: "low",
-          reactivationReason: "not stale",
-          stalledStage: null,
-          silenceHours: 6,
-          signals: [],
-          recommendedAction: "wait",
-          tone: null,
-          timing: "monitor"
-        }) as any
+      getAiCards: async () => ({ summary: { stage: "NEW", paymentIntent: false, urgency: "low", dropoffRisk: "low" } }) as any,
+      getPriorityScore: async () => ({ needsReply: false, waitingSinceMinutes: 0 }) as any,
+      getReactivation: async () => ({ shouldReactivate: false, reactivationPriority: "low", stalledStage: null, silenceHours: 0.5 }) as any
     })
   );
 
-  assert.equal(decision.recommendedAttention, "wait");
-  assert.equal(decision.recommendedSurface, "priority_desk");
-  assert.ok(decision.priorityScore < 40);
+  assert.ok(decision.conversionProbability < 0.25);
+  assert.ok(decision.dropoffRisk < 0.25);
+  assert.equal(decision.recommendedAttention, "monitor");
 });
 
-test("recommendedSurface mapping for close_out", async () => {
-  const decision: PriorityIntelligenceDecision = await buildLeadPriorityIntelligence(
-    "44444444-4444-4444-8444-444444444444",
-    baseDeps({
-      getLeadOutcome: async () =>
-        ({
-          leadId: "lead-d",
-          outcome: "converted"
-        }) as any
-    })
-  );
-  assert.equal(decision.recommendedAttention, "close_out");
-  assert.equal(decision.recommendedSurface, "priority_desk");
+test("priority band mapping", () => {
+  assert.equal(mapPriorityBandFromScore(0), "low");
+  assert.equal(mapPriorityBandFromScore(25), "low");
+  assert.equal(mapPriorityBandFromScore(26), "medium");
+  assert.equal(mapPriorityBandFromScore(50), "medium");
+  assert.equal(mapPriorityBandFromScore(51), "high");
+  assert.equal(mapPriorityBandFromScore(75), "high");
+  assert.equal(mapPriorityBandFromScore(76), "critical");
+  assert.equal(mapPriorityBandFromScore(100), "critical");
 });
 
-test("reasonCodes are populated for key signals", async () => {
-  const decision = await buildLeadPriorityIntelligence(
-    "lead-e",
-    baseDeps({
-      getLeadById: async () => ({ id: "lead-e", stage: "PRICE_SENT", conversionScore: 52, paymentIntent: true }) as any,
-      getAiCards: async () =>
-        ({
-          summary: {
-            stage: "PRICE_SENT",
-            urgency: "high",
-            paymentIntent: true,
-            dropoffRisk: "high"
-          }
-        }) as any,
-      getPriorityScore: async () =>
-        ({
-          leadId: "lead-e",
-          priorityScore: 70,
-          priorityBand: "high",
-          needsReply: true,
-          waitingSinceMinutes: 90,
-          stage: "PRICE_SENT",
-          urgency: "high",
-          paymentIntent: true,
-          dropoffRisk: "high",
-          recommendedAction: "push_softly_to_deposit",
-          commercialPriority: "high",
-          estimatedHeat: "hot",
-          reasons: []
-        }) as any,
-      getReactivation: async () =>
-        ({
-          leadId: "lead-e",
-          shouldReactivate: true,
-          reactivationPriority: "high",
-          reactivationReason: "stalled",
-          stalledStage: "PRICE_SENT",
-          silenceHours: 56,
-          signals: ["stalled_after_outbound"],
-          recommendedAction: "reactivate_gently",
-          tone: "reassuring",
-          timing: "now"
-        }) as any,
-      listOperatorEventsByRange: async () =>
-        [
-          { leadId: "lead-e", actionType: "reply_card_dismissed" },
-          { leadId: "lead-e", actionType: "reply_card_dismissed" },
-          { leadId: "lead-e", actionType: "feed_item_skipped" }
-        ] as any
-    })
-  );
+test("reasonCodes population", () => {
+  const decision = computePriorityIntelligence({
+    leadId: "lead-r",
+    stage: "DEPOSIT_PENDING",
+    awaitingReply: false,
+    waitingMinutes: 0,
+    silenceMinutes: 180,
+    reactivationState: {
+      shouldReactivate: true,
+      reactivationPriority: "high",
+      stalledStage: "DEPOSIT_PENDING"
+    },
+    signals: {
+      product_interest_detected: true,
+      price_request_detected: true,
+      payment_intent_detected: true,
+      deposit_intent_detected: true,
+      shipping_question_detected: true,
+      delivery_timing_detected: false,
+      customization_request_detected: false,
+      video_interest_detected: false,
+      event_date_detected: true,
+      event_date_near: true,
+      high_ticket_context: true,
+      repeat_customer_detected: true,
+      price_objection_detected: false,
+      timing_objection_detected: false,
+      trust_friction_detected: false,
+      fit_uncertainty_detected: false,
+      fabric_uncertainty_detected: false,
+      external_approval_delay_detected: false,
+      recent_inbound_message: false
+    }
+  });
 
-  assert.ok(decision.reasonCodes.includes("PAYMENT_INTENT"));
-  assert.ok(decision.reasonCodes.includes("HIGH_URGENCY"));
-  assert.ok(decision.reasonCodes.includes("WAITING_OVER_60_MIN"));
-  assert.ok(decision.reasonCodes.includes("OPERATOR_DISMISSALS"));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.product_interest_detected));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.price_request_detected));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.payment_intent_detected));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.shipping_question_detected));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.event_date_detected));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.event_date_near));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.deposit_pending_then_silence));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.high_ticket_context));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.repeat_customer_detected));
+  assert.ok(decision.reasonCodes.includes(PRIORITY_INTELLIGENCE_REASON_CODES_V1.stage_deposit_pending));
+});
+
+test("primaryReasonCode selection", () => {
+  const decision = computePriorityIntelligence({
+    leadId: "lead-p",
+    stage: "DEPOSIT_PENDING",
+    awaitingReply: true,
+    waitingMinutes: 30,
+    silenceMinutes: 240,
+    reactivationState: {
+      shouldReactivate: true,
+      reactivationPriority: "high",
+      stalledStage: "DEPOSIT_PENDING"
+    },
+    signals: {
+      product_interest_detected: true,
+      price_request_detected: true,
+      payment_intent_detected: true,
+      deposit_intent_detected: true,
+      shipping_question_detected: true,
+      delivery_timing_detected: true,
+      customization_request_detected: true,
+      video_interest_detected: true,
+      event_date_detected: true,
+      event_date_near: true,
+      high_ticket_context: true,
+      repeat_customer_detected: true,
+      price_objection_detected: false,
+      timing_objection_detected: false,
+      trust_friction_detected: false,
+      fit_uncertainty_detected: false,
+      fabric_uncertainty_detected: false,
+      external_approval_delay_detected: false,
+      recent_inbound_message: true
+    }
+  });
+
+  assert.equal(decision.primaryReasonCode, PRIORITY_INTELLIGENCE_REASON_CODES_V1.awaiting_reply);
 });

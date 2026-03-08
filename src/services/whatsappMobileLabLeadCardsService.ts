@@ -9,6 +9,7 @@ import { buildStrategicAdvisorFromContext } from "./whatsappStrategicAdvisorServ
 import { buildLeadTranscript } from "./whatsappTranscriptFormatter.js";
 import { buildLeadReactivationReplies } from "./whatsappReactivationReplyService.js";
 import { listWhatsAppLeadMessages } from "../db/whatsappLeadsRepo.js";
+import { buildLeadPriorityIntelligence } from "./whatsappPriorityIntelligenceService.js";
 
 type Card = {
   label: string;
@@ -72,6 +73,7 @@ type MobileLabLeadCardsDeps = {
     leadId: string;
     latestMessageId?: string | null;
     stageAnalysis?: Record<string, unknown> | null;
+    priorityItem?: Record<string, unknown> | null;
     strategy?: Record<string, unknown> | null;
     replyOptions?: Record<string, unknown> | null;
     topReplyCard?: Record<string, unknown> | null;
@@ -110,6 +112,7 @@ function defaultDeps(): MobileLabLeadCardsDeps {
         leadId: input.leadId,
         latestMessageId: input.latestMessageId ?? null,
         stageAnalysis: input.stageAnalysis ?? null,
+        priorityItem: input.priorityItem ?? null,
         strategy: input.strategy ?? null,
         replyOptions: input.replyOptions ?? null,
         topReplyCard: input.topReplyCard ?? null,
@@ -472,11 +475,30 @@ export async function buildMobileLabLeadCards(
         : null;
       const status = topReplyCard ? "enriched" : "no_generation_needed";
       const pipelineSource = "active_ai_cards" as const;
+      let priorityItem: Record<string, unknown> | null = null;
+      try {
+        const priority = await buildLeadPriorityIntelligence(safeLeadId);
+        priorityItem = {
+          conversion_probability: priority.conversionProbability,
+          dropoff_risk: priority.dropoffRisk,
+          priority_score: priority.priorityScore,
+          priority_band: priority.priorityBand,
+          recommended_attention: priority.recommendedAttention,
+          reason_codes: priority.reasonCodes,
+          primary_reason_code: priority.primaryReasonCode
+        };
+      } catch (error) {
+        console.warn("[mobile-lab-lead-cards] priority_intelligence_refresh_failed", {
+          leadId: safeLeadId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
       try {
         await deps.persistCachedLeadState({
           leadId: safeLeadId,
           latestMessageId: latestMessage?.id || null,
           stageAnalysis: replyContext.stageAnalysis as unknown as Record<string, unknown>,
+          priorityItem,
           strategy: replyContext.strategy as unknown as Record<string, unknown>,
           replyOptions: replyContext.replyOptions as unknown as Record<string, unknown>,
           topReplyCard: topReplyCard as unknown as Record<string, unknown> | null,

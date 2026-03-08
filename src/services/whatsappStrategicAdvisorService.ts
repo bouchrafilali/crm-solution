@@ -51,6 +51,7 @@ export type StrategicAdvisorResult = {
   stageAnalysis: StageDetectionAnalysis;
   transcriptLength: number;
   messageCount: number;
+  source?: "state_delta" | "transcript_fallback";
   provider: AiProvider;
   model: string;
   usage?: AiUsageMetrics | null;
@@ -137,6 +138,38 @@ function buildStrategicAdvisorUserPrompt(input: { transcript: string; stageAnaly
     JSON.stringify(input.stageAnalysis),
     "Transcript:",
     input.transcript
+  ].join("\n");
+}
+
+function buildStrategicAdvisorStateDeltaPrompt(input: {
+  stageAnalysis: StageDetectionAnalysis;
+  currentState: Record<string, unknown>;
+  latestMessageDelta: Record<string, unknown>;
+  recentMinimalContext: Array<Record<string, unknown>>;
+}): string {
+  return [
+    "Based on stage analysis + structured state + latest delta, output only valid JSON with this exact shape:",
+    "{",
+    '  "recommended_action": "qualify | answer_precisely | reassure | propose_video | narrow_options | clarify_deadline | push_softly_to_deposit | reduce_friction_to_payment | reactivate_gently | wait | close_out",',
+    '  "action_confidence": 0.0,',
+    '  "commercial_priority": "low | medium | high | critical",',
+    '  "tone": "soft_luxury | reassuring | decisive_elegant | warm_refined | calm_urgent",',
+    '  "pressure_level": "none | low | medium",',
+    '  "primary_goal": "one sentence goal",',
+    '  "secondary_goal": "one sentence goal",',
+    '  "missed_opportunities": [],',
+    '  "strategy_rationale": [],',
+    '  "do_now": [],',
+    '  "avoid": []',
+    "}",
+    "Stage analysis JSON:",
+    JSON.stringify(input.stageAnalysis),
+    "Current structured state JSON:",
+    JSON.stringify(input.currentState),
+    "Latest message delta JSON:",
+    JSON.stringify(input.latestMessageDelta),
+    "Recent minimal context JSON:",
+    JSON.stringify(input.recentMinimalContext)
   ].join("\n");
 }
 
@@ -336,6 +369,43 @@ export async function buildStrategicAdvisorFromContext(input: {
     stageAnalysis: input.stageAnalysis,
     transcriptLength,
     messageCount,
+    source: "transcript_fallback",
+    provider: modelResult.provider,
+    model: modelResult.model,
+    usage: modelResult.usage,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export async function buildStrategicAdvisorFromStateDelta(input: {
+  leadId: string;
+  stageAnalysis: StageDetectionAnalysis;
+  currentState: Record<string, unknown>;
+  latestMessageDelta: Record<string, unknown>;
+  recentMinimalContext: Array<Record<string, unknown>>;
+  callModel?: typeof callStrategicAdvisorModel;
+}): Promise<StrategicAdvisorResult> {
+  const safeLeadId = String(input.leadId || "").trim();
+  if (!safeLeadId) {
+    throw new StrategicAdvisorError("invalid_lead_id", "Lead ID is required");
+  }
+  const systemPrompt = buildStrategicAdvisorSystemPrompt();
+  const userPrompt = buildStrategicAdvisorStateDeltaPrompt({
+    stageAnalysis: input.stageAnalysis,
+    currentState: input.currentState || {},
+    latestMessageDelta: input.latestMessageDelta || {},
+    recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
+  });
+  const modelCaller = input.callModel || callStrategicAdvisorModel;
+  const modelResult = await modelCaller({ systemPrompt, userPrompt });
+  const parsed = parseStrategicAdvisorJson(modelResult.rawOutput);
+  const strategy = validateStrategicAdvisor(parsed);
+  return {
+    strategy,
+    stageAnalysis: input.stageAnalysis,
+    transcriptLength: JSON.stringify(input.recentMinimalContext || []).length,
+    messageCount: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext.length : 0,
+    source: "state_delta",
     provider: modelResult.provider,
     model: modelResult.model,
     usage: modelResult.usage,

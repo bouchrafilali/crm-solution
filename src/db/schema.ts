@@ -389,12 +389,14 @@ create table if not exists whatsapp_agent_lead_state (
   latest_message_id uuid references whatsapp_lead_messages(id) on delete set null,
   stage_analysis jsonb,
   facts jsonb,
+  structured_state jsonb,
   priority_item jsonb,
   strategy jsonb,
   reply_options jsonb,
   brand_review jsonb,
   top_reply_card jsonb,
   providers jsonb,
+  reasoning_source text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

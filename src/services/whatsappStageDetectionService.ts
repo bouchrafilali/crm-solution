@@ -113,6 +113,7 @@ export type StageDetectionResult = {
   analysis: StageDetectionAnalysis;
   transcriptLength: number;
   messageCount: number;
+  source?: "state_delta" | "transcript_fallback";
   provider: AiProvider;
   model: string;
   usage?: AiUsageMetrics | null;
@@ -222,6 +223,47 @@ function buildStageDetectionUserPrompt(transcript: string): string {
     "}",
     "Transcript:",
     transcript
+  ].join("\n");
+}
+
+function buildStageDetectionStateDeltaUserPrompt(input: {
+  currentState: Record<string, unknown>;
+  latestMessageDelta: Record<string, unknown>;
+  recentMinimalContext: Array<Record<string, unknown>>;
+}): string {
+  return [
+    "Analyze this WhatsApp lead using structured state + latest message delta.",
+    "Return only valid JSON with this exact shape:",
+    "{",
+    '  "stage": "NEW | PRODUCT_INTEREST | QUALIFICATION_PENDING | QUALIFIED | PRICE_SENT | VIDEO_PROPOSED | VIDEO_DONE | DEPOSIT_PENDING | CONFIRMED | CONVERTED | LOST | STALLED",',
+    '  "stage_confidence": 0.0,',
+    '  "priority_score": 0,',
+    '  "urgency": "low | medium | high",',
+    '  "payment_intent": false,',
+    '  "dropoff_risk": "low | medium | high",',
+    '  "signals": [{"type": "product_interest | price_request | customization_request | event_date | urgency | shipping_question | payment_intent | hesitation | objection | video_interest | deadline_risk", "evidence": "short quoted evidence"}],',
+    '  "facts": {',
+    '    "products_of_interest": [],',
+    '    "event_date": null,',
+    '    "delivery_deadline": null,',
+    '    "destination_country": null,',
+    '    "budget": null,',
+    '    "price_points_detected": [],',
+    '    "customization_requests": [],',
+    '    "preferred_colors": [],',
+    '    "preferred_fabrics": [],',
+    '    "payment_method_preference": null',
+    "  },",
+    '  "objections": [{"type": "price | timing | trust | fit | fabric | uncertainty | external_approval | other", "evidence": "short evidence"}],',
+    '  "recommended_next_action": "qualify | answer_precisely | propose_video | reassure | push_softly_to_deposit | reactivate_gently | wait | clarify_timing | close_out",',
+    '  "reasoning_summary": []',
+    "}",
+    "Current structured state JSON:",
+    JSON.stringify(input.currentState),
+    "Latest message delta JSON:",
+    JSON.stringify(input.latestMessageDelta),
+    "Recent minimal context JSON:",
+    JSON.stringify(input.recentMinimalContext)
   ].join("\n");
 }
 
@@ -398,6 +440,42 @@ export async function detectStageFromTranscript(input: {
     analysis,
     transcriptLength,
     messageCount,
+    source: "transcript_fallback",
+    provider: modelResult.provider,
+    model: modelResult.model,
+    usage: modelResult.usage,
+    timestamp: new Date().toISOString()
+  };
+}
+
+export async function detectStageFromStateDelta(input: {
+  leadId: string;
+  currentState: Record<string, unknown>;
+  latestMessageDelta: Record<string, unknown>;
+  recentMinimalContext: Array<Record<string, unknown>>;
+  callModel?: typeof callStageDetectionModel;
+}): Promise<StageDetectionResult> {
+  const safeLeadId = String(input.leadId || "").trim();
+  if (!safeLeadId) {
+    throw new StageDetectionError("invalid_lead_id", "Lead ID is required");
+  }
+
+  const systemPrompt = buildStageDetectionSystemPrompt();
+  const userPrompt = buildStageDetectionStateDeltaUserPrompt({
+    currentState: input.currentState || {},
+    latestMessageDelta: input.latestMessageDelta || {},
+    recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
+  });
+  const modelCaller = input.callModel || callStageDetectionModel;
+  const modelResult = await modelCaller({ systemPrompt, userPrompt });
+  const parsed = parseStageDetectionJson(modelResult.rawOutput);
+  const analysis = validateStageDetectionAnalysis(parsed);
+
+  return {
+    analysis,
+    transcriptLength: JSON.stringify(input.recentMinimalContext || []).length,
+    messageCount: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext.length : 0,
+    source: "state_delta",
     provider: modelResult.provider,
     model: modelResult.model,
     usage: modelResult.usage,

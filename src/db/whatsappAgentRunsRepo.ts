@@ -43,12 +43,14 @@ export type WhatsAppAgentLeadStateRecord = {
   latestMessageId: string | null;
   stageAnalysis: Record<string, unknown> | null;
   facts: Record<string, unknown> | null;
+  structuredState?: Record<string, unknown> | null;
   priorityItem: Record<string, unknown> | null;
   strategy: Record<string, unknown> | null;
   replyOptions: Record<string, unknown> | null;
   brandReview: Record<string, unknown> | null;
   topReplyCard: Record<string, unknown> | null;
   providers: Record<string, unknown> | null;
+  reasoningSource?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -443,12 +445,14 @@ export async function upsertWhatsAppAgentLeadState(input: {
   latestMessageId?: string | null;
   stageAnalysis?: Record<string, unknown> | null;
   facts?: Record<string, unknown> | null;
+  structuredState?: Record<string, unknown> | null;
   priorityItem?: Record<string, unknown> | null;
   strategy?: Record<string, unknown> | null;
   replyOptions?: Record<string, unknown> | null;
   brandReview?: Record<string, unknown> | null;
   topReplyCard?: Record<string, unknown> | null;
   providers?: Record<string, unknown> | null;
+  reasoningSource?: string | null;
 }): Promise<WhatsAppAgentLeadStateRecord> {
   const db = getPoolOrThrow();
   const q = await db.query<{
@@ -457,12 +461,14 @@ export async function upsertWhatsAppAgentLeadState(input: {
     latest_message_id: string | null;
     stage_analysis: unknown;
     facts: unknown;
+    structured_state: unknown;
     priority_item: unknown;
     strategy: unknown;
     reply_options: unknown;
     brand_review: unknown;
     top_reply_card: unknown;
     providers: unknown;
+    reasoning_source: string | null;
     created_at: string;
     updated_at: string;
   }>(
@@ -473,12 +479,14 @@ export async function upsertWhatsAppAgentLeadState(input: {
         latest_message_id,
         stage_analysis,
         facts,
+        structured_state,
         priority_item,
         strategy,
         reply_options,
         brand_review,
         top_reply_card,
-        providers
+        providers,
+        reasoning_source
       )
       values (
         $1::uuid,
@@ -491,7 +499,8 @@ export async function upsertWhatsAppAgentLeadState(input: {
         $8::jsonb,
         $9::jsonb,
         $10::jsonb,
-        $11::jsonb
+        $11::jsonb,
+        nullif(trim($12::text), '')
       )
       on conflict (lead_id)
       do update set
@@ -499,12 +508,14 @@ export async function upsertWhatsAppAgentLeadState(input: {
         latest_message_id = coalesce(excluded.latest_message_id, whatsapp_agent_lead_state.latest_message_id),
         stage_analysis = coalesce(excluded.stage_analysis, whatsapp_agent_lead_state.stage_analysis),
         facts = coalesce(excluded.facts, whatsapp_agent_lead_state.facts),
+        structured_state = coalesce(excluded.structured_state, whatsapp_agent_lead_state.structured_state),
         priority_item = coalesce(excluded.priority_item, whatsapp_agent_lead_state.priority_item),
         strategy = coalesce(excluded.strategy, whatsapp_agent_lead_state.strategy),
         reply_options = coalesce(excluded.reply_options, whatsapp_agent_lead_state.reply_options),
         brand_review = coalesce(excluded.brand_review, whatsapp_agent_lead_state.brand_review),
         top_reply_card = coalesce(excluded.top_reply_card, whatsapp_agent_lead_state.top_reply_card),
         providers = coalesce(excluded.providers, whatsapp_agent_lead_state.providers),
+        reasoning_source = coalesce(excluded.reasoning_source, whatsapp_agent_lead_state.reasoning_source),
         updated_at = now()
       returning
         lead_id,
@@ -512,12 +523,14 @@ export async function upsertWhatsAppAgentLeadState(input: {
         latest_message_id,
         stage_analysis,
         facts,
+        structured_state,
         priority_item,
         strategy,
         reply_options,
         brand_review,
         top_reply_card,
         providers,
+        reasoning_source,
         created_at,
         updated_at
     `,
@@ -527,12 +540,14 @@ export async function upsertWhatsAppAgentLeadState(input: {
       input.latestMessageId ?? null,
       input.stageAnalysis == null ? null : JSON.stringify(input.stageAnalysis),
       input.facts == null ? null : JSON.stringify(input.facts),
+      input.structuredState == null ? null : JSON.stringify(input.structuredState),
       input.priorityItem == null ? null : JSON.stringify(input.priorityItem),
       input.strategy == null ? null : JSON.stringify(input.strategy),
       input.replyOptions == null ? null : JSON.stringify(input.replyOptions),
       input.brandReview == null ? null : JSON.stringify(input.brandReview),
       input.topReplyCard == null ? null : JSON.stringify(input.topReplyCard),
-      input.providers == null ? null : JSON.stringify(input.providers)
+      input.providers == null ? null : JSON.stringify(input.providers),
+      input.reasoningSource ?? null
     ]
   );
   const row = q.rows[0];
@@ -542,12 +557,14 @@ export async function upsertWhatsAppAgentLeadState(input: {
     latestMessageId: row.latest_message_id,
     stageAnalysis: asRecord(row.stage_analysis),
     facts: asRecord(row.facts),
+    structuredState: asRecord(row.structured_state),
     priorityItem: asRecord(row.priority_item),
     strategy: asRecord(row.strategy),
     replyOptions: asRecord(row.reply_options),
     brandReview: asRecord(row.brand_review),
     topReplyCard: asRecord(row.top_reply_card),
     providers: asRecord(row.providers),
+    reasoningSource: row.reasoning_source ? String(row.reasoning_source) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -561,12 +578,14 @@ export async function getWhatsAppAgentLeadState(leadId: string): Promise<WhatsAp
     latest_message_id: string | null;
     stage_analysis: unknown;
     facts: unknown;
+    structured_state: unknown;
     priority_item: unknown;
     strategy: unknown;
     reply_options: unknown;
     brand_review: unknown;
     top_reply_card: unknown;
     providers: unknown;
+    reasoning_source: string | null;
     created_at: string;
     updated_at: string;
   }>(
@@ -577,12 +596,14 @@ export async function getWhatsAppAgentLeadState(leadId: string): Promise<WhatsAp
         latest_message_id,
         stage_analysis,
         facts,
+        structured_state,
         priority_item,
         strategy,
         reply_options,
         brand_review,
         top_reply_card,
         providers,
+        reasoning_source,
         created_at,
         updated_at
       from whatsapp_agent_lead_state
@@ -599,12 +620,14 @@ export async function getWhatsAppAgentLeadState(leadId: string): Promise<WhatsAp
     latestMessageId: row.latest_message_id,
     stageAnalysis: asRecord(row.stage_analysis),
     facts: asRecord(row.facts),
+    structuredState: asRecord(row.structured_state),
     priorityItem: asRecord(row.priority_item),
     strategy: asRecord(row.strategy),
     replyOptions: asRecord(row.reply_options),
     brandReview: asRecord(row.brand_review),
     topReplyCard: asRecord(row.top_reply_card),
     providers: asRecord(row.providers),
+    reasoningSource: row.reasoning_source ? String(row.reasoning_source) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
