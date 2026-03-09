@@ -1,4 +1,12 @@
-export type NavPage = "dashboard" | "agents" | "runs" | "leads" | "lead-workspace" | "approvals" | "learning";
+export type NavPage =
+  | "dashboard"
+  | "agents"
+  | "runs"
+  | "leads"
+  | "lead-workspace"
+  | "approvals"
+  | "learning"
+  | "system-architecture-map";
 
 export type AgentStatus = "running" | "idle" | "degraded" | "paused";
 

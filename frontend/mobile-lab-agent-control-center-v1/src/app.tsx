@@ -9,6 +9,7 @@ import { LeadsPage } from "./pages/LeadsPage.js";
 import { LeadWorkspacePage } from "./pages/LeadWorkspacePage.js";
 import { ApprovalsPage } from "./pages/ApprovalsPage.js";
 import { LearningPage } from "./pages/LearningPage.js";
+import { SystemArchitectureMapPage } from "./pages/SystemArchitectureMapPage.js";
 import { cn, initials } from "./utils.js";
 
 interface SidebarItem {
@@ -22,7 +23,8 @@ const sidebarItems: SidebarItem[] = [
   { id: "runs", label: "Runs" },
   { id: "leads", label: "Leads" },
   { id: "approvals", label: "Approvals" },
-  { id: "learning", label: "Learning" }
+  { id: "learning", label: "Learning" },
+  { id: "system-architecture-map", label: "System Map" }
 ];
 
 export function App() {
@@ -159,6 +161,7 @@ export function App() {
               ) : null}
               {activePage === "approvals" ? <ApprovalsPage key="page-approvals" approvals={approvals} onDecision={handleApprovalDecision} /> : null}
               {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={mockData.learningEvents} /> : null}
+              {activePage === "system-architecture-map" ? <SystemArchitectureMapPage key="page-system-architecture-map" /> : null}
             </AnimatePresence>
           </div>
         </main>
