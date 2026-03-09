@@ -8174,6 +8174,18 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         }, [aiFlowPopupLeadId]);
 
         React.useEffect(() => {
+          const previousOverflow = document.body && document.body.style ? document.body.style.overflow : "";
+          if (aiFlowPopupLeadId && document.body && document.body.style) {
+            document.body.style.overflow = "hidden";
+          }
+          return () => {
+            if (document.body && document.body.style) {
+              document.body.style.overflow = previousOverflow || "";
+            }
+          };
+        }, [aiFlowPopupLeadId]);
+
+        React.useEffect(() => {
           mobileDrawerOffsetRef.current = mobileDrawerOffset;
           const isOpen = mobileDrawerOffset < mobileDrawerClosedRef.current * 0.5;
           setMobileUiState((prev) => (prev.aiDrawerOpen === isOpen ? prev : { ...prev, aiDrawerOpen: isOpen }));
@@ -8700,6 +8712,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
 
         function renderAiFlowPanel(lead) {
           if (!lead || String(lead.channelType || "").toUpperCase() !== "MOBILE_LAB") return null;
+          if (aiFlowPopupLeadId && String(aiFlowPopupLeadId) === String(lead.id || "")) return null;
           const flow = lead.agentRun && typeof lead.agentRun === "object" ? lead.agentRun : null;
           const run = flow && flow.run && typeof flow.run === "object" ? flow.run : null;
           const runMeta = lead.agentRunMeta && typeof lead.agentRunMeta === "object" ? lead.agentRunMeta : null;
