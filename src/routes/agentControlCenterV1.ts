@@ -11,25 +11,51 @@ function firstExistingPath(candidates: string[]): string | null {
   return null;
 }
 
-function resolveAssetsDir(): string | null {
-  return firstExistingPath([
+function resolveAssetsDirs(): string[] {
+  const candidates = [
     join(process.cwd(), "frontend/mobile-lab-agent-control-center-v1/dist"),
     join(process.cwd(), "dist/frontend/mobile-lab-agent-control-center-v1/dist")
-  ]);
+  ];
+
+  return candidates.filter((candidate) => existsSync(candidate));
+}
+
+function resolveAssetsDir(): string | null {
+  return firstExistingPath(resolveAssetsDirs());
 }
 
 agentControlCenterV1Router.use("/agent-control-center-v1", (req, res, next) => {
-  const assetsDir = resolveAssetsDir();
-  if (!assetsDir) {
+  const assetsDirs = resolveAssetsDirs();
+  if (!assetsDirs.length) {
     next();
     return;
   }
 
-  return express.static(assetsDir, {
+  const staticOptions = {
     index: false,
     maxAge: "1h",
     etag: true
-  })(req, res, next);
+  };
+
+  let currentIndex = 0;
+  const serveFromNextDir = (): void => {
+    if (currentIndex >= assetsDirs.length) {
+      next();
+      return;
+    }
+
+    const staticMiddleware = express.static(assetsDirs[currentIndex], staticOptions);
+    currentIndex += 1;
+    staticMiddleware(req, res, (error) => {
+      if (error) {
+        next(error);
+        return;
+      }
+      serveFromNextDir();
+    });
+  };
+
+  serveFromNextDir();
 });
 
 function renderAgentControlCenterShell(): string {
@@ -255,7 +281,16 @@ function renderAgentControlCenterShell(): string {
 </html>`;
 }
 
-agentControlCenterV1Router.get(["/agent-control-center-v1", "/agent-control-center-v1/*"], (_req, res) => {
+function isStaticAssetPath(pathname: string): boolean {
+  return /\.[a-z0-9]+$/i.test(pathname);
+}
+
+agentControlCenterV1Router.get(["/agent-control-center-v1", "/agent-control-center-v1/*"], (req, res, next) => {
+  if (isStaticAssetPath(req.path)) {
+    next();
+    return;
+  }
+
   const html = renderAgentControlCenterShell();
 
   res.status(200).type("html").send(html);

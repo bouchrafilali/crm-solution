@@ -10,6 +10,7 @@ import { LeadWorkspacePage } from "./pages/LeadWorkspacePage.js";
 import { ApprovalsPage } from "./pages/ApprovalsPage.js";
 import { LearningPage } from "./pages/LearningPage.js";
 import { SystemArchitectureMapPage } from "./pages/SystemArchitectureMapPage.js";
+import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1.js";
 import { cn, initials } from "./utils.js";
 
 interface SidebarItem {
@@ -51,21 +52,33 @@ export function App() {
   const [selectedLeadId, setSelectedLeadId] = useState(mockData.leads[0]?.id ?? "");
   const [approvals, setApprovals] = useState(mockData.approvals);
 
-  const selectedLead = useMemo(() => mockData.leads.find((lead) => lead.id === selectedLeadId) ?? mockData.leads[0], [selectedLeadId]);
+  const selectedLead = useMemo(
+    () => mockData.leads.find((lead) => lead.id === selectedLeadId) ?? mockData.leads[0] ?? null,
+    [selectedLeadId]
+  );
   const selectedLeadAnalysis = useMemo(() => {
+    if (!selectedLead) return null;
     const mapped = mockData.strategicAnalyses.find((analysis) => analysis.leadId === selectedLead?.id);
     if (mapped) return mapped;
-    return {
-      leadId: selectedLead.id,
-      probableStage: selectedLead.currentStage,
-      keySignals: selectedLead.detectedSignals,
-      risks: selectedLead.missingFields.length ? [`Missing fields: ${selectedLead.missingFields.join(", ")}`] : ["No major policy risk detected"],
-      opportunities: ["Move conversation to a single clear next step", "Use concise conversion wording"],
-      nextBestAction: selectedLead.nextBestAction
-    };
+    return generateStrategicAdvisorAnalysis({
+      lead: selectedLead,
+      conversation: {
+        id: `wa-${selectedLead.id}`,
+        label: `Conversation ${selectedLead.id}`
+      },
+      recentMessages: mockData.conversations
+        .filter((message) => message.leadId === selectedLead.id)
+        .slice(-6),
+      currentStage: selectedLead.currentStage,
+      signals: selectedLead.detectedSignals,
+      priorityScore: selectedLead.priorityScore,
+      openTasks: selectedLead.openTasks,
+      missingFields: selectedLead.missingFields,
+      lastOperatorAction: null
+    });
   }, [selectedLead]);
   const selectedLeadReplies = useMemo(
-    () => mockData.suggestedReplies.filter((reply) => reply.leadId === selectedLead?.id),
+    () => (selectedLead ? mockData.suggestedReplies.filter((reply) => reply.leadId === selectedLead.id) : []),
     [selectedLead]
   );
 
