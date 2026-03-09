@@ -1,9 +1,12 @@
-import { getWhatsAppLeadById, listWhatsAppLeads } from "../db/whatsappLeadsRepo.js";
+import { createHash } from "node:crypto";
+import { getWhatsAppLeadById, listWhatsAppLeadMessages, listWhatsAppLeads } from "../db/whatsappLeadsRepo.js";
 import { getWhatsAppLeadOutcome } from "../db/whatsappLeadOutcomesRepo.js";
 import { getWhatsAppAgentLeadState } from "../db/whatsappAgentRunsRepo.js";
-import { buildAiCardsViewModel, type AiCardsViewModel } from "./whatsappAiCardsService.js";
-import { buildLeadPriorityScore, mapPriorityBand, type PriorityBand, type PriorityDeskItem } from "./whatsappPriorityDeskService.js";
-import { buildLeadReactivationCheck, type ReactivationDecision } from "./whatsappReactivationEngineService.js";
+import {
+  getWhatsAppPriorityIntelligence,
+  upsertWhatsAppPriorityIntelligence
+} from "../db/whatsappPriorityIntelligenceRepo.js";
+import { mapPriorityBand, type PriorityBand } from "./whatsappPriorityDeskService.js";
 
 export type PriorityAttentionAction = "reply_now" | "reactivate_now" | "wait" | "monitor" | "close_out";
 export type PrioritySurface = "mobile_lab" | "priority_desk" | "reactivation_queue";
@@ -91,10 +94,9 @@ export class PriorityIntelligenceError extends Error {
     | "invalid_lead_id"
     | "lead_metadata"
     | "lead_state"
-    | "ai_cards"
-    | "priority_score"
-    | "reactivation"
+    | "messages"
     | "outcome"
+    | "persist"
     | "queue";
 
   constructor(
@@ -102,10 +104,9 @@ export class PriorityIntelligenceError extends Error {
       | "invalid_lead_id"
       | "lead_metadata"
       | "lead_state"
-      | "ai_cards"
-      | "priority_score"
-      | "reactivation"
+      | "messages"
       | "outcome"
+      | "persist"
       | "queue",
     message: string,
     options?: { cause?: unknown }
@@ -121,10 +122,10 @@ export class PriorityIntelligenceError extends Error {
 type PriorityIntelligenceDeps = {
   getLeadById: typeof getWhatsAppLeadById;
   getLeadState: typeof getWhatsAppAgentLeadState;
-  getAiCards: (leadId: string) => Promise<AiCardsViewModel>;
-  getPriorityScore: (leadId: string) => Promise<PriorityDeskItem>;
-  getReactivation: (leadId: string) => Promise<ReactivationDecision>;
+  getMessages: typeof listWhatsAppLeadMessages;
   getLeadOutcome: typeof getWhatsAppLeadOutcome;
+  getPersisted: typeof getWhatsAppPriorityIntelligence;
+  upsertPersisted: typeof upsertWhatsAppPriorityIntelligence;
   listLeads: typeof listWhatsAppLeads;
   nowIso: () => string;
   nowMs: () => number;
@@ -134,10 +135,10 @@ function defaultDeps(): PriorityIntelligenceDeps {
   return {
     getLeadById: (leadId) => getWhatsAppLeadById(leadId),
     getLeadState: (leadId) => getWhatsAppAgentLeadState(leadId),
-    getAiCards: (leadId) => buildAiCardsViewModel(leadId),
-    getPriorityScore: (leadId) => buildLeadPriorityScore(leadId),
-    getReactivation: (leadId) => buildLeadReactivationCheck(leadId),
+    getMessages: (leadId, options) => listWhatsAppLeadMessages(leadId, options),
     getLeadOutcome: (leadId) => getWhatsAppLeadOutcome(leadId),
+    getPersisted: (leadId) => getWhatsAppPriorityIntelligence(leadId),
+    upsertPersisted: (input) => upsertWhatsAppPriorityIntelligence(input),
     listLeads: (input) => listWhatsAppLeads(input),
     nowIso: () => new Date().toISOString(),
     nowMs: () => Date.now()
@@ -383,6 +384,88 @@ function recentFromIso(nowMs: number, days: number): { from: string; to: string 
   };
 }
 
+function toTimeMs(value: string | null | undefined): number {
+  if (!value) return NaN;
+  return new Date(value).getTime();
+}
+
+function safeIso(value: string | null | undefined): string | null {
+  const ms = toTimeMs(value);
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toISOString();
+}
+
+function extractMessageTiming(messages: Array<{ direction: string; createdAt: string }>, nowMs: number): {
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  awaitingReply: boolean;
+  waitingMinutes: number;
+  silenceMinutes: number;
+} {
+  const sorted = messages
+    .slice()
+    .filter((row) => row && String(row.createdAt || "").trim())
+    .sort((a, b) => toTimeMs(a.createdAt) - toTimeMs(b.createdAt));
+  const latest = sorted.length ? sorted[sorted.length - 1] : null;
+  const latestInbound = [...sorted].reverse().find((row) => String(row.direction || "").toUpperCase() === "IN") || null;
+  const latestOutbound = [...sorted].reverse().find((row) => String(row.direction || "").toUpperCase() === "OUT") || null;
+  const latestIso = safeIso(latest?.createdAt || null);
+  const awaitingReply = Boolean(latest && String(latest.direction || "").toUpperCase() === "IN");
+  const waitingAnchorMs = awaitingReply ? toTimeMs(latestIso) : NaN;
+  const waitingMinutes = Number.isFinite(waitingAnchorMs) ? Math.max(0, Math.round((nowMs - waitingAnchorMs) / 60000)) : 0;
+  const silenceAnchorMs = toTimeMs(latestIso);
+  const silenceMinutes = Number.isFinite(silenceAnchorMs) ? Math.max(0, Math.round((nowMs - silenceAnchorMs) / 60000)) : 0;
+  return {
+    lastInboundAt: safeIso(latestInbound?.createdAt || null),
+    lastOutboundAt: safeIso(latestOutbound?.createdAt || null),
+    awaitingReply,
+    waitingMinutes,
+    silenceMinutes
+  };
+}
+
+function stableObject(value: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  Object.keys(value || {})
+    .sort()
+    .forEach((key) => {
+      const row = value[key];
+      if (Array.isArray(row)) {
+        out[key] = row.map((item) => (item && typeof item === "object" ? stableObject(item as Record<string, unknown>) : item));
+        return;
+      }
+      if (row && typeof row === "object") {
+        out[key] = stableObject(row as Record<string, unknown>);
+        return;
+      }
+      out[key] = row;
+    });
+  return out;
+}
+
+function inputSignature(input: {
+  stage: string;
+  facts: Record<string, unknown>;
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  eventDate: string | null;
+  paymentIntent: boolean;
+  awaitingReply: boolean;
+  ticketValueEstimate: number | null;
+}): string {
+  const payload = JSON.stringify({
+    stage: String(input.stage || "").trim().toUpperCase(),
+    facts: stableObject(input.facts || {}),
+    lastInboundAt: safeIso(input.lastInboundAt),
+    lastOutboundAt: safeIso(input.lastOutboundAt),
+    eventDate: String(input.eventDate || "").trim() || null,
+    paymentIntent: Boolean(input.paymentIntent),
+    awaitingReply: Boolean(input.awaitingReply),
+    ticketValueEstimate: input.ticketValueEstimate == null ? null : Number(input.ticketValueEstimate)
+  });
+  return createHash("sha256").update(payload).digest("hex");
+}
+
 export async function buildLeadPriorityIntelligence(
   leadId: string,
   depsOverride?: Partial<PriorityIntelligenceDeps>
@@ -393,24 +476,18 @@ export async function buildLeadPriorityIntelligence(
   }
   const deps: PriorityIntelligenceDeps = { ...defaultDeps(), ...(depsOverride || {}) };
 
-  const [lead, leadState, aiCards, priority, reactivation, outcome] = await Promise.all([
+  const [lead, leadState, outcome, messages] = await Promise.all([
     deps.getLeadById(safeLeadId).catch((error) => {
       throw new PriorityIntelligenceError("lead_metadata", error instanceof Error ? error.message : "Lead metadata failed", { cause: error });
     }),
     deps.getLeadState(safeLeadId).catch((error) => {
       throw new PriorityIntelligenceError("lead_state", error instanceof Error ? error.message : "Lead state failed", { cause: error });
     }),
-    deps.getAiCards(safeLeadId).catch((error) => {
-      throw new PriorityIntelligenceError("ai_cards", error instanceof Error ? error.message : "AI cards failed", { cause: error });
-    }),
-    deps.getPriorityScore(safeLeadId).catch((error) => {
-      throw new PriorityIntelligenceError("priority_score", error instanceof Error ? error.message : "Priority score failed", { cause: error });
-    }),
-    deps.getReactivation(safeLeadId).catch((error) => {
-      throw new PriorityIntelligenceError("reactivation", error instanceof Error ? error.message : "Reactivation check failed", { cause: error });
-    }),
     deps.getLeadOutcome(safeLeadId).catch((error) => {
       throw new PriorityIntelligenceError("outcome", error instanceof Error ? error.message : "Lead outcome failed", { cause: error });
+    }),
+    deps.getMessages(safeLeadId, { limit: 80, order: "asc" }).catch((error) => {
+      throw new PriorityIntelligenceError("messages", error instanceof Error ? error.message : "Messages metadata failed", { cause: error });
     })
   ]);
 
@@ -425,21 +502,65 @@ export async function buildLeadPriorityIntelligence(
   const facts = mergeFacts(leadState as unknown as Record<string, unknown> | null);
   const stageSignals = stageSource?.signals;
   const objections = stageSource?.objections;
+  const timing = extractMessageTiming(
+    (Array.isArray(messages) ? messages : []).map((row) => ({
+      direction: String(row.direction || ""),
+      createdAt: String(row.createdAt || "")
+    })),
+    nowMs
+  );
 
-  const stage = String(aiCards.summary.stage || lead.stage || "NEW");
-  const waitingMinutes = Math.max(0, Math.round(Number(priority.waitingSinceMinutes || 0)));
-  const silenceMinutes = Math.max(0, Math.round(Number(reactivation.silenceHours || 0) * 60));
+  const stageFromState = String((stageSource && stageSource.stage) || "").trim();
+  const stage = String(stageFromState || lead.stage || "NEW").trim();
+  const waitingMinutes = timing.waitingMinutes;
+  const silenceMinutes = timing.silenceMinutes;
+  const eventDate = String(facts.event_date || lead.eventDate || "").trim() || null;
+  const paymentIntent = Boolean(lead.paymentIntent || hasSignalType(stageSignals, "payment_intent"));
+  const ticketValueEstimate = lead.ticketValue == null ? null : Number(lead.ticketValue);
+
+  const persistedInputSignature = inputSignature({
+    stage,
+    facts,
+    lastInboundAt: timing.lastInboundAt,
+    lastOutboundAt: timing.lastOutboundAt,
+    eventDate,
+    paymentIntent,
+    awaitingReply: timing.awaitingReply,
+    ticketValueEstimate
+  });
+  const persisted = await deps.getPersisted(safeLeadId).catch((error) => {
+    throw new PriorityIntelligenceError("persist", error instanceof Error ? error.message : "Persisted intelligence read failed", { cause: error });
+  });
+  if (persisted && String(persisted.inputSignature || "") === persistedInputSignature) {
+    return {
+      leadId: safeLeadId,
+      priorityScore: persisted.priorityScore,
+      priorityBand: persisted.priorityBand,
+      conversionProbability: persisted.conversionProbability,
+      dropoffRisk: persisted.dropoffRisk,
+      recommendedAttention: persisted.recommendedAttention as PriorityAttentionAction,
+      recommendedSurface: pickSurface(persisted.recommendedAttention as PriorityAttentionAction, persisted.awaitingReply),
+      reasonCodes: persisted.reasonCodes as PriorityIntelligenceReasonCode[],
+      primaryReasonCode: persisted.primaryReasonCode as PriorityIntelligenceReasonCode | null,
+      operatorGuidance: guidanceForAttention(persisted.recommendedAttention as PriorityAttentionAction)
+    };
+  }
+
+  const stalledStage = silenceMinutes > 1440 && ["QUALIFIED", "PRICE_SENT", "VIDEO_PROPOSED", "DEPOSIT_PENDING"].includes(stageKey(stage))
+    ? stageKey(stage)
+    : null;
+  const shouldReactivate = Boolean(!timing.awaitingReply && silenceMinutes > 360);
 
   const decision = computePriorityIntelligence({
     leadId: safeLeadId,
     stage,
-    awaitingReply: Boolean(priority.needsReply),
+    awaitingReply: timing.awaitingReply,
     waitingMinutes,
     silenceMinutes,
     reactivationState: {
-      shouldReactivate: Boolean(reactivation.shouldReactivate),
-      reactivationPriority: reactivation.reactivationPriority,
-      stalledStage: reactivation.stalledStage || null
+      shouldReactivate,
+      reactivationPriority: shouldReactivate && silenceMinutes > 1440 ? "high" : (shouldReactivate ? "medium" : "low"),
+      stalledStage
     },
     signals: {
       product_interest_detected: Boolean(lead.hasProductInterest || hasSignalType(stageSignals, "product_interest")),
@@ -449,7 +570,7 @@ export async function buildLeadPriorityIntelligence(
           hasSignalType(stageSignals, "price_request") ||
           signalFromFactsList(facts.price_points_detected)
       ),
-      payment_intent_detected: Boolean(aiCards.summary.paymentIntent || lead.paymentIntent || hasSignalType(stageSignals, "payment_intent")),
+      payment_intent_detected: paymentIntent,
       deposit_intent_detected: Boolean(lead.depositIntent || stageKey(stage) === "DEPOSIT_PENDING"),
       shipping_question_detected: Boolean(
         hasSignalType(stageSignals, "shipping_question") ||
@@ -467,9 +588,9 @@ export async function buildLeadPriorityIntelligence(
         hasSignalType(stageSignals, "customization_request") || signalFromFactsList(facts.customization_requests)
       ),
       video_interest_detected: Boolean(hasSignalType(stageSignals, "video_interest") || lead.videoIntent || stageKey(stage).includes("VIDEO")),
-      event_date_detected: Boolean(signalFromString(facts.event_date) || signalFromString(lead.eventDate)),
-      event_date_near: eventDateNear(String(facts.event_date || lead.eventDate || "") || null, nowMs),
-      high_ticket_context: Number(lead.ticketValue || 0) >= 1500,
+      event_date_detected: Boolean(signalFromString(eventDate)),
+      event_date_near: eventDateNear(eventDate, nowMs),
+      high_ticket_context: Number(ticketValueEstimate || 0) >= 1500,
       repeat_customer_detected: hasAnyTag(lead.detectedSignals?.tags, ["repeat_customer", "returning_customer", "existing_customer"]),
       price_objection_detected: hasObjectionType(objections, "price"),
       timing_objection_detected: hasObjectionType(objections, "timing"),
@@ -477,20 +598,42 @@ export async function buildLeadPriorityIntelligence(
       fit_uncertainty_detected: hasObjectionType(objections, "fit") || hasObjectionType(objections, "uncertainty"),
       fabric_uncertainty_detected: hasObjectionType(objections, "fabric"),
       external_approval_delay_detected: hasObjectionType(objections, "external_approval"),
-      recent_inbound_message: Boolean(priority.needsReply && waitingMinutes <= 120)
+      recent_inbound_message: Boolean(timing.awaitingReply && waitingMinutes <= 120)
     }
   });
 
-  if (outcome?.outcome === "converted" || outcome?.outcome === "lost") {
-    return {
-      ...decision,
-      recommendedAttention: "close_out",
-      recommendedSurface: "priority_desk",
-      operatorGuidance: guidanceForAttention("close_out")
-    };
-  }
+  const finalDecision = (outcome?.outcome === "converted" || outcome?.outcome === "lost")
+    ? {
+        ...decision,
+        recommendedAttention: "close_out" as const,
+        recommendedSurface: "priority_desk" as const,
+        operatorGuidance: guidanceForAttention("close_out")
+      }
+    : decision;
 
-  return decision;
+  await deps.upsertPersisted({
+    leadId: safeLeadId,
+    stage: stageKey(stage),
+    facts,
+    lastInboundAt: timing.lastInboundAt,
+    lastOutboundAt: timing.lastOutboundAt,
+    eventDate,
+    paymentIntent,
+    awaitingReply: timing.awaitingReply,
+    ticketValueEstimate,
+    conversionProbability: finalDecision.conversionProbability,
+    dropoffRisk: finalDecision.dropoffRisk,
+    priorityScore: finalDecision.priorityScore,
+    priorityBand: finalDecision.priorityBand,
+    recommendedAttention: finalDecision.recommendedAttention,
+    reasonCodes: finalDecision.reasonCodes,
+    primaryReasonCode: finalDecision.primaryReasonCode,
+    inputSignature: persistedInputSignature
+  }).catch((error) => {
+    throw new PriorityIntelligenceError("persist", error instanceof Error ? error.message : "Persisted intelligence write failed", { cause: error });
+  });
+
+  return finalDecision;
 }
 
 export async function buildPriorityIntelligenceQueue(

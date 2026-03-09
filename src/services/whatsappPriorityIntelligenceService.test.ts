@@ -42,45 +42,15 @@ function baseDeps(overrides?: Record<string, unknown>) {
         },
         facts: null
       }) as any,
-    getAiCards: async () =>
-      ({
-        summary: {
-          stage: "QUALIFIED",
-          urgency: "medium",
-          paymentIntent: false,
-          dropoffRisk: "medium"
-        }
-      }) as any,
-    getPriorityScore: async () =>
-      ({
-        leadId: "lead-1",
-        priorityScore: 50,
-        priorityBand: "medium",
-        needsReply: true,
-        waitingSinceMinutes: 20,
-        stage: "QUALIFIED",
-        urgency: "medium",
-        paymentIntent: false,
-        dropoffRisk: "medium",
-        recommendedAction: "answer_precisely",
-        commercialPriority: "medium",
-        estimatedHeat: "warm",
-        reasons: []
-      }) as any,
-    getReactivation: async () =>
-      ({
-        leadId: "lead-1",
-        shouldReactivate: false,
-        reactivationPriority: "low",
-        reactivationReason: "active",
-        stalledStage: null,
-        silenceHours: 4,
-        signals: [],
-        recommendedAction: "wait",
-        tone: null,
-        timing: "monitor"
-      }) as any,
+    getMessages: async () =>
+      ([
+        { direction: "IN", createdAt: "2026-03-07T09:40:00.000Z" },
+        { direction: "OUT", createdAt: "2026-03-07T09:45:00.000Z" },
+        { direction: "IN", createdAt: "2026-03-07T09:50:00.000Z" }
+      ]) as any,
     getLeadOutcome: async () => null,
+    getPersisted: async () => null,
+    upsertPersisted: async () => {},
     listLeads: async () => [],
     nowIso: () => "2026-03-07T10:00:00.000Z",
     nowMs: () => new Date("2026-03-07T10:00:00.000Z").getTime()
@@ -128,9 +98,7 @@ test("high-intent active lead", async () => {
             }
           }
         }) as any,
-      getAiCards: async () => ({ summary: { stage: "DEPOSIT_PENDING", paymentIntent: true, urgency: "high", dropoffRisk: "low" } }) as any,
-      getPriorityScore: async () => ({ needsReply: true, waitingSinceMinutes: 22 }) as any,
-      getReactivation: async () => ({ shouldReactivate: false, reactivationPriority: "low", stalledStage: null, silenceHours: 2 }) as any
+      getMessages: async () => ([{ direction: "IN", createdAt: "2026-03-07T09:38:00.000Z" }]) as any
     })
   );
 
@@ -161,15 +129,11 @@ test("stalled reactivation lead", async () => {
           shipCountry: null,
           shipCity: null
         }) as any,
-      getAiCards: async () => ({ summary: { stage: "PRICE_SENT", paymentIntent: false, urgency: "medium", dropoffRisk: "high" } }) as any,
-      getPriorityScore: async () => ({ needsReply: false, waitingSinceMinutes: 0 }) as any,
-      getReactivation: async () =>
-        ({
-          shouldReactivate: true,
-          reactivationPriority: "high",
-          stalledStage: "PRICE_SENT",
-          silenceHours: 72
-        }) as any
+      getMessages: async () =>
+        ([
+          { direction: "IN", createdAt: "2026-03-04T00:00:00.000Z" },
+          { direction: "OUT", createdAt: "2026-03-04T00:10:00.000Z" }
+        ]) as any
     })
   );
 
@@ -199,9 +163,11 @@ test("low-urgency lead", async () => {
           shipCountry: null,
           shipCity: null
         }) as any,
-      getAiCards: async () => ({ summary: { stage: "NEW", paymentIntent: false, urgency: "low", dropoffRisk: "low" } }) as any,
-      getPriorityScore: async () => ({ needsReply: false, waitingSinceMinutes: 0 }) as any,
-      getReactivation: async () => ({ shouldReactivate: false, reactivationPriority: "low", stalledStage: null, silenceHours: 0.5 }) as any
+      getMessages: async () =>
+        ([
+          { direction: "IN", createdAt: "2026-03-07T09:55:00.000Z" },
+          { direction: "OUT", createdAt: "2026-03-07T09:56:00.000Z" }
+        ]) as any
     })
   );
 
