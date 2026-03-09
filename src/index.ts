@@ -10,6 +10,7 @@ import { zokoWebhookRouter } from "./routes/zokoWebhook.js";
 import { registerOrdersDeleteWebhook, webhooksRouter } from "./routes/webhooks.js";
 import { blueprintV2Router } from "./routes/blueprintV2.js";
 import { mlAutomationRouter } from "./routes/mlAutomation.js";
+import { agentControlCenterV1Router } from "./routes/agentControlCenterV1.js";
 import { addManyOrderSnapshots } from "./services/orderSnapshots.js";
 import { startZokoHistorySyncWorker } from "./services/zokoHistorySyncWorker.js";
 import { startAuto24hFollowupWorker } from "./services/autoFollowUpRule.js";
@@ -253,6 +254,7 @@ app.use("/webhooks", webhooksRouter);
 app.use(zokoWebhookRouter);
 app.use(blueprintV2Router);
 app.use(mlAutomationRouter);
+app.use(agentControlCenterV1Router);
 
 async function loadRecentOrdersFromDBIntoMemory(): Promise<void> {
   if (!isDbEnabled()) return;
