@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { mockData } from "./mock-data.js";
 import { ApprovalDecision, NavPage } from "./types.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
@@ -27,8 +27,27 @@ const sidebarItems: SidebarItem[] = [
   { id: "system-architecture-map", label: "System Map" }
 ];
 
+function isNavPage(value: string): value is NavPage {
+  return [
+    "dashboard",
+    "agents",
+    "runs",
+    "leads",
+    "lead-workspace",
+    "approvals",
+    "learning",
+    "system-architecture-map"
+  ].includes(value);
+}
+
+function readPageFromHash(): NavPage | null {
+  if (typeof window === "undefined") return null;
+  const hashValue = window.location.hash.replace(/^#/, "");
+  return isNavPage(hashValue) ? hashValue : null;
+}
+
 export function App() {
-  const [activePage, setActivePage] = useState<NavPage>("dashboard");
+  const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash() ?? "dashboard");
   const [selectedLeadId, setSelectedLeadId] = useState(mockData.leads[0]?.id ?? "");
   const [approvals, setApprovals] = useState(mockData.approvals);
 
@@ -50,9 +69,33 @@ export function App() {
     [selectedLead]
   );
 
+  function navigateToPage(page: NavPage): void {
+    setActivePage(page);
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const targetHash = `#${activePage}`;
+    if (window.location.hash !== targetHash) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${targetHash}`);
+    }
+  }, [activePage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function handleHashChange(): void {
+      const pageFromHash = readPageFromHash();
+      if (pageFromHash) setActivePage(pageFromHash);
+    }
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
   function openLeadWorkspace(leadId: string): void {
     setSelectedLeadId(leadId);
-    setActivePage("lead-workspace");
+    navigateToPage("lead-workspace");
   }
 
   function handleApprovalDecision(id: string, decision: ApprovalDecision): void {
@@ -75,7 +118,7 @@ export function App() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActivePage(item.id)}
+                onClick={() => navigateToPage(item.id)}
                 className={cn(
                   "ml-interactive flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm",
                   activePage === item.id
@@ -129,7 +172,7 @@ export function App() {
             </div>
             <select
               value={activePage === "lead-workspace" ? "leads" : activePage}
-              onChange={(event) => setActivePage(event.target.value as NavPage)}
+              onChange={(event) => navigateToPage(event.target.value as NavPage)}
               className="ml-panel-soft rounded-lg px-2 py-1 text-xs text-slate-200"
             >
               {sidebarItems.map((item) => (
@@ -156,7 +199,7 @@ export function App() {
                   runs={mockData.runs}
                   learningEvents={mockData.learningEvents}
                   messages={mockData.conversations}
-                  onBackToLeads={() => setActivePage("leads")}
+                  onBackToLeads={() => navigateToPage("leads")}
                 />
               ) : null}
               {activePage === "approvals" ? <ApprovalsPage key="page-approvals" approvals={approvals} onDecision={handleApprovalDecision} /> : null}
