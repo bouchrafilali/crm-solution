@@ -20,17 +20,17 @@ interface FilterBarProps {
 
 export function FilterBar({ fields, onChange, query, onQueryChange, queryPlaceholder = "Search" }: FilterBarProps) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3">
+    <div className="ml-panel mb-5 flex flex-wrap items-center gap-2 rounded-2xl p-3.5">
       {fields.map((field) => (
-        <label key={field.id} className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/70 px-2 py-1.5">
-          <span className="text-xs text-zinc-500">{field.label}</span>
+        <label key={field.id} className="ml-panel-soft ml-interactive flex items-center gap-2 rounded-xl px-2.5 py-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">{field.label}</span>
           <select
-            className="bg-transparent text-xs text-zinc-200 outline-none"
+            className="bg-transparent text-xs font-medium text-slate-200 outline-none"
             value={field.value}
             onChange={(event) => onChange(field.id, event.target.value)}
           >
             {field.options.map((option) => (
-              <option key={option.value} value={option.value} className="bg-zinc-900 text-zinc-200">
+              <option key={option.value} value={option.value} className="bg-slate-950 text-slate-100">
                 {option.label}
               </option>
             ))}
@@ -42,7 +42,7 @@ export function FilterBar({ fields, onChange, query, onQueryChange, queryPlaceho
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder={queryPlaceholder}
-          className="ml-auto min-w-52 rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none transition focus:border-zinc-700"
+          className="ml-panel-soft ml-auto min-w-52 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 outline-none transition focus:border-sky-400/50"
         />
       ) : null}
     </div>

@@ -5,6 +5,7 @@ import { FilterBar, FilterField } from "../components/FilterBar.js";
 import { RunTable } from "../components/RunTable.js";
 import { SectionHeader } from "../components/SectionHeader.js";
 import { TraceTimeline } from "../components/TraceTimeline.js";
+import { StatusBadge } from "../components/StatusBadge.js";
 import { byId } from "../mock-data.js";
 
 interface RunsPageProps {
@@ -62,6 +63,29 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
 
   const selectedRun = useMemo(() => filteredRuns.find((run) => run.id === selectedRunId) ?? filteredRuns[0] ?? null, [filteredRuns, selectedRunId]);
 
+  const statusCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const run of filteredRuns) {
+      map.set(run.status, (map.get(run.status) ?? 0) + 1);
+    }
+    return map;
+  }, [filteredRuns]);
+
+  const healthKpis = useMemo(() => {
+    const success = statusCounts.get("success") ?? 0;
+    const total = filteredRuns.length || 1;
+    const waiting = (statusCounts.get("waiting_human_input") ?? 0) + (statusCounts.get("waiting_human_approval") ?? 0);
+    const blocked = (statusCounts.get("blocked") ?? 0) + (statusCounts.get("error") ?? 0);
+    const avgDuration = Math.round(filteredRuns.reduce((sum, run) => sum + run.durationMs, 0) / total);
+
+    return [
+      { label: "Success Rate", value: `${Math.round((success / total) * 100)}%`, tone: "success" as const },
+      { label: "Waiting Human", value: String(waiting), tone: "waiting_human_input" as const },
+      { label: "Blocked / Error", value: String(blocked), tone: blocked > 0 ? ("error" as const) : ("success" as const) },
+      { label: "Avg Runtime", value: `${(avgDuration / 1000).toFixed(1)}s`, tone: "skipped" as const }
+    ];
+  }, [filteredRuns, statusCounts]);
+
   const fields: FilterField[] = [
     {
       id: "agent",
@@ -115,6 +139,19 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
   return (
     <motion.div key="runs" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <SectionHeader title="Runs" subtitle="Inspect execution runs, decision traces, and intervention bottlenecks." />
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {healthKpis.map((item) => (
+          <div key={item.label} className="ml-panel rounded-2xl px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{item.label}</p>
+            <div className="mt-2 flex items-center justify-between">
+              <p className="text-xl font-semibold text-slate-100">{item.value}</p>
+              <StatusBadge value={item.tone} />
+            </div>
+          </div>
+        ))}
+      </div>
+
       <FilterBar
         fields={fields}
         onChange={(id, value) => setFilters((prev) => ({ ...prev, [id]: value }))}
@@ -123,7 +160,7 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
         queryPlaceholder="Search decision summary or next step"
       />
 
-      <RunTable runs={filteredRuns} onSelect={setSelectedRunId} />
+      <RunTable runs={filteredRuns} onSelect={setSelectedRunId} selectedRunId={selectedRun?.id ?? null} />
 
       <AnimatePresence>
         {selectedRun ? (
@@ -132,67 +169,65 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4"
+            className="ml-panel mt-4 rounded-2xl p-4"
           >
-            <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold text-zinc-100">Execution Trace: {selectedRun.id}</h3>
-                <p className="mt-1 text-xs text-zinc-400">
+                <h3 className="text-lg font-semibold text-slate-100">Execution Trace {selectedRun.id}</h3>
+                <p className="mt-1 text-xs text-slate-400">
                   {selectedRun.timestamp} • {byId.agent[selectedRun.triggeredAgentId]?.name} • {byId.lead[selectedRun.leadId]?.name}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenLead(selectedRun.leadId)}
-                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200"
-              >
+              <button type="button" onClick={() => onOpenLead(selectedRun.leadId)} className="ml-button rounded-lg px-3 py-1.5 text-xs font-medium">
                 Open Lead
               </button>
             </div>
 
             <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr]">
               <div className="space-y-3">
-                <details open className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <summary className="cursor-pointer text-sm font-medium text-zinc-100">1. Event Context</summary>
-                  <p className="mt-2 text-sm text-zinc-300">{selectedRun.trace.eventContext}</p>
+                <details open className="ml-panel-soft rounded-xl p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-100">1. Event Context</summary>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-300">{selectedRun.trace.eventContext}</p>
                 </details>
 
-                <details open className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <summary className="cursor-pointer text-sm font-medium text-zinc-100">2. Input Snapshot</summary>
-                  <ul className="mt-2 space-y-1 text-sm text-zinc-300">
+                <details open className="ml-panel-soft rounded-xl p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-100">2. Input Snapshot</summary>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-300">
                     {selectedRun.trace.inputSnapshot.map((item) => (
-                      <li key={item} className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-2 py-1.5">
+                      <li key={item} className="ml-panel-soft ml-code rounded-lg px-2 py-1.5 text-[12px] text-slate-300">
                         {item}
                       </li>
                     ))}
                   </ul>
                 </details>
 
-                <details open className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <summary className="cursor-pointer text-sm font-medium text-zinc-100">3. Decision Summary</summary>
-                  <p className="mt-2 text-sm text-zinc-300">{selectedRun.trace.decisionSummary}</p>
+                <details open className="ml-panel-soft rounded-xl p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-100">3. Decision Summary</summary>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-300">{selectedRun.trace.decisionSummary}</p>
                 </details>
 
-                <details open className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <summary className="cursor-pointer text-sm font-medium text-zinc-100">4. Agents Invoked</summary>
+                <details open className="ml-panel-soft rounded-xl p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-100">4. Agents Invoked</summary>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {selectedRun.trace.agentsInvoked.map((agentName) => (
-                      <span key={agentName} className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300">
+                      <span key={agentName} className="ml-chip rounded-md px-2 py-1 text-xs text-slate-300">
                         {agentName}
                       </span>
                     ))}
                   </div>
                 </details>
 
-                <details open className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <summary className="cursor-pointer text-sm font-medium text-zinc-100">5. Output</summary>
-                  <p className="mt-2 text-sm text-zinc-300">{selectedRun.trace.output}</p>
+                <details open className="ml-panel-soft rounded-xl p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-100">5. Output</summary>
+                  <p className="ml-code mt-2 rounded-lg border border-slate-600/30 bg-slate-900/60 px-2 py-2 text-[12px] text-slate-300">
+                    {selectedRun.trace.output}
+                  </p>
                 </details>
               </div>
 
               <div>
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <h4 className="mb-3 text-sm font-medium text-zinc-100">6. Trace Timeline</h4>
+                <div className="ml-panel-soft rounded-xl p-3">
+                  <h4 className="mb-3 text-sm font-semibold text-slate-100">6. Trace Timeline</h4>
                   <TraceTimeline timeline={selectedRun.trace.timeline} />
                 </div>
               </div>

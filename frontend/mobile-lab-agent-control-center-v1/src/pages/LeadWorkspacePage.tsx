@@ -9,6 +9,7 @@ import { ConversationPanel } from "../components/ConversationPanel.js";
 import { StrategicAnalysisCard } from "../components/StrategicAnalysisCard.js";
 import { SuggestedReplyCard } from "../components/SuggestedReplyCard.js";
 import { StatusBadge } from "../components/StatusBadge.js";
+import { byId } from "../mock-data.js";
 
 interface LeadWorkspacePageProps {
   lead: Lead;
@@ -48,27 +49,40 @@ export function LeadWorkspacePage({
         title="Lead Workspace"
         subtitle="Unified lead operations surface for intelligence, conversation control, and AI-guided execution."
         action={
-          <button
-            type="button"
-            onClick={onBackToLeads}
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200"
-          >
+          <button type="button" onClick={onBackToLeads} className="ml-button rounded-lg px-3 py-1.5 text-xs font-medium">
             Back to Leads
           </button>
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3">
-        <p className="text-sm font-semibold text-zinc-100">{lead.name}</p>
-        <StatusBadge value={lead.approvalStatus === "none" ? "approved" : lead.approvalStatus} />
-        <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2 py-1 text-[11px] text-zinc-300">{lead.currentStage}</span>
-        <span className="rounded-full border border-zinc-700 bg-zinc-950 px-2 py-1 text-[11px] text-zinc-300">Priority {lead.priorityScore}</span>
+      <div className="ml-panel mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl p-3.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-xs font-semibold text-slate-100">
+            {lead.name
+              .split(/\s+/)
+              .slice(0, 2)
+              .map((chunk) => chunk[0]?.toUpperCase() ?? "")
+              .join("")}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-100">{lead.name}</p>
+            <p className="text-xs text-slate-400">
+              {lead.country} • {lead.language} • {lead.currentStage}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge value={lead.approvalStatus === "none" ? "approved" : lead.approvalStatus} />
+          <span className="ml-chip rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">Priority {lead.priorityScore}</span>
+          <span className="ml-chip rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">{formatCurrency(lead.estimatedValue)}</span>
+        </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.25fr_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.92fr_1.3fr_1fr]">
         <section className="space-y-4">
-          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-            <h3 className="text-sm font-semibold text-zinc-100">Lead Intelligence</h3>
+          <article className="ml-panel rounded-2xl p-4">
+            <h3 className="text-sm font-semibold text-slate-100">Lead Intelligence</h3>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
               <Info label="Country" value={lead.country} />
               <Info label="Language" value={lead.language} />
@@ -82,8 +96,8 @@ export function LeadWorkspacePage({
             </div>
           </article>
 
-          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-            <h3 className="text-sm font-semibold text-zinc-100">Detected Signals</h3>
+          <article className="ml-panel rounded-2xl p-4">
+            <h3 className="text-sm font-semibold text-slate-100">Detected Signals</h3>
             <div className="mt-3 flex flex-wrap gap-2">
               {lead.detectedSignals.map((signal) => (
                 <SignalTag key={signal} text={signal} />
@@ -91,16 +105,16 @@ export function LeadWorkspacePage({
             </div>
           </article>
 
-          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-            <h3 className="text-sm font-semibold text-zinc-100">Missing Fields</h3>
+          <article className="ml-panel rounded-2xl p-4">
+            <h3 className="text-sm font-semibold text-slate-100">Missing Fields</h3>
             {lead.missingFields.length === 0 ? (
-              <p className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-3 py-2 text-xs text-emerald-200">
+              <p className="mt-3 rounded-xl border border-emerald-300/24 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
                 Qualification complete. No blocking fields.
               </p>
             ) : (
               <div className="mt-3 flex flex-wrap gap-2">
                 {lead.missingFields.map((field) => (
-                  <span key={field} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-200">
+                  <span key={field} className="rounded-md border border-amber-300/25 bg-amber-500/10 px-2 py-1 text-xs text-amber-100">
                     {field}
                   </span>
                 ))}
@@ -108,66 +122,66 @@ export function LeadWorkspacePage({
             )}
           </article>
 
-          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-            <h3 className="mb-3 text-sm font-semibold text-zinc-100">Open Tasks</h3>
+          <article className="ml-panel rounded-2xl p-4">
+            <h3 className="mb-3 text-sm font-semibold text-slate-100">Open Tasks</h3>
             <TaskList tasks={lead.openTasks} />
           </article>
         </section>
 
         <section>
-          <ConversationPanel messages={messages.filter((message) => message.leadId === lead.id)} />
+          <ConversationPanel
+            messages={messages.filter((message) => message.leadId === lead.id)}
+            leadName={lead.name}
+            leadStage={lead.currentStage}
+            language={lead.language}
+          />
         </section>
 
         <section className="space-y-4">
           <StrategicAnalysisCard analysis={analysis} />
 
-          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-            <h3 className="mb-3 text-sm font-semibold text-zinc-100">Suggested Replies</h3>
-            <div className="space-y-3">
-              {suggestedReplies.map((reply) => (
-                <SuggestedReplyCard
-                  key={reply.id}
-                  reply={reply}
-                  selected={selectedReplyId === reply.id}
-                  onSelect={setSelectedReplyId}
-                />
-              ))}
-            </div>
-          </article>
-
-          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-            <h3 className="text-sm font-semibold text-zinc-100">Agent Activity</h3>
-            {latestRun ? (
-              <div className="mt-3 space-y-2 text-xs">
-                <Info label="Last triggered agent" value={latestRun.triggeredAgentId} compact />
-                <Info label="Last run time" value={latestRun.timestamp} compact />
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2">
-                  <p className="text-zinc-500">Current status</p>
-                  <StatusBadge value={latestRun.status} className="mt-1" />
-                </div>
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2">
-                  <p className="text-zinc-500">Trace snippet</p>
-                  <p className="mt-1 text-zinc-300">{latestRun.decisionSummary}</p>
-                </div>
-              </div>
+          <article className="ml-panel rounded-2xl p-4">
+            <h3 className="mb-3 text-sm font-semibold text-slate-100">Suggested Replies</h3>
+            {suggestedReplies.length === 0 ? (
+              <p className="text-xs text-slate-500">No suggestions available for this lead yet.</p>
             ) : (
-              <p className="mt-3 text-xs text-zinc-500">No activity yet for this lead.</p>
+              <div className="space-y-3">
+                {suggestedReplies.map((reply) => (
+                  <SuggestedReplyCard key={reply.id} reply={reply} selected={selectedReplyId === reply.id} onSelect={setSelectedReplyId} />
+                ))}
+              </div>
             )}
           </article>
 
-          <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-            <h3 className="text-sm font-semibold text-zinc-100">Learning Snapshot</h3>
-            {latestLearning ? (
+          <article className="ml-panel rounded-2xl p-4">
+            <h3 className="text-sm font-semibold text-slate-100">Agent Activity</h3>
+            {latestRun ? (
               <div className="mt-3 space-y-2 text-xs">
-                <p className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-zinc-300">
-                  Latest correction: {latestLearning.deltaSummary}
-                </p>
-                <p className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-zinc-300">
-                  Frequent pattern: {latestLearning.correctionPattern}
-                </p>
+                <Info label="Last triggered agent" value={byId.agent[latestRun.triggeredAgentId]?.name ?? latestRun.triggeredAgentId} compact />
+                <Info label="Last run time" value={latestRun.timestamp} compact />
+                <div className="ml-panel-soft rounded-xl px-3 py-2">
+                  <p className="text-slate-500">Current status</p>
+                  <StatusBadge value={latestRun.status} className="mt-1" />
+                </div>
+                <div className="ml-panel-soft rounded-xl px-3 py-2">
+                  <p className="text-slate-500">Trace snippet</p>
+                  <p className="mt-1 leading-relaxed text-slate-300">{latestRun.decisionSummary}</p>
+                </div>
               </div>
             ) : (
-              <p className="mt-3 text-xs text-zinc-500">No learning signals yet.</p>
+              <p className="mt-3 text-xs text-slate-500">No activity yet for this lead.</p>
+            )}
+          </article>
+
+          <article className="ml-panel rounded-2xl p-4">
+            <h3 className="text-sm font-semibold text-slate-100">Learning Snapshot</h3>
+            {latestLearning ? (
+              <div className="mt-3 space-y-2 text-xs">
+                <p className="ml-panel-soft rounded-xl px-3 py-2 text-slate-300">Latest correction: {latestLearning.deltaSummary}</p>
+                <p className="ml-panel-soft rounded-xl px-3 py-2 text-slate-300">Frequent pattern: {latestLearning.correctionPattern}</p>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">No learning signals yet.</p>
             )}
           </article>
         </section>
@@ -178,9 +192,9 @@ export function LeadWorkspacePage({
 
 function Info({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={`rounded-xl border border-zinc-800 bg-zinc-950/70 ${compact ? "px-3 py-2" : "px-2.5 py-2"}`}>
-      <p className="text-zinc-500">{label}</p>
-      <p className="mt-1 text-zinc-200">{value}</p>
+    <div className={`ml-panel-soft rounded-xl ${compact ? "px-3 py-2" : "px-2.5 py-2"}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-slate-500">{label}</p>
+      <p className="mt-1 text-slate-200">{value}</p>
     </div>
   );
 }

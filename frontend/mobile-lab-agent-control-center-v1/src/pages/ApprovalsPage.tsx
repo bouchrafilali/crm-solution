@@ -28,9 +28,9 @@ export function ApprovalsPage({ approvals, onDecision }: ApprovalsPageProps) {
           const items = approvals.filter((item) => item.group === group);
 
           return (
-            <section key={group} className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-              <h3 className="text-sm font-semibold text-zinc-100">{group}</h3>
-              <p className="mt-1 text-xs text-zinc-500">{items.length} item(s)</p>
+            <section key={group} className="ml-panel rounded-2xl p-4">
+              <h3 className="text-sm font-semibold text-slate-100">{group}</h3>
+              <p className="mt-1 text-xs text-slate-500">{items.length} item(s)</p>
               <div className="mt-3 space-y-3">
                 {items.map((item) => (
                   <ApprovalCard key={item.id} item={item} onDecision={onDecision} />

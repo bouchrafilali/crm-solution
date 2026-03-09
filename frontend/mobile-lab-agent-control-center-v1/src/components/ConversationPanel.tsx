@@ -1,13 +1,17 @@
 import { ConversationMessage } from "../types.js";
+import { cn } from "../utils.js";
 
 interface ConversationPanelProps {
   messages: ConversationMessage[];
+  leadName?: string;
+  leadStage?: string;
+  language?: string;
 }
 
 function bubbleClass(actor: ConversationMessage["actor"]): string {
-  if (actor === "client") return "ml-0 mr-8 bg-zinc-800 text-zinc-100 border-zinc-700";
-  if (actor === "operator") return "ml-8 mr-0 bg-cyan-500/12 text-cyan-100 border-cyan-500/30";
-  return "ml-8 mr-0 bg-emerald-500/12 text-emerald-100 border-emerald-500/30";
+  if (actor === "client") return "border-slate-600/55 bg-slate-800/90 text-slate-100";
+  if (actor === "operator") return "border-sky-300/35 bg-sky-500/14 text-sky-100";
+  return "border-emerald-300/35 bg-emerald-500/14 text-emerald-100";
 }
 
 function actorLabel(actor: ConversationMessage["actor"]): string {
@@ -22,41 +26,60 @@ function stateIcon(state: ConversationMessage["state"]): string {
   return "✓✓";
 }
 
-export function ConversationPanel({ messages }: ConversationPanelProps) {
+export function ConversationPanel({ messages, leadName = "Lead", leadStage = "Conversation active", language = "FR" }: ConversationPanelProps) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-100">Conversation</h3>
-        <span className="text-xs text-zinc-500">WhatsApp thread</span>
+    <div className="ml-panel rounded-2xl p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-600/55 bg-slate-800 text-xs font-semibold text-slate-100">
+            {leadName
+              .split(/\s+/)
+              .slice(0, 2)
+              .map((chunk) => chunk[0]?.toUpperCase() ?? "")
+              .join("")}
+          </span>
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold text-slate-100">{leadName}</h3>
+            <p className="text-[11px] text-slate-400">
+              {leadStage} • {language}
+            </p>
+          </div>
+        </div>
+        <span className="ml-chip rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-200">
+          WhatsApp Live
+        </span>
       </div>
 
-      <div className="scroll-dark max-h-[560px] space-y-3 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
+      <div className="ml-panel-soft scroll-dark relative max-h-[560px] space-y-3 overflow-y-auto rounded-xl p-3.5">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(56,189,248,0.08),transparent_35%),radial-gradient(circle_at_100%_100%,rgba(16,185,129,0.08),transparent_32%)]" />
         {messages.map((message) => (
-          <div key={message.id} className={`rounded-2xl border p-3 ${bubbleClass(message.actor)}`}>
-            <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-zinc-400">{actorLabel(message.actor)}</p>
+          <div key={message.id} className={cn("relative flex", message.actor === "client" ? "justify-start" : "justify-end")}>
+            <div className={cn("max-w-[82%] rounded-2xl border p-3.5", bubbleClass(message.actor))}>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">{actorLabel(message.actor)}</p>
 
-            {message.replyTo ? (
-              <div className="mb-2 rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-1">
-                <p className="text-[11px] text-zinc-500">Replying to {message.replyTo.actor}</p>
-                <p className="line-clamp-1 text-xs text-zinc-400">{message.replyTo.text}</p>
+              {message.replyTo ? (
+                <div className="mb-2 rounded-lg border border-slate-500/35 bg-black/18 px-2.5 py-1.5">
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-slate-400">Replying to {message.replyTo.actor}</p>
+                  <p className="line-clamp-1 text-xs text-slate-300">{message.replyTo.text}</p>
+                </div>
+              ) : null}
+
+              <p className="text-[13px] leading-relaxed">{message.text}</p>
+
+              <div className="mt-2.5 flex items-center justify-end gap-2 text-[11px] text-slate-400">
+                <span>{message.timestamp}</span>
+                <span className={message.state === "read" ? "text-sky-300" : "text-slate-500"}>{stateIcon(message.state)}</span>
               </div>
-            ) : null}
-
-            <p className="text-sm leading-relaxed">{message.text}</p>
-
-            <div className="mt-2 flex items-center justify-end gap-2 text-[11px] text-zinc-500">
-              <span>{message.timestamp}</span>
-              <span className={message.state === "read" ? "text-cyan-300" : "text-zinc-500"}>{stateIcon(message.state)}</span>
             </div>
           </div>
         ))}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-        <button className="rounded-xl border border-zinc-700 bg-zinc-800/70 px-2 py-2 text-zinc-200 transition hover:border-zinc-600">Analyze Now</button>
-        <button className="rounded-xl border border-zinc-700 bg-zinc-800/70 px-2 py-2 text-zinc-200 transition hover:border-zinc-600">Generate Replies</button>
-        <button className="rounded-xl border border-zinc-700 bg-zinc-800/70 px-2 py-2 text-zinc-200 transition hover:border-zinc-600">Request Missing Info</button>
-        <button className="rounded-xl border border-zinc-700 bg-zinc-800/70 px-2 py-2 text-zinc-200 transition hover:border-zinc-600">Create Task</button>
+        <button className="ml-button ml-button-primary rounded-xl px-2 py-2 font-medium">Analyze Now</button>
+        <button className="ml-button rounded-xl px-2 py-2 font-medium">Generate Replies</button>
+        <button className="ml-button rounded-xl px-2 py-2 font-medium">Request Missing Info</button>
+        <button className="ml-button rounded-xl px-2 py-2 font-medium">Create Task</button>
       </div>
     </div>
   );

@@ -41,27 +41,27 @@ export function LearningPage({ learningEvents }: LearningPageProps) {
     <motion.div key="learning" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <SectionHeader title="Learning" subtitle="Monitor how human corrections improve model behavior and operational quality." />
 
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-        <h3 className="text-sm font-semibold text-zinc-100">Recent Corrections</h3>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[960px] text-left text-xs">
-            <thead className="text-zinc-500">
+      <section className="ml-panel rounded-2xl p-4">
+        <h3 className="text-sm font-semibold text-slate-100">Recent Corrections</h3>
+        <div className="ml-table-shell mt-3 overflow-x-auto rounded-xl">
+          <table className="ml-table w-full min-w-[960px] text-left text-xs">
+            <thead>
               <tr>
-                <th className="py-2">Timestamp</th>
-                <th className="py-2">Lead</th>
-                <th className="py-2">AI Suggestion</th>
-                <th className="py-2">Final Human Version</th>
-                <th className="py-2">Delta Summary</th>
+                <th className="px-3 py-3">Timestamp</th>
+                <th className="px-3 py-3">Lead</th>
+                <th className="px-3 py-3">AI Suggestion</th>
+                <th className="px-3 py-3">Final Human Version</th>
+                <th className="px-3 py-3">Delta Summary</th>
               </tr>
             </thead>
             <tbody>
               {learningEvents.map((event) => (
-                <tr key={event.id} className="border-t border-zinc-800 text-zinc-300">
-                  <td className="py-2 text-zinc-400">{event.timestamp}</td>
-                  <td className="py-2">{byId.lead[event.leadId]?.name ?? event.leadId}</td>
-                  <td className="max-w-[280px] truncate py-2 text-zinc-400">{event.aiSuggestion}</td>
-                  <td className="max-w-[280px] truncate py-2">{event.finalHumanVersion}</td>
-                  <td className="py-2 text-zinc-400">{event.deltaSummary}</td>
+                <tr key={event.id}>
+                  <td className="ml-code px-3 py-3 text-[11px] text-slate-400">{event.timestamp}</td>
+                  <td className="px-3 py-3 font-medium text-slate-200">{byId.lead[event.leadId]?.name ?? event.leadId}</td>
+                  <td className="max-w-[280px] truncate px-3 py-3 text-slate-400">{event.aiSuggestion}</td>
+                  <td className="max-w-[280px] truncate px-3 py-3 text-slate-300">{event.finalHumanVersion}</td>
+                  <td className="px-3 py-3 text-slate-400">{event.deltaSummary}</td>
                 </tr>
               ))}
             </tbody>
@@ -70,26 +70,26 @@ export function LearningPage({ learningEvents }: LearningPageProps) {
       </section>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-          <h3 className="text-sm font-semibold text-zinc-100">Frequent Correction Patterns</h3>
+        <section className="ml-panel rounded-2xl p-4">
+          <h3 className="text-sm font-semibold text-slate-100">Frequent Correction Patterns</h3>
           <div className="mt-3 space-y-2">
             {patternCounts.map((entry) => (
-              <div key={entry.pattern} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2">
-                <p className="text-sm text-zinc-200">{entry.pattern}</p>
-                <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400">{entry.count}</span>
+              <div key={entry.pattern} className="ml-panel-soft flex items-center justify-between rounded-xl px-3 py-2">
+                <p className="text-sm text-slate-200">{entry.pattern}</p>
+                <span className="ml-chip rounded-full px-2 py-0.5 text-xs text-slate-300">{entry.count}</span>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
-          <h3 className="text-sm font-semibold text-zinc-100">Improvement Candidates</h3>
+        <section className="ml-panel rounded-2xl p-4">
+          <h3 className="text-sm font-semibold text-slate-100">Improvement Candidates</h3>
           <div className="mt-3 space-y-2">
             {improvementCandidates.map((candidate) => (
-              <article key={candidate.title} className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                <p className="text-sm font-medium text-zinc-200">{candidate.title}</p>
-                <p className="mt-1 text-xs text-zinc-400">{candidate.description}</p>
-                <p className="mt-2 text-[11px] text-zinc-500">Owner: {candidate.owner}</p>
+              <article key={candidate.title} className="ml-panel-soft rounded-xl p-3">
+                <p className="text-sm font-medium text-slate-200">{candidate.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">{candidate.description}</p>
+                <p className="mt-2 text-[11px] text-slate-500">Owner: {candidate.owner}</p>
               </article>
             ))}
           </div>

@@ -18,13 +18,16 @@ export function MetricCard({ label, value, delta, tone = "neutral" }: MetricCard
     <motion.article
       layout
       whileHover={{ y: -2 }}
-      transition={{ duration: 0.2 }}
-      className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 shadow-[0_8px_24px_-14px_rgba(0,0,0,0.8)]"
+      transition={{ duration: 0.18 }}
+      className="ml-panel ml-interactive rounded-2xl p-4"
     >
-      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">{label}</p>
-      <div className="mt-3 flex items-end justify-between gap-2">
-        <p className="text-2xl font-semibold tracking-tight text-zinc-100">{value}</p>
-        {delta ? <p className={`text-xs font-medium ${toneClasses[tone]}`}>{delta}</p> : null}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-600" />
+      </div>
+      <div className="mt-4 flex items-end justify-between gap-2">
+        <p className="text-[1.8rem] font-semibold tracking-tight text-slate-50">{value}</p>
+        {delta ? <p className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${toneClasses[tone]}`}>{delta}</p> : null}
       </div>
     </motion.article>
   );
