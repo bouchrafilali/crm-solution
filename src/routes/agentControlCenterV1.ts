@@ -24,6 +24,67 @@ function resolveAssetsDir(): string | null {
   return firstExistingPath(resolveAssetsDirs());
 }
 
+agentControlCenterV1Router.get("/agent-control-center-v1/strategicAdvisorAgentV1.js", (req, res, next) => {
+  const assetsDir = resolveAssetsDir();
+  if (assetsDir && existsSync(join(assetsDir, "strategicAdvisorAgentV1.js"))) {
+    next();
+    return;
+  }
+
+  const fallbackModule = `const defaultOutput = {
+  leadId: "",
+  probableStage: "PRODUCT_INTEREST",
+  stageConfidence: 0.62,
+  momentum: "medium",
+  priorityRecommendation: "medium",
+  keySignals: ["Limited context available"],
+  risks: ["Strategic advisor module fallback in use"],
+  opportunities: ["Continue with controlled next-step guidance"],
+  missingInformation: [],
+  nextBestAction: "reassure_and_progress",
+  replyObjective: "Keep response concise while gathering missing context.",
+  rationale: "Fallback strategic module served because deployment assets are out of sync.",
+  humanApprovalRequired: false
+};
+
+export function generateStrategicAdvisorAnalysis(context) {
+  const leadId = context?.lead?.id ?? "";
+  const currentStage = context?.currentStage ?? context?.lead?.currentStage ?? "PRODUCT_INTEREST";
+  const mappedStage = typeof currentStage === "string" ? currentStage : "PRODUCT_INTEREST";
+  return { ...defaultOutput, leadId, probableStage: mappedStage };
+}
+
+export function generateStrategicAdvisorAnalysisRecord(context) {
+  const output = generateStrategicAdvisorAnalysis(context);
+  return {
+    schemaVersion: "strategic_advisor_v1",
+    leadId: output.leadId,
+    conversationId: context?.conversation?.id ?? "",
+    timestamp: new Date().toISOString(),
+    provider: "fallback_strategic_advisor_v1",
+    model: "fallback-rule",
+    decisionSummary: "Fallback strategic advisor output",
+    inputSnapshot: {
+      currentStage: output.probableStage,
+      priorityScore: Number(context?.priorityScore ?? 0),
+      signalCount: Array.isArray(context?.signals) ? context.signals.length : 0,
+      missingFields: Array.isArray(context?.missingFields) ? context.missingFields : [],
+      openTaskCount: Array.isArray(context?.openTasks) ? context.openTasks.length : 0,
+      lastOperatorAction: context?.lastOperatorAction ?? null,
+      recentMessageCount: Array.isArray(context?.recentMessages) ? context.recentMessages.length : 0
+    },
+    output,
+    confidenceIndicators: {
+      stageConfidence: output.stageConfidence,
+      actionConfidence: 0.58
+    }
+  };
+}
+`;
+
+  res.status(200).type("application/javascript").send(fallbackModule);
+});
+
 agentControlCenterV1Router.use("/agent-control-center-v1", (req, res, next) => {
   const assetsDirs = resolveAssetsDirs();
   if (!assetsDirs.length) {
