@@ -7697,6 +7697,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const [streamSendingLeadId, setStreamSendingLeadId] = React.useState("");
         const [streamManualTextByLead, setStreamManualTextByLead] = React.useState({});
         const [aiFlowPopupLeadId, setAiFlowPopupLeadId] = React.useState("");
+        const leadsRef = React.useRef(leads);
+        const suggestionsInFlightRef = React.useRef(new Set());
 
         const openMediaViewer = React.useCallback((payload) => {
           if (!payload || !payload.url) return;
@@ -8021,11 +8023,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         const loadSuggestions = React.useCallback(async (leadId, forceRegenerate) => {
           if (!leadId || !isUuidValue(leadId)) return;
           if (!LIVE_MODE) return;
+          const safeLeadId = String(leadId || "").trim();
+          if (!safeLeadId) return;
+          if (!forceRegenerate && suggestionsInFlightRef.current.has(safeLeadId)) return;
+          suggestionsInFlightRef.current.add(safeLeadId);
           const requestId = suggestionsRequestRef.current + 1;
           suggestionsRequestRef.current = requestId;
           setLoadingSuggestions(true);
-          setLoadingSuggestionsLeadId(String(leadId));
-          const lead = leads.find((item) => String(item.id) === String(leadId)) || null;
+          setLoadingSuggestionsLeadId(safeLeadId);
+          const lead = (Array.isArray(leadsRef.current) ? leadsRef.current : []).find((item) => String(item.id) === safeLeadId) || null;
           const previousSuggestions = lead && Array.isArray(lead.suggestions) ? lead.suggestions : [];
           const feedType = lead && String(lead.feedType || "").toLowerCase() === "reactivation" ? "reactivation" : "active";
           try {
@@ -8034,12 +8040,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             if (forceRegenerate) cardsQuery.set("force", "1");
             const payload = await fetchJson(
               "/api/whatsapp/mobile-lab/leads/" +
-                encodeURIComponent(leadId) +
+                encodeURIComponent(safeLeadId) +
                 "/cards?" +
                 cardsQuery.toString()
             );
             if (requestId !== suggestionsRequestRef.current) return;
-            const suggestions = mapSuggestionsFromLeadCardsPayload(leadId, payload);
+            const suggestions = mapSuggestionsFromLeadCardsPayload(safeLeadId, payload);
             const agentRunMeta = mapAgentRunMetaFromCardsPayload(payload);
             const fallbackMeta = mapGenerationFallbackFromCardsPayload(payload);
             const fallbackGenerationMeta = mapFallbackGenerationMetaFromCardsPayload(payload);
@@ -8053,7 +8059,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     ? "Regeneration failed. Kept previous suggestions."
                     : "No new usable suggestions. Kept previous suggestions.")
               : null;
-            patchLead(leadId, {
+            patchLead(safeLeadId, {
               suggestions: preservePrevious ? previousSuggestions : suggestions,
               enrichmentStatus: String((payload && (payload.status || payload.enrichmentStatus)) || "error"),
               enrichmentSource: String((payload && (payload.enrichmentSource || payload.pipelineSource || payload.source)) || "active_ai_cards"),
@@ -8073,12 +8079,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               reasonCodes: priorityIntelligence.reasonCodes,
               primaryReasonCode: priorityIntelligence.primaryReasonCode
             });
-            await loadAgentRun(leadId, agentRunMeta.runId);
-            if (forceRegenerate) await loadMessages(leadId);
+            await loadAgentRun(safeLeadId, agentRunMeta.runId);
+            if (forceRegenerate) await loadMessages(safeLeadId);
           } catch (error) {
             if (requestId !== suggestionsRequestRef.current) return;
             const preserved = Boolean(forceRegenerate && previousSuggestions.length);
-            patchLead(leadId, {
+            patchLead(safeLeadId, {
               suggestions: preserved ? previousSuggestions : [],
               enrichmentStatus: preserved ? String(lead && lead.enrichmentStatus ? lead.enrichmentStatus : "enriched") : "error",
               enrichmentSource: feedType === "reactivation" ? "reactivation_replies" : "active_ai_cards",
@@ -8090,15 +8096,16 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               generationFallbackReason: null,
               fallbackGenerationMeta: null
             });
-            console.error("[mobile-lab] lead cards load failed", { leadId, error });
-            await loadAgentRun(leadId, null);
+            console.error("[mobile-lab] lead cards load failed", { leadId: safeLeadId, error });
+            await loadAgentRun(safeLeadId, null);
           } finally {
+            suggestionsInFlightRef.current.delete(safeLeadId);
             if (requestId === suggestionsRequestRef.current) {
               setLoadingSuggestions(false);
               setLoadingSuggestionsLeadId("");
             }
           }
-        }, [leads, loadAgentRun, loadMessages, patchLead]);
+        }, [loadAgentRun, loadMessages, patchLead]);
 
         function regenerateSuggestionsForLead(lead) {
           if (!lead || !lead.id) return;
@@ -8109,6 +8116,10 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (!LIVE_MODE) return;
           void loadLeads();
         }, [loadLeads]);
+
+        React.useEffect(() => {
+          leadsRef.current = leads;
+        }, [leads]);
 
         React.useEffect(() => {
           if (viewMode !== "stream") return;
