@@ -22,6 +22,11 @@ export type WhatsAppPriorityIntelligenceRecord = {
   updatedAt: string;
 };
 
+export type WhatsAppPriorityRadarRow = WhatsAppPriorityIntelligenceRecord & {
+  clientName: string | null;
+  phoneNumber: string | null;
+};
+
 function getPoolOrThrow() {
   const db = getDbPool();
   if (!db) throw new Error("DATABASE_URL is not configured");
@@ -140,6 +145,72 @@ export async function getWhatsAppPriorityIntelligence(
   return mapRow(q.rows[0]);
 }
 
+export async function listWhatsAppPriorityIntelligenceByLeadIds(
+  leadIds: string[]
+): Promise<Map<string, WhatsAppPriorityIntelligenceRecord>> {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const ids = Array.isArray(leadIds)
+    ? leadIds
+        .map((id) => String(id || "").trim())
+        .filter((id) => uuidPattern.test(id))
+    : [];
+  if (!ids.length) return new Map();
+  const db = getPoolOrThrow();
+  const q = await db.query<{
+    lead_id: string;
+    stage: string;
+    facts: unknown;
+    last_inbound_at: string | null;
+    last_outbound_at: string | null;
+    event_date: string | null;
+    payment_intent: boolean;
+    awaiting_reply: boolean;
+    ticket_value_estimate: string | number | null;
+    conversion_probability: string | number;
+    dropoff_risk: string | number;
+    priority_score: number;
+    priority_band: "critical" | "high" | "medium" | "low";
+    recommended_attention: string;
+    reason_codes: unknown;
+    primary_reason_code: string | null;
+    input_signature: string;
+    computed_at: string;
+    updated_at: string;
+  }>(
+    `
+      select
+        lead_id,
+        stage,
+        facts,
+        last_inbound_at,
+        last_outbound_at,
+        event_date,
+        payment_intent,
+        awaiting_reply,
+        ticket_value_estimate,
+        conversion_probability,
+        dropoff_risk,
+        priority_score,
+        priority_band,
+        recommended_attention,
+        reason_codes,
+        primary_reason_code,
+        input_signature,
+        computed_at,
+        updated_at
+      from whatsapp_priority_intelligence
+      where lead_id = any($1::uuid[])
+    `,
+    [ids]
+  );
+
+  const out = new Map<string, WhatsAppPriorityIntelligenceRecord>();
+  for (const row of q.rows) {
+    out.set(row.lead_id, mapRow(row));
+  }
+  return out;
+}
+
 export async function upsertWhatsAppPriorityIntelligence(input: {
   leadId: string;
   stage: string;
@@ -243,4 +314,81 @@ export async function upsertWhatsAppPriorityIntelligence(input: {
       String(input.inputSignature || "")
     ]
   );
+}
+
+export async function listWhatsAppPriorityRadarRows(
+  limit = 300
+): Promise<WhatsAppPriorityRadarRow[]> {
+  const db = getPoolOrThrow();
+  const safeLimit = Math.max(1, Math.min(1000, Math.round(Number(limit || 300))));
+  const q = await db.query<{
+    lead_id: string;
+    stage: string;
+    facts: unknown;
+    last_inbound_at: string | null;
+    last_outbound_at: string | null;
+    event_date: string | null;
+    payment_intent: boolean;
+    awaiting_reply: boolean;
+    ticket_value_estimate: string | number | null;
+    conversion_probability: string | number;
+    dropoff_risk: string | number;
+    priority_score: number;
+    priority_band: "critical" | "high" | "medium" | "low";
+    recommended_attention: string;
+    reason_codes: unknown;
+    primary_reason_code: string | null;
+    input_signature: string;
+    computed_at: string;
+    updated_at: string;
+    client_name: string | null;
+    phone_number: string | null;
+  }>(
+    `
+      select
+        p.lead_id,
+        p.stage,
+        p.facts,
+        p.last_inbound_at,
+        p.last_outbound_at,
+        p.event_date,
+        p.payment_intent,
+        p.awaiting_reply,
+        p.ticket_value_estimate,
+        p.conversion_probability,
+        p.dropoff_risk,
+        p.priority_score,
+        p.priority_band,
+        p.recommended_attention,
+        p.reason_codes,
+        p.primary_reason_code,
+        p.input_signature,
+        p.computed_at,
+        p.updated_at,
+        l.client_name,
+        l.phone_number
+      from whatsapp_priority_intelligence p
+      join whatsapp_leads l on l.id = p.lead_id
+      order by
+        case p.priority_band
+          when 'critical' then 4
+          when 'high' then 3
+          when 'medium' then 2
+          when 'low' then 1
+          else 0
+        end desc,
+        p.priority_score desc,
+        coalesce(p.last_inbound_at, p.last_outbound_at, p.updated_at) desc
+      limit $1::int
+    `,
+    [safeLimit]
+  );
+  return q.rows.map((row) => {
+    const base = mapRow(row);
+    return {
+      ...base,
+      clientName: row.client_name ? String(row.client_name) : null,
+      phoneNumber: row.phone_number ? String(row.phone_number) : null
+    };
+  });
 }

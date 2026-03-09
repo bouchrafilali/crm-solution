@@ -30,6 +30,7 @@ function reactivationViewFixture(items: ReactivationQueueViewResponse["items"]):
 
 const noSkipDeps = {
   getActiveSkips: async () => [],
+  getPrioritySignalsByLeadIds: async () => new Map(),
   nowIso: () => "2026-03-07T12:00:00.000Z",
   enrichmentLeadLimit: () => 0,
   enrichmentTimeoutMs: () => 200
@@ -146,6 +147,96 @@ test("active and reactivation counts correct", async () => {
 
   assert.equal(payload.meta.activeCount, 1);
   assert.equal(payload.meta.reactivationCount, 1);
+});
+
+test("priority intelligence signals are exposed and used for active ordering", async () => {
+  const payload = await buildMobileLabFeed(
+    { limit: 10, days: 30, mode: "active_only" },
+    {
+      ...noSkipDeps,
+      getPriorityView: async () =>
+        priorityViewFixture([
+          {
+            leadId: "lead-a",
+            clientName: "A",
+            lastMessagePreview: "A",
+            lastMessageAt: "2026-03-07T09:00:00.000Z",
+            latestMessageDirection: "inbound",
+            needsReply: true,
+            waitingSinceMinutes: 10,
+            priorityScore: 30,
+            priorityBand: "low",
+            estimatedHeat: "warm",
+            stage: "QUALIFIED",
+            urgency: "medium",
+            paymentIntent: false,
+            dropoffRisk: "low",
+            recommendedAction: "answer_precisely",
+            commercialPriority: "medium",
+            tone: null,
+            reasons: [],
+            topReplyCard: null
+          },
+          {
+            leadId: "lead-b",
+            clientName: "B",
+            lastMessagePreview: "B",
+            lastMessageAt: "2026-03-07T08:00:00.000Z",
+            latestMessageDirection: "inbound",
+            needsReply: true,
+            waitingSinceMinutes: 20,
+            priorityScore: 40,
+            priorityBand: "medium",
+            estimatedHeat: "warm",
+            stage: "QUALIFIED",
+            urgency: "medium",
+            paymentIntent: false,
+            dropoffRisk: "low",
+            recommendedAction: "answer_precisely",
+            commercialPriority: "medium",
+            tone: null,
+            reasons: [],
+            topReplyCard: null
+          }
+        ]),
+      getReactivationView: async () => reactivationViewFixture([]),
+      getPrioritySignalsByLeadIds: async () =>
+        new Map([
+          [
+            "lead-a",
+            {
+              priorityScore: 92,
+              priorityBand: "high",
+              conversionProbability: 0.71,
+              dropoffRisk: 0.22,
+              recommendedAttention: "reply_now",
+              reasonCodes: ["awaiting_reply"],
+              lastInboundAt: "2026-03-07T10:00:00.000Z"
+            }
+          ],
+          [
+            "lead-b",
+            {
+              priorityScore: 66,
+              priorityBand: "medium",
+              conversionProbability: 0.42,
+              dropoffRisk: 0.31,
+              recommendedAttention: "wait",
+              reasonCodes: ["product_interest_detected"],
+              lastInboundAt: "2026-03-07T09:30:00.000Z"
+            }
+          ]
+        ])
+    }
+  );
+
+  assert.equal(payload.items[0].leadId, "lead-a");
+  assert.equal(payload.items[0].priorityBand, "high");
+  assert.equal(payload.items[0].priorityScore, 92);
+  assert.equal(payload.items[0].recommendedAttention, "reply_now");
+  assert.deepEqual(payload.items[0].reasonCodes, ["awaiting_reply"]);
+  assert.equal(payload.items[0].conversionProbability, 0.71);
+  assert.equal(payload.items[0].dropoffRisk, 0.22);
 });
 
 test("ranking order correct", async () => {

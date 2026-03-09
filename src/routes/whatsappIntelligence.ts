@@ -138,6 +138,7 @@ import {
   buildPriorityIntelligenceQueue,
   PriorityIntelligenceError
 } from "../services/whatsappPriorityIntelligenceService.js";
+import { buildOperatorRadar, OperatorRadarError } from "../services/whatsappOperatorRadarService.js";
 import { buildLeadReactivationCheck, buildReactivationQueue, ReactivationEngineError } from "../services/whatsappReactivationEngineService.js";
 import { buildLeadReactivationReplies, ReactivationReplyError } from "../services/whatsappReactivationReplyService.js";
 import { buildReactivationQueueView, ReactivationQueueViewError } from "../services/whatsappReactivationQueueViewService.js";
@@ -4099,6 +4100,28 @@ whatsappRouter.get("/api/whatsapp/priority-intelligence/queue", async (req, res)
   }
 });
 
+whatsappRouter.get("/api/whatsapp/operator-radar", async (req, res) => {
+  const parsed = z.object({
+    limit: z.coerce.number().int().min(1).max(1000).optional()
+  }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+
+  try {
+    const payload = await buildOperatorRadar({ limit: parsed.data.limit ?? 300 });
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof OperatorRadarError) {
+      return res.status(400).json({
+        error: "operator_radar_failed",
+        step: error.step,
+        message: error.message
+      });
+    }
+    console.error("[whatsapp] operator-radar", error);
+    return res.status(503).json({ error: "operator_radar_unavailable" });
+  }
+});
+
 whatsappRouter.get("/api/whatsapp/priority-desk", async (req, res) => {
   const parsed = z.object({
     limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -5610,6 +5633,28 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .name-line .at.unread { color: #67e8f9; font-weight: 700; }
       .preview { margin-top: 3px; font-size: 13px; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .lead-meta { margin-top: 7px; display: flex; align-items: center; gap: 7px; }
+      .priority-band {
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 10px;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        border: 1px solid rgba(196, 209, 233, .26);
+        background: rgba(92, 112, 147, .18);
+        color: rgba(228, 238, 255, .95);
+      }
+      .priority-band.critical {
+        border-color: rgba(255, 120, 120, .52);
+        background: rgba(138, 42, 54, .28);
+      }
+      .priority-band.high {
+        border-color: rgba(255, 182, 120, .52);
+        background: rgba(128, 82, 38, .25);
+      }
+      .priority-band.medium {
+        border-color: rgba(121, 203, 255, .48);
+        background: rgba(38, 76, 124, .25);
+      }
       .badge { border-radius: 999px; border: 1px solid transparent; padding: 4px 8px; font-size: 11px; }
       .urg-high { background: rgba(239,68,68,.15); color: #fecaca; border-color: rgba(248,113,113,.3); }
       .urg-medium { background: rgba(245,158,11,.15); color: #fde68a; border-color: rgba(251,191,36,.25); }
@@ -6647,6 +6692,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           recommendedAttention: null,
           conversionProbability: null,
           dropoffRiskScore: null,
+          priorityBand: null,
+          priorityScore: null,
           reasonCodes: [],
           primaryReasonCode: null,
           suggestions: [],
@@ -6697,11 +6744,24 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           generationFallbackUsed: false,
           generationFallbackReason: null,
           fallbackGenerationMeta: null,
-          recommendedAttention: null,
-          conversionProbability: null,
-          dropoffRiskScore: null,
-          reasonCodes: [],
-          primaryReasonCode: null,
+          recommendedAttention: String((item && item.recommendedAttention) || "").trim().toLowerCase() || null,
+          conversionProbability: (() => {
+            const n = Number(item && item.conversionProbability);
+            return Number.isFinite(n) ? n : null;
+          })(),
+          dropoffRiskScore: (() => {
+            const n = Number(item && item.dropoffRisk);
+            return Number.isFinite(n) ? n : null;
+          })(),
+          priorityBand: String((item && item.priorityBand) || "").trim().toLowerCase() || null,
+          priorityScore: (() => {
+            const n = Number(item && item.priorityScore);
+            return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : null;
+          })(),
+          reasonCodes: Array.isArray(item && item.reasonCodes)
+            ? item.reasonCodes.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+            : [],
+          primaryReasonCode: String((item && item.primaryReasonCode) || "").trim().toLowerCase() || null,
           skipAllowed: item && item.skipAllowed !== false,
           suggestions: hasCard
             ? [
@@ -8833,6 +8893,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                           <div className="lead-meta">
                             <span className={"badge " + urgencyClass[lead.urgency]}>{lead.urgency}</span>
                             <span className={"stage " + stageClass[lead.stage]}>{lead.stageLabel || lead.stage}</span>
+                            {lead.priorityBand ? (
+                              <span className={"priority-band " + String(lead.priorityBand)}>{String(lead.priorityBand)}</span>
+                            ) : null}
                             {lead.unread > 0 ? <span className="unread">{lead.unread}</span> : null}
                           </div>
                         </div>
@@ -9413,6 +9476,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                       <div className="lead-meta">
                                         <span className={"badge " + urgencyClass[lead.urgency]}>{lead.urgency}</span>
                                         <span className={"stage " + stageClass[lead.stage]}>{lead.stageLabel || lead.stage}</span>
+                                        {lead.priorityBand ? (
+                                          <span className={"priority-band " + String(lead.priorityBand)}>{String(lead.priorityBand)}</span>
+                                        ) : null}
                                         {lead.unread > 0 ? <span className="unread">{lead.unread}</span> : null}
                                       </div>
                                     </div>
@@ -9625,6 +9691,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                       <div className="lead-meta">
                                         <span className={"badge " + urgencyClass[lead.urgency]}>{lead.urgency}</span>
                                         <span className={"stage " + stageClass[lead.stage]}>{lead.stageLabel || lead.stage}</span>
+                                        {lead.priorityBand ? (
+                                          <span className={"priority-band " + String(lead.priorityBand)}>{String(lead.priorityBand)}</span>
+                                        ) : null}
                                         {lead.unread > 0 ? <span className="unread">{lead.unread}</span> : null}
                                       </div>
                                     </div>

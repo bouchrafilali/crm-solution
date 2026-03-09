@@ -1,4 +1,5 @@
 import { listRecentMessagesByLeadIds, listWhatsAppLeads } from "../db/whatsappLeadsRepo.js";
+import { listWhatsAppPriorityIntelligenceByLeadIds } from "../db/whatsappPriorityIntelligenceRepo.js";
 import {
   computePriorityScoreDeterministic,
   type PriorityDeskItem
@@ -48,7 +49,12 @@ export type MobileLabFeedItem = {
   latestMessageDirection: "inbound" | "outbound" | null;
   stage: string | null;
   urgency: string | null;
+  priorityScore: number | null;
   priorityBand: string | null;
+  conversionProbability: number | null;
+  dropoffRisk: number | null;
+  recommendedAttention: string | null;
+  reasonCodes: string[];
   estimatedHeat: string | null;
   recommendedAction: string | null;
   tone: string | null;
@@ -100,6 +106,20 @@ type MobileLabFeedDeps = {
     status: Extract<MobileLabEnrichmentStatus, "enriched" | "no_generation_needed">;
   }>;
   getActiveSkips: () => Promise<Array<{ leadId: string; feedType: FeedType; skippedUntil: string }>>;
+  getPrioritySignalsByLeadIds: (leadIds: string[]) => Promise<
+    Map<
+      string,
+      {
+        priorityScore: number;
+        priorityBand: string;
+        conversionProbability: number;
+        dropoffRisk: number;
+        recommendedAttention: string;
+        reasonCodes: string[];
+        lastInboundAt: string | null;
+      }
+    >
+  >;
   enrichmentLeadLimit: (limit: number) => number;
   enrichmentTimeoutMs: () => number;
   nowIso: () => string;
@@ -362,6 +382,33 @@ function defaultDeps(): MobileLabFeedDeps {
         skippedUntil: row.skippedUntil
       }));
     },
+    getPrioritySignalsByLeadIds: async (leadIds) => {
+      const rows = await listWhatsAppPriorityIntelligenceByLeadIds(leadIds);
+      const out = new Map<
+        string,
+        {
+          priorityScore: number;
+          priorityBand: string;
+          conversionProbability: number;
+          dropoffRisk: number;
+          recommendedAttention: string;
+          reasonCodes: string[];
+          lastInboundAt: string | null;
+        }
+      >();
+      for (const [leadId, row] of rows.entries()) {
+        out.set(leadId, {
+          priorityScore: Number(row.priorityScore || 0),
+          priorityBand: String(row.priorityBand || "").trim().toLowerCase(),
+          conversionProbability: Number(row.conversionProbability || 0),
+          dropoffRisk: Number(row.dropoffRisk || 0),
+          recommendedAttention: String(row.recommendedAttention || "").trim().toLowerCase(),
+          reasonCodes: Array.isArray(row.reasonCodes) ? row.reasonCodes.map((code) => String(code || "").trim().toLowerCase()).filter(Boolean) : [],
+          lastInboundAt: row.lastInboundAt || null
+        });
+      }
+      return out;
+    },
     enrichmentLeadLimit: (limit: number) => resolveDefaultEnrichmentLeadLimit(limit),
     enrichmentTimeoutMs: () => resolveDefaultEnrichmentTimeoutMs(),
     nowIso: () => new Date().toISOString()
@@ -395,7 +442,12 @@ function toActiveFeedItem(item: PriorityDeskViewItem): MobileLabFeedItem {
     latestMessageDirection: item.latestMessageDirection,
     stage: item.stage,
     urgency: item.urgency,
+    priorityScore: Number(item.priorityScore || 0),
     priorityBand: item.priorityBand,
+    conversionProbability: null,
+    dropoffRisk: null,
+    recommendedAttention: null,
+    reasonCodes: [],
     estimatedHeat: item.estimatedHeat,
     recommendedAction: item.recommendedAction,
     tone: item.tone,
@@ -423,7 +475,12 @@ function toReactivationFeedItem(item: ReactivationQueueViewItem): MobileLabFeedI
     latestMessageDirection: item.latestMessageDirection,
     stage: item.stalledStage,
     urgency: null,
+    priorityScore: null,
     priorityBand: null,
+    conversionProbability: null,
+    dropoffRisk: null,
+    recommendedAttention: null,
+    reasonCodes: [],
     estimatedHeat: null,
     recommendedAction: item.recommendedAction,
     tone: item.tone,
@@ -489,15 +546,43 @@ export async function buildMobileLabFeed(
 
     const activeItems = priorityView.items
       .slice()
-      .sort(
-        (a, b) =>
-          Number(b.needsReply) - Number(a.needsReply) ||
-          b.priorityScore - a.priorityScore ||
-          b.waitingSinceMinutes - a.waitingSinceMinutes ||
-          a.leadId.localeCompare(b.leadId)
-      )
       .map(toActiveFeedItem)
       .filter((item) => !skippedSet.has(`active:${item.leadId}`));
+
+    const prioritySignals = await deps.getPrioritySignalsByLeadIds(activeItems.map((item) => item.leadId));
+    for (const item of activeItems) {
+      const signal = prioritySignals.get(item.leadId);
+      if (!signal) continue;
+      item.priorityScore = Number(signal.priorityScore || 0);
+      item.priorityBand = String(signal.priorityBand || item.priorityBand || "").trim().toLowerCase() || item.priorityBand;
+      item.conversionProbability = Number.isFinite(Number(signal.conversionProbability)) ? Number(signal.conversionProbability) : null;
+      item.dropoffRisk = Number.isFinite(Number(signal.dropoffRisk)) ? Number(signal.dropoffRisk) : null;
+      item.recommendedAttention = String(signal.recommendedAttention || "").trim().toLowerCase() || null;
+      item.reasonCodes = Array.isArray(signal.reasonCodes) ? signal.reasonCodes : [];
+    }
+
+    const priorityBandWeight = (value: string | null): number => {
+      const key = String(value || "").trim().toLowerCase();
+      if (key === "critical") return 4;
+      if (key === "high") return 3;
+      if (key === "medium") return 2;
+      if (key === "low") return 1;
+      return 0;
+    };
+    activeItems.sort((a, b) => {
+      const signalA = prioritySignals.get(a.leadId);
+      const signalB = prioritySignals.get(b.leadId);
+      const band = priorityBandWeight(b.priorityBand) - priorityBandWeight(a.priorityBand);
+      if (band !== 0) return band;
+      const score = Number(b.priorityScore || 0) - Number(a.priorityScore || 0);
+      if (score !== 0) return score;
+      const aInbound = signalA?.lastInboundAt || (a.latestMessageDirection === "inbound" ? a.lastMessageAt : null);
+      const bInbound = signalB?.lastInboundAt || (b.latestMessageDirection === "inbound" ? b.lastMessageAt : null);
+      const aInboundMs = toMs(aInbound);
+      const bInboundMs = toMs(bInbound);
+      if (Number.isFinite(aInboundMs) || Number.isFinite(bInboundMs)) return (bInboundMs || 0) - (aInboundMs || 0);
+      return a.leadId.localeCompare(b.leadId);
+    });
 
     const reactivationItems = reactivationView.items
       .slice()
