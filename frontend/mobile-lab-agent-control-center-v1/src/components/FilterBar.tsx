@@ -1,3 +1,5 @@
+import { ReactNode } from "react";
+
 interface FilterOption {
   label: string;
   value: string;
@@ -16,9 +18,10 @@ interface FilterBarProps {
   query?: string;
   onQueryChange?: (value: string) => void;
   queryPlaceholder?: string;
+  actions?: ReactNode;
 }
 
-export function FilterBar({ fields, onChange, query, onQueryChange, queryPlaceholder = "Search" }: FilterBarProps) {
+export function FilterBar({ fields, onChange, query, onQueryChange, queryPlaceholder = "Search", actions }: FilterBarProps) {
   return (
     <div className="ml-panel mb-5 flex flex-wrap items-center gap-2 rounded-2xl p-3.5">
       {fields.map((field) => (
@@ -45,6 +48,7 @@ export function FilterBar({ fields, onChange, query, onQueryChange, queryPlaceho
           className="ml-panel-soft ml-auto min-w-52 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 outline-none transition focus:border-sky-400/50"
         />
       ) : null}
+      {actions}
     </div>
   );
 }
