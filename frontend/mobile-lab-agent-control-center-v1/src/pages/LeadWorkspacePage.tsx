@@ -61,9 +61,10 @@ export function LeadWorkspacePage({
   const leadMessages = useMemo(() => messages.filter((message) => message.leadId === lead.id), [messages, lead.id]);
 
   const strategicRationale = useMemo(() => {
+    if (analysis.rationale) return analysis.rationale;
     if (latestRun?.trace?.decisionSummary) return latestRun.trace.decisionSummary;
     return "Prioritize high-intent progression while minimizing policy risk and maintaining premium tone discipline.";
-  }, [latestRun]);
+  }, [analysis.rationale, latestRun]);
 
   const selectedReply = suggestedReplies.find((reply) => reply.id === selectedReplyId) ?? suggestedReplies[0] ?? null;
 

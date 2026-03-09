@@ -10,6 +10,7 @@ import {
   StrategicAnalysis,
   SuggestedReply
 } from "./types.js";
+import { generateStrategicAdvisorAnalysisRecord, StrategicAdvisorContext } from "./strategicAdvisorAgentV1.js";
 
 const agents: Agent[] = [
   {
@@ -835,33 +836,6 @@ const suggestedReplies: SuggestedReply[] = [
   }
 ];
 
-const strategicAnalyses: StrategicAnalysis[] = [
-  {
-    leadId: "lead-nadia-belhaj",
-    probableStage: "DEPOSIT_PENDING",
-    keySignals: ["Clear intent to confirm", "Urgent timeline", "Direct request for next step"],
-    risks: ["Response delay may drop momentum"],
-    opportunities: ["Close payment in current session", "Use concise one-step instruction"],
-    nextBestAction: "Send approved payment instruction with production-lock confirmation."
-  },
-  {
-    leadId: "lead-dalia-karim",
-    probableStage: "PRICE_SENT",
-    keySignals: ["Asks for hold duration", "High value potential"],
-    risks: ["Unapproved hold promise"],
-    opportunities: ["Secure conditional hold with deadline"],
-    nextBestAction: "Approve hold wording and push for deposit commitment by tomorrow 18:00."
-  },
-  {
-    leadId: "lead-julien-fabre",
-    probableStage: "PRICE_SENT",
-    keySignals: ["Time-sensitive delivery question", "Likely close if timeline clear"],
-    risks: ["Over-promising delivery"],
-    opportunities: ["Set realistic delivery boundary and ask for payment trigger"],
-    nextBestAction: "Get ops validation, then send constrained delivery commitment message."
-  }
-];
-
 const conversations: ConversationMessage[] = [
   {
     id: "msg-001",
@@ -925,6 +899,37 @@ const conversations: ConversationMessage[] = [
   }
 ];
 
+function toIsoTimestamp(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.replace(" ", "T");
+  return normalized.includes("Z") ? normalized : `${normalized}Z`;
+}
+
+function buildStrategicAdvisorContext(lead: Lead): StrategicAdvisorContext {
+  const latestRun = runs.find((run) => run.leadId === lead.id) ?? null;
+  const recentMessages = conversations.filter((message) => message.leadId === lead.id).slice(-6);
+  const lastOperatorMessage = [...recentMessages].reverse().find((message) => message.actor === "operator");
+
+  return {
+    lead,
+    conversation: {
+      id: latestRun?.conversationId ?? `wa-${lead.id}`,
+      label: `Conversation ${latestRun?.conversationId ?? lead.id}`
+    },
+    recentMessages,
+    currentStage: lead.currentStage,
+    signals: lead.detectedSignals,
+    priorityScore: lead.priorityScore,
+    openTasks: lead.openTasks,
+    missingFields: lead.missingFields,
+    lastOperatorAction: lastOperatorMessage?.text ?? null,
+    generatedAt: toIsoTimestamp(latestRun?.timestamp)
+  };
+}
+
+const strategicAdvisorRecords = leads.map((lead) => generateStrategicAdvisorAnalysisRecord(buildStrategicAdvisorContext(lead)));
+const strategicAnalyses: StrategicAnalysis[] = strategicAdvisorRecords.map((record) => record.output);
+
 export const mockData: AppMockData = {
   agents,
   leads,
@@ -939,5 +944,7 @@ export const mockData: AppMockData = {
 
 export const byId = {
   lead: Object.fromEntries(leads.map((lead) => [lead.id, lead])),
-  agent: Object.fromEntries(agents.map((agent) => [agent.id, agent]))
+  agent: Object.fromEntries(agents.map((agent) => [agent.id, agent])),
+  strategicAnalysis: Object.fromEntries(strategicAnalyses.map((analysis) => [analysis.leadId, analysis])),
+  strategicAdvisorRecord: Object.fromEntries(strategicAdvisorRecords.map((record) => [record.leadId, record]))
 };

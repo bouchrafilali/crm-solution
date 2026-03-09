@@ -26,6 +26,33 @@ export type ApprovalGroup =
 
 export type ApprovalDecision = "pending" | "approved" | "rejected";
 
+export type StrategicAdvisorStage =
+  | "NEW"
+  | "PRODUCT_INTEREST"
+  | "QUALIFICATION_PENDING"
+  | "QUALIFIED"
+  | "PRICE_SENT"
+  | "VIDEO_PROPOSED"
+  | "DEPOSIT_PENDING"
+  | "CONFIRMED"
+  | "CONVERTED"
+  | "LOST";
+
+export type StrategicAdvisorMomentum = "low" | "medium" | "high" | "critical";
+
+export type StrategicAdvisorActionType =
+  | "clarify_missing_info"
+  | "qualify_before_price"
+  | "send_contextualized_price"
+  | "reassure_and_progress"
+  | "propose_video_call"
+  | "advance_to_deposit"
+  | "reactivate_gently"
+  | "hold_until_confirmation"
+  | "route_to_human_approval";
+
+export type StrategicAdvisorPriority = "low" | "medium" | "high" | "critical";
+
 export interface AgentRunSummary {
   id: string;
   timestamp: string;
@@ -158,11 +185,18 @@ export interface SuggestedReply {
 
 export interface StrategicAnalysis {
   leadId: string;
-  probableStage: string;
+  probableStage: StrategicAdvisorStage;
+  stageConfidence: number;
+  momentum: StrategicAdvisorMomentum;
+  priorityRecommendation: StrategicAdvisorPriority;
   keySignals: string[];
   risks: string[];
   opportunities: string[];
-  nextBestAction: string;
+  missingInformation: string[];
+  nextBestAction: StrategicAdvisorActionType;
+  replyObjective: string;
+  rationale: string;
+  humanApprovalRequired: boolean;
 }
 
 export interface ConversationMessage {

@@ -125,6 +125,8 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
   const selectedRun = useMemo(() => (selectedRunId ? filteredRuns.find((run) => run.id === selectedRunId) ?? null : null), [filteredRuns, selectedRunId]);
   const selectedLead = selectedRun ? byId.lead[selectedRun.leadId] ?? null : null;
   const selectedAgent = selectedRun ? byId.agent[selectedRun.triggeredAgentId] ?? null : null;
+  const selectedStrategicAnalysis = selectedRun ? byId.strategicAnalysis[selectedRun.leadId] ?? null : null;
+  const selectedStrategicRecord = selectedRun ? byId.strategicAdvisorRecord[selectedRun.leadId] ?? null : null;
 
   const blockedRuns = useMemo(
     () => filteredRuns.filter((run) => run.status === "blocked" || run.status === "error").length,
@@ -408,6 +410,26 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
                 <InfoRow label="Human Approval Required" value={requiresHumanGate ? "Yes" : "No"} />
                 <InfoRow label="Next Step" value={selectedRun.nextStep} />
               </div>
+              {selectedStrategicAnalysis ? (
+                <div className="mt-3 rounded-xl border border-slate-600/25 bg-slate-900/55 px-3 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-slate-500">Strategic Advisor Output</p>
+                    <StatusBadge value={selectedStrategicAnalysis.priorityRecommendation} />
+                  </div>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <InfoRow label="Probable Stage" value={selectedStrategicAnalysis.probableStage} />
+                    <InfoRow label="Momentum" value={toLabel(selectedStrategicAnalysis.momentum)} />
+                    <InfoRow label="Stage Confidence" value={`${Math.round(selectedStrategicAnalysis.stageConfidence * 100)}%`} />
+                    <InfoRow label="Recommended Action" value={toLabel(selectedStrategicAnalysis.nextBestAction)} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedStrategicAnalysis.keySignals.slice(0, 6).map((signal, index) => (
+                      <SignalTag key={`${selectedRun.id}-${signal}-${index}`} text={signal} />
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-300">{selectedStrategicAnalysis.rationale}</p>
+                </div>
+              ) : null}
             </section>
 
             <section className="ml-panel-soft rounded-xl p-3">
@@ -436,6 +458,17 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
                 <InfoRow label="Duration" value={formatDurationMs(selectedRun.durationMs)} mono />
                 <InfoRow label="Next Step" value={selectedRun.nextStep} />
               </div>
+              {selectedStrategicRecord ? (
+                <div className="mt-3 rounded-xl border border-slate-600/25 bg-slate-900/55 px-3 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-slate-500">Analysis Record</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <InfoRow label="Provider" value={selectedStrategicRecord.provider} mono />
+                    <InfoRow label="Model" value={selectedStrategicRecord.model} mono />
+                    <InfoRow label="Stage Confidence" value={`${Math.round(selectedStrategicRecord.confidenceIndicators.stageConfidence * 100)}%`} />
+                    <InfoRow label="Action Confidence" value={`${Math.round(selectedStrategicRecord.confidenceIndicators.actionConfidence * 100)}%`} />
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <section className="ml-panel-soft rounded-xl p-3">
