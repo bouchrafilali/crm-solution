@@ -32,11 +32,11 @@ agentControlCenterV1Router.use("/agent-control-center-v1", (req, res, next) => {
   })(req, res, next);
 });
 
-agentControlCenterV1Router.get("/agent-control-center-v1", (_req, res) => {
+function renderAgentControlCenterShell(): string {
   const assetsDir = resolveAssetsDir();
   const assetsLoaded = Boolean(assetsDir);
 
-  const html = `<!doctype html>
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -253,6 +253,10 @@ agentControlCenterV1Router.get("/agent-control-center-v1", (_req, res) => {
     ${assetsLoaded ? '<script type="module" src="/agent-control-center-v1/main.js"></script>' : ""}
   </body>
 </html>`;
+}
+
+agentControlCenterV1Router.get(["/agent-control-center-v1", "/agent-control-center-v1/*"], (_req, res) => {
+  const html = renderAgentControlCenterShell();
 
   res.status(200).type("html").send(html);
 });
