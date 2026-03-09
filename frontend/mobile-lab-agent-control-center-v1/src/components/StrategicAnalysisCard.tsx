@@ -2,9 +2,10 @@ import { StrategicAnalysis } from "../types.js";
 
 interface StrategicAnalysisCardProps {
   analysis: StrategicAnalysis;
+  rationale?: string;
 }
 
-export function StrategicAnalysisCard({ analysis }: StrategicAnalysisCardProps) {
+export function StrategicAnalysisCard({ analysis, rationale }: StrategicAnalysisCardProps) {
   return (
     <article className="ml-panel rounded-2xl p-4">
       <div className="flex items-center justify-between gap-3">
@@ -52,6 +53,12 @@ export function StrategicAnalysisCard({ analysis }: StrategicAnalysisCardProps) 
       <p className="mt-3 rounded-xl border border-sky-300/30 bg-sky-500/12 px-3 py-2 text-xs text-sky-100">
         <span className="font-semibold">Next best action:</span> {analysis.nextBestAction}
       </p>
+
+      {rationale ? (
+        <p className="mt-2 rounded-xl border border-slate-500/25 bg-slate-900/60 px-3 py-2 text-xs leading-relaxed text-slate-300">
+          <span className="font-semibold text-slate-200">Strategy rationale:</span> {rationale}
+        </p>
+      ) : null}
     </article>
   );
 }
