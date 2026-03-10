@@ -91,8 +91,6 @@ import {
   logSuggestionUsed
 } from "../services/mlMessageTracking.js";
 import {
-  attachFinalMessageToSuggestion,
-  createSuggestionFeedbackDraft,
   getSuggestionTypePerformance,
   listSuggestionFeedbackQueue,
   markSuggestionOutcome,
@@ -171,6 +169,12 @@ import {
   getLatestWhatsAppAgentRunSnapshot,
   WhatsAppAgentOrchestratorError
 } from "../services/whatsappAgentOrchestratorService.js";
+import {
+  computeLearningLoopStats,
+  createCanonicalSuggestionRecord,
+  evaluateSuggestionOutcomes,
+  trackOperatorReplyDecision
+} from "../services/operatorLearningLoopService.js";
 
 export const whatsappRouter = Router();
 const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 200;
@@ -258,9 +262,12 @@ const messageCreateSchema = z.object({
     .object({
       id: z.string().uuid(),
       source: z.enum(["rules_suggest_reply", "ai_followup", "ai_classify", "ai_draft", "manual"]).optional(),
+      conversation_id: z.string().uuid().optional().nullable(),
+      operator_id: z.string().min(1).max(120).optional().nullable(),
       suggestion_type: z.string().optional().nullable(),
       suggested_text: z.string().optional().nullable(),
-      accepted: z.boolean().optional()
+      accepted: z.boolean().optional(),
+      decision_type: z.enum(["ACCEPTED", "EDITED", "REJECTED", "MANUAL"]).optional()
     })
     .optional()
 });
@@ -2797,28 +2804,15 @@ whatsappRouter.post("/api/whatsapp/leads/:id/messages", async (req, res) => {
     });
     if (!message) return res.status(503).json({ error: "message_store_failed" });
 
-    if (parsed.data.direction === "OUT" && parsed.data.suggestion_feedback?.id) {
-      try {
-        await attachFinalMessageToSuggestion({
-          id: parsed.data.suggestion_feedback.id,
-          finalText: parsed.data.text,
-          finalMessageId: message.id,
-          accepted: parsed.data.suggestion_feedback.accepted
-        });
-        if (parsed.data.suggestion_feedback.accepted === true) {
-          await logSuggestionUsed({
-            leadId,
-            messageId: message.id,
-            suggestionKey: parsed.data.suggestion_feedback.suggestion_type || null,
-            ui_source: "conversation_composer"
-          });
-        }
-      } catch (error) {
-        console.warn("[whatsapp] suggestion feedback attach failed", { leadId, error });
-      }
-    }
-
     const postProcessWarnings: string[] = [];
+    let outboundDecision:
+      | {
+          suggestion_id: string | null;
+          decision_type: "ACCEPTED" | "EDITED" | "REJECTED" | "MANUAL";
+          similarity_score: number | null;
+          edit_distance: number | null;
+        }
+      | null = null;
     if (parsed.data.direction === "OUT") {
       try {
         const override = await applyTeamPriceOverrideFromLeadOutbound({
@@ -2841,6 +2835,48 @@ whatsappRouter.post("/api/whatsapp/leads/:id/messages", async (req, res) => {
         messageCreatedAt: message.createdAt,
         warnings: postProcessWarnings
       });
+
+      try {
+        const latestLeadAfterOutbound = await getWhatsAppLeadById(leadId);
+        const tracked = await trackOperatorReplyDecision({
+          leadId,
+          conversationId: leadId,
+          stageBeforeReply: lead.stage,
+          stageAfterReply: latestLeadAfterOutbound?.stage || null,
+          suggestionFeedback: parsed.data.suggestion_feedback
+            ? {
+                id: parsed.data.suggestion_feedback.id,
+                source: parsed.data.suggestion_feedback.source ?? null,
+                suggestion_type: parsed.data.suggestion_feedback.suggestion_type ?? null,
+                suggested_text: parsed.data.suggestion_feedback.suggested_text ?? null,
+                accepted: parsed.data.suggestion_feedback.accepted,
+                decision_type: parsed.data.suggestion_feedback.decision_type ?? null
+              }
+            : null,
+          finalText: parsed.data.text,
+          sendMessageId: message.id,
+          actedAt: message.createdAt
+        });
+
+        outboundDecision = {
+          suggestion_id: tracked.suggestionId,
+          decision_type: tracked.decisionType,
+          similarity_score: tracked.similarityScore,
+          edit_distance: tracked.editDistance
+        };
+
+        if (tracked.decisionType === "ACCEPTED" && tracked.suggestionId) {
+          await logSuggestionUsed({
+            leadId,
+            messageId: message.id,
+            suggestionKey: parsed.data.suggestion_feedback?.suggestion_type || null,
+            ui_source: "conversation_composer"
+          });
+        }
+      } catch (error) {
+        console.warn("[whatsapp] operator learning loop tracking failed", { leadId, error });
+        postProcessWarnings.push("operator_learning_tracking_failed");
+      }
     }
 
     let inboundQualificationPayload: null | {
@@ -2987,6 +3023,7 @@ whatsappRouter.post("/api/whatsapp/leads/:id/messages", async (req, res) => {
       message_type: message.messageType,
       template_name: message.templateName,
       warnings: postProcessWarnings,
+      ...(outboundDecision ? { outbound_decision: outboundDecision } : {}),
       ...(inboundQualificationPayload || {})
     });
   } catch (error) {
@@ -3744,15 +3781,17 @@ async function handleFollowUpRequest(req: any, res: any) {
     const text = await generateFollowUp(lead, parsed.data.type as FollowUpType, settings);
     let feedback_token: string | null = null;
     try {
-      feedback_token = await createSuggestionFeedbackDraft({
+      feedback_token = await createCanonicalSuggestionRecord({
         leadId: lead.id,
+        conversationId: lead.id,
         source: "ai_followup",
         suggestionType: parsed.data.type,
         suggestionText: text,
         suggestionPayload: {
           type: parsed.data.type,
           generated_at: new Date().toISOString()
-        }
+        },
+        stageBeforeReply: lead.stage
       });
     } catch (error) {
       console.warn("[whatsapp] follow-up feedback draft create failed", { leadId: lead.id, error });
@@ -3881,8 +3920,9 @@ whatsappRouter.post("/api/whatsapp/ai/classify", async (req, res) => {
 
     let feedback_token: string | null = null;
     try {
-      feedback_token = await createSuggestionFeedbackDraft({
+      feedback_token = await createCanonicalSuggestionRecord({
         leadId: lead.id,
+        conversationId: lead.id,
         source: "ai_classify",
         suggestionType: classification.suggestion_type,
         suggestionText: classification.suggested_message,
@@ -3893,7 +3933,8 @@ whatsappRouter.post("/api/whatsapp/ai/classify", async (req, res) => {
           urgency: classification.urgency,
           explanation: classification.explanation,
           generated_at: new Date().toISOString()
-        }
+        },
+        stageBeforeReply: lead.stage
       });
     } catch (error) {
       console.warn("[whatsapp] classify feedback draft create failed", { leadId: lead.id, error });
@@ -3945,7 +3986,25 @@ whatsappRouter.post("/api/whatsapp/ai/draft", async (req, res) => {
       type: parsed.data.type as DraftType,
       settings
     });
-    return res.status(200).json(draft);
+    let feedback_token: string | null = null;
+    try {
+      feedback_token = await createCanonicalSuggestionRecord({
+        leadId: lead.id,
+        conversationId: lead.id,
+        source: "ai_draft",
+        suggestionType: parsed.data.type,
+        suggestionText: String(draft.text || ""),
+        suggestionPayload: {
+          type: parsed.data.type,
+          recommended_next_action: draft.recommended_next_action,
+          generated_at: new Date().toISOString()
+        },
+        stageBeforeReply: lead.stage
+      });
+    } catch (error) {
+      console.warn("[whatsapp] ai draft feedback draft create failed", { leadId: lead.id, error });
+    }
+    return res.status(200).json({ ...draft, feedback_token });
   } catch (error) {
     console.error("[whatsapp] ai draft", error);
     return res.status(503).json({ error: "ai_draft_failed" });
@@ -3978,7 +4037,36 @@ whatsappRouter.post("/api/whatsapp/leads/:id/reply-generator", async (req, res) 
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
 
     const result = await getLeadReplyGenerator(leadId);
-    return res.status(200).json(result);
+    const replyOptions = Array.isArray(result.replyOptions?.reply_options) ? result.replyOptions.reply_options : [];
+    const feedback_tokens: string[] = [];
+    for (let index = 0; index < replyOptions.length; index += 1) {
+      const option = replyOptions[index] as { label?: string; intent?: string; messages?: string[] };
+      const messages = Array.isArray(option.messages) ? option.messages.map((m) => String(m || "").trim()).filter(Boolean) : [];
+      const suggestionText = messages.join("\n\n");
+      let token: string | null = null;
+      if (suggestionText) {
+        try {
+          token = await createCanonicalSuggestionRecord({
+            leadId: lead.id,
+            conversationId: lead.id,
+            source: "ai_draft",
+            suggestionType: String(option.intent || option.label || `reply_option_${index + 1}`),
+            suggestionText,
+            suggestionPayload: {
+              option_index: index,
+              label: option.label || null,
+              intent: option.intent || null,
+              generated_at: new Date().toISOString()
+            },
+            stageBeforeReply: lead.stage
+          });
+        } catch (error) {
+          console.warn("[whatsapp] reply-generator canonical suggestion failed", { leadId: lead.id, index, error });
+        }
+      }
+      feedback_tokens.push(String(token || ""));
+    }
+    return res.status(200).json({ ...result, feedback_tokens });
   } catch (error) {
     if (error instanceof StageDetectionError || error instanceof StrategicAdvisorError || error instanceof ReplyGeneratorError) {
       return res.status(400).json({ error: error.code, message: error.message });
@@ -4512,8 +4600,9 @@ async function suggestReplyHandler(req: any, res: any) {
     ).filter(Boolean);
     let feedback_token: string | null = null;
     try {
-      feedback_token = await createSuggestionFeedbackDraft({
+      feedback_token = await createCanonicalSuggestionRecord({
         leadId: lead.id,
+        conversationId: lead.id,
         source: "rules_suggest_reply",
         suggestionType: suggestion.suggestion_type,
         suggestionText: suggestion.suggested_message,
@@ -4525,7 +4614,8 @@ async function suggestReplyHandler(req: any, res: any) {
           qualification_complete: suggestion.qualification_complete,
           missing_fields: suggestion.missing_fields,
           generated_at: new Date().toISOString()
-        }
+        },
+        stageBeforeReply: lead.stage
       });
     } catch (error) {
       console.warn("[whatsapp] suggest-reply feedback draft create failed", { leadId: lead.id, error });
@@ -4683,17 +4773,42 @@ async function handleAiSuggestionsRegenerate(req: Request, res: Response) {
       }
     });
 
-    const normalizedSuggestions = (Array.isArray(result.suggestions) ? result.suggestions : []).map((item, idx) => {
-      const raw = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-      const messages = normalizeGeneratedSuggestionMessages(raw);
-      const text = messages.length ? messages.join("\n\n") : String(raw.text || raw.reply || "").trim();
-      return {
-        ...raw,
-        id: String(raw.id || `ai_${idx + 1}`),
-        messages,
-        text
-      };
-    });
+    const normalizedSuggestions = await Promise.all(
+      (Array.isArray(result.suggestions) ? result.suggestions : []).map(async (item, idx) => {
+        const raw = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+        const messages = normalizeGeneratedSuggestionMessages(raw);
+        const text = messages.length ? messages.join("\n\n") : String(raw.text || raw.reply || "").trim();
+        let feedback_token: string | null = null;
+        if (text) {
+          try {
+            feedback_token = await createCanonicalSuggestionRecord({
+              leadId: lead.id,
+              conversationId: lead.id,
+              source: "ai_draft",
+              suggestionType: String(raw.goal || raw.intent || raw.id || `ai_${idx + 1}`),
+              suggestionText: text,
+              suggestionPayload: {
+                id: String(raw.id || `ai_${idx + 1}`),
+                goal: String(raw.goal || ""),
+                confidence: raw.confidence ?? null,
+                generated_at: new Date().toISOString()
+              },
+              stageBeforeReply: lead.stage
+            });
+          } catch (error) {
+            console.warn("[whatsapp] ai suggestions canonical record failed", { leadId: lead.id, idx, error });
+            feedback_token = null;
+          }
+        }
+        return {
+          ...raw,
+          id: String(raw.id || `ai_${idx + 1}`),
+          messages,
+          text,
+          feedback_token
+        };
+      })
+    );
 
     return res.status(200).json({
       suggestions: normalizedSuggestions,
@@ -4714,8 +4829,9 @@ whatsappRouter.post("/api/whatsapp/suggestions/cards/feedback-draft", async (req
   try {
     const lead = await getWhatsAppLeadById(parsed.data.leadId);
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
-    const feedbackToken = await createSuggestionFeedbackDraft({
+    const feedbackToken = await createCanonicalSuggestionRecord({
       leadId: lead.id,
+      conversationId: lead.id,
       source: "manual",
       suggestionType: String(parsed.data.cardId || "").trim().toLowerCase(),
       suggestionText: String(parsed.data.cardText || "").trim(),
@@ -4723,7 +4839,9 @@ whatsappRouter.post("/api/whatsapp/suggestions/cards/feedback-draft", async (req
         card_id: String(parsed.data.cardId || "").trim(),
         generated_at: new Date().toISOString(),
         source: "suggestions_cards_insert"
-      }
+      },
+      stageBeforeReply: lead.stage,
+      wasAiGenerated: false
     });
     return res.status(200).json({ feedback_token: feedbackToken });
   } catch (error) {
@@ -4860,6 +4978,44 @@ whatsappRouter.get("/api/whatsapp/suggestions/performance", async (req, res) => 
   } catch (error) {
     console.error("[whatsapp] suggestion performance", error);
     return res.status(503).json({ error: "suggestion_performance_unavailable" });
+  }
+});
+
+whatsappRouter.get("/api/whatsapp/suggestions/learning-loop/stats", async (req, res) => {
+  const parsed = z
+    .object({
+      days: z.coerce.number().int().min(1).max(365).optional(),
+      suggestion_type: z.string().optional()
+    })
+    .safeParse(req.query || {});
+  if (!parsed.success) return res.status(400).json({ error: "invalid_query" });
+  try {
+    const stats = await computeLearningLoopStats({
+      days: parsed.data.days,
+      suggestionType: parsed.data.suggestion_type || null
+    });
+    return res.status(200).json(stats);
+  } catch (error) {
+    console.error("[whatsapp] learning loop stats", error);
+    return res.status(503).json({ error: "learning_loop_stats_unavailable" });
+  }
+});
+
+whatsappRouter.post("/api/whatsapp/suggestions/learning-loop/evaluate", async (req, res) => {
+  const parsed = z
+    .object({
+      limit: z.coerce.number().int().min(1).max(1000).optional()
+    })
+    .safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
+  try {
+    const result = await evaluateSuggestionOutcomes({
+      limit: parsed.data.limit
+    });
+    return res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    console.error("[whatsapp] learning loop evaluate", error);
+    return res.status(503).json({ error: "learning_loop_evaluate_failed" });
   }
 });
 

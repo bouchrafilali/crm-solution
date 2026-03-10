@@ -14,6 +14,7 @@ import { agentControlCenterV1Router } from "./routes/agentControlCenterV1.js";
 import { addManyOrderSnapshots } from "./services/orderSnapshots.js";
 import { startZokoHistorySyncWorker } from "./services/zokoHistorySyncWorker.js";
 import { startAuto24hFollowupWorker } from "./services/autoFollowUpRule.js";
+import { startOperatorLearningLoopWorker } from "./services/operatorLearningLoopService.js";
 import "./shopify/client.js";
 
 const app = express();
@@ -284,6 +285,7 @@ async function bootstrap(): Promise<void> {
     startAppointmentsReminderWorker();
     startZokoHistorySyncWorker();
     startAuto24hFollowupWorker();
+    startOperatorLearningLoopWorker();
     void registerOrdersDeleteWebhook().catch((error) => {
       console.error("[webhooks] orders/delete registration failed", error);
     });

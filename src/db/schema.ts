@@ -265,14 +265,26 @@ create table if not exists whatsapp_lead_messages (
 create table if not exists whatsapp_suggestion_feedback (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references whatsapp_leads(id) on delete cascade,
+  conversation_id uuid references whatsapp_leads(id) on delete set null,
+  operator_id text,
   source text not null,
+  suggestion_status text not null default 'GENERATED' check (suggestion_status in ('GENERATED', 'ACCEPTED', 'EDITED', 'REJECTED', 'IGNORED', 'EXPIRED')),
   suggestion_type text,
   suggestion_text text not null,
   suggestion_payload jsonb,
+  stage_before_reply text,
+  stage_after_reply text,
+  was_ai_generated boolean not null default true,
   accepted boolean,
+  final_human_text text,
   final_text text,
+  send_message_id uuid references whatsapp_lead_messages(id) on delete set null,
   final_message_id uuid references whatsapp_lead_messages(id) on delete set null,
   outcome_label text check (outcome_label in ('NO_REPLY', 'REPLIED', 'PAYMENT_QUESTION', 'DEPOSIT_LINK_SENT', 'CONFIRMED', 'CONVERTED', 'LOST')),
+  outcome_status text check (outcome_status in ('CLIENT_REPLIED', 'STAGE_ADVANCED', 'DEPOSIT_SIGNAL', 'CONVERTED', 'LOST', 'NO_RESPONSE_24H', 'NO_RESPONSE_72H', 'UNKNOWN')),
+  outcome_evaluated_at timestamptz,
+  generated_at timestamptz not null default now(),
+  acted_at timestamptz,
   outcome_at timestamptz,
   review_status text not null default 'OPEN' check (review_status in ('OPEN', 'REVIEWED', 'ARCHIVED')),
   review_notes text,
@@ -283,6 +295,28 @@ create table if not exists whatsapp_suggestion_feedback (
 create index if not exists idx_whatsapp_suggestion_feedback_lead on whatsapp_suggestion_feedback(lead_id, created_at desc);
 create index if not exists idx_whatsapp_suggestion_feedback_status on whatsapp_suggestion_feedback(review_status, created_at desc);
 create index if not exists idx_whatsapp_suggestion_feedback_outcome on whatsapp_suggestion_feedback(outcome_label, created_at desc);
+create index if not exists idx_whatsapp_suggestion_feedback_status_generated_at on whatsapp_suggestion_feedback(suggestion_status, generated_at desc);
+create index if not exists idx_whatsapp_suggestion_feedback_outcome_status on whatsapp_suggestion_feedback(outcome_status, outcome_evaluated_at desc);
+create index if not exists idx_whatsapp_suggestion_feedback_conversation on whatsapp_suggestion_feedback(conversation_id, generated_at desc);
+create index if not exists idx_whatsapp_suggestion_feedback_send_message on whatsapp_suggestion_feedback(send_message_id);
+
+create table if not exists whatsapp_suggestion_learning_signals (
+  id uuid primary key default gen_random_uuid(),
+  suggestion_feedback_id uuid not null references whatsapp_suggestion_feedback(id) on delete cascade,
+  lead_id uuid not null references whatsapp_leads(id) on delete cascade,
+  conversation_id uuid references whatsapp_leads(id) on delete set null,
+  decision_type text not null check (decision_type in ('ACCEPTED', 'EDITED', 'REJECTED', 'MANUAL')),
+  similarity_score numeric(6,5),
+  edit_distance int,
+  flags jsonb not null default '{}'::jsonb,
+  outcome_positive boolean,
+  outcome_status text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_whatsapp_suggestion_learning_signals_feedback on whatsapp_suggestion_learning_signals(suggestion_feedback_id, created_at desc);
+create index if not exists idx_whatsapp_suggestion_learning_signals_lead on whatsapp_suggestion_learning_signals(lead_id, created_at desc);
+create index if not exists idx_whatsapp_suggestion_learning_signals_decision on whatsapp_suggestion_learning_signals(decision_type, created_at desc);
 
 create table if not exists whatsapp_mobile_lab_skips (
   lead_id uuid not null references whatsapp_leads(id) on delete cascade,
@@ -427,6 +461,20 @@ create table if not exists whatsapp_priority_intelligence (
 
 create index if not exists idx_whatsapp_priority_intelligence_priority on whatsapp_priority_intelligence(priority_score desc, updated_at desc);
 create index if not exists idx_whatsapp_priority_intelligence_updated_at on whatsapp_priority_intelligence(updated_at desc);
+
+create table if not exists whatsapp_human_queries (
+  id uuid primary key default gen_random_uuid(),
+  lead_id uuid not null references whatsapp_leads(id) on delete cascade,
+  question text not null,
+  context jsonb,
+  status text not null default 'pending' check (status in ('pending', 'answered', 'cancelled')),
+  answer text,
+  created_at timestamptz not null default now(),
+  answered_at timestamptz
+);
+
+create index if not exists idx_whatsapp_human_queries_lead_status_created
+  on whatsapp_human_queries(lead_id, status, created_at desc);
 
 create table if not exists ai_insights (
   id uuid primary key default gen_random_uuid(),
@@ -1063,7 +1111,23 @@ create index if not exists idx_automation_rules_model_id on automation_rules(mod
 
 create table if not exists ml_events (
   id uuid primary key default gen_random_uuid(),
-  event_type text not null check (event_type in ('RULE_TRIGGERED', 'MODEL_PREDICTION', 'SUGGESTIONS_GENERATED', 'SUGGESTION_USED', 'SUGGESTION_REJECTED', 'AUTO_STAGE_CHANGE', 'MESSAGE_PERSISTED', 'INFERENCE')),
+  event_type text not null check (
+    event_type in (
+      'RULE_TRIGGERED',
+      'MODEL_PREDICTION',
+      'SUGGESTIONS_GENERATED',
+      'SUGGESTION_USED',
+      'SUGGESTION_REJECTED',
+      'AUTO_STAGE_CHANGE',
+      'MESSAGE_PERSISTED',
+      'INFERENCE',
+      'SUGGESTION_GENERATED',
+      'SUGGESTION_ACCEPTED',
+      'SUGGESTION_EDITED',
+      'SUGGESTION_IGNORED',
+      'MANUAL_REPLY_SENT'
+    )
+  ),
   model_key text,
   rule_id uuid references automation_rules(id) on delete set null,
   lead_id uuid,
@@ -1092,7 +1156,12 @@ alter table if exists ml_events
       'SUGGESTION_REJECTED',
       'AUTO_STAGE_CHANGE',
       'MESSAGE_PERSISTED',
-      'INFERENCE'
+      'INFERENCE',
+      'SUGGESTION_GENERATED',
+      'SUGGESTION_ACCEPTED',
+      'SUGGESTION_EDITED',
+      'SUGGESTION_IGNORED',
+      'MANUAL_REPLY_SENT'
     )
   );
 
