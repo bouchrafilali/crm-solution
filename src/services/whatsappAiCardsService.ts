@@ -65,6 +65,7 @@ export type AiCardsViewModel = {
     label: string;
     intent: string;
     messages: string[];
+    reason_short?: string;
   }>;
   brandGuardian: {
     approved: boolean;
@@ -174,7 +175,10 @@ function mapToViewModel(input: {
     replyCards: review.reply_options.map((option) => ({
       label: option.label,
       intent: option.intent,
-      messages: option.messages
+      messages: option.messages,
+      ...(typeof option.reason_short === "string" && option.reason_short.trim()
+        ? { reason_short: option.reason_short.trim() }
+        : {})
     })),
     brandGuardian: {
       approved: review.approved,

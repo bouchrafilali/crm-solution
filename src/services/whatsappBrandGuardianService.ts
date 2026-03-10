@@ -19,6 +19,7 @@ import {
 } from "./whatsappReplyGeneratorService.js";
 import { getAiProviderForStep, type AiProvider } from "./aiProviderRouting.js";
 import type { AiUsageMetrics } from "./aiPricing.js";
+import { attachReasonShortToReplyOptions } from "./whatsappSuggestionReasonService.js";
 
 const MESSAGE_MAX_LENGTH = 280;
 
@@ -26,7 +27,8 @@ const ReplyOptionSchema = z
   .object({
     label: z.string().min(1),
     intent: z.string().min(1),
-    messages: z.array(z.string().min(1).max(MESSAGE_MAX_LENGTH)).min(2).max(4)
+    messages: z.array(z.string().min(1).max(MESSAGE_MAX_LENGTH)).min(2).max(4),
+    reason_short: z.string().min(1).max(220).optional()
   })
   .strict();
 
@@ -332,7 +334,18 @@ export async function buildBrandGuardianFromContext(input: {
   });
 
   const parsed = parseBrandGuardianJson(modelResult.rawOutput);
-  const review = validateBrandGuardianReview(parsed);
+  const reviewRaw = validateBrandGuardianReview(parsed);
+  const review = {
+    ...reviewRaw,
+    reply_options: attachReasonShortToReplyOptions(reviewRaw.reply_options, {
+      language: "en",
+      stage: input.stageAnalysis.stage,
+      recommendedAction: input.strategy.recommended_action,
+      urgency: input.stageAnalysis.urgency,
+      dropoffRisk: input.stageAnalysis.dropoff_risk,
+      paymentIntent: input.stageAnalysis.payment_intent
+    })
+  };
 
   return {
     review,

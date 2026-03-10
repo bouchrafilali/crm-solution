@@ -1,6 +1,7 @@
 import { computeTimingPressure, type TimingUrgency } from "./timingPressure.js";
 import { computeLeadPriorityScore, type LeadPriorityUrgency } from "./leadPriority.js";
 import { computeSmartRelanceDelay, type LocalTimeContext } from "./smartRelanceDelay.js";
+import { buildSuggestionReasonShort } from "./whatsappSuggestionReasonService.js";
 
 export type SuggestionStage =
   | "NEW"
@@ -49,6 +50,7 @@ export type SuggestionCard = {
   title: string;
   text: string;
   reason: string;
+  reason_short?: string;
   priority: number;
   final_score?: number;
   score_debug?: {
@@ -637,6 +639,19 @@ export function buildSuggestions(input: {
     return {
       ...card,
       reason: adjustedReason,
+      reason_short: buildSuggestionReasonShort({
+        language: lang,
+        stage: effectiveStage,
+        suggestionType: card.id,
+        optionIntent: card.title,
+        optionText: card.text,
+        urgency: timing.urgency,
+        dropoffRisk: facts.risk_score,
+        paymentIntent: intents.payment_intent,
+        depositIntent: intents.deposit_intent,
+        priceIntent: intents.price_intent,
+        confirmationIntent: intents.confirmation_intent
+      }),
       timing: {
         urgency: timing.urgency,
         label: adjustedTimingLabel,

@@ -181,6 +181,7 @@ export interface SuggestedReply {
   tone: string;
   language: string;
   content: string;
+  reason_short?: string;
 }
 
 export interface StrategicAnalysis {

@@ -1,3 +1,4 @@
+import React from "react";
 import { motion } from "framer-motion";
 import { SuggestedReply } from "../types.js";
 import { cn } from "../utils.js";
@@ -20,6 +21,7 @@ export function SuggestedReplyCard({
   onAction
 }: SuggestedReplyCardProps) {
   const safeConfidence = typeof confidence === "number" ? Math.max(0, Math.min(100, Math.round(confidence))) : null;
+  const reasonShort = String(reply.reason_short || "").trim();
 
   return (
     <motion.article
@@ -45,6 +47,12 @@ export function SuggestedReplyCard({
       <p className="mt-2 text-xs text-slate-400">
         {reply.intent} • {reply.tone}
       </p>
+      {reasonShort ? (
+        <div className="mt-2 rounded-lg border border-slate-700/40 bg-slate-900/45 px-2.5 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Why</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{reasonShort}</p>
+        </div>
+      ) : null}
       <p className="ml-panel-soft mt-3 rounded-xl px-3 py-2.5 text-sm leading-relaxed text-slate-200">{reply.content}</p>
 
       {safeConfidence !== null ? (

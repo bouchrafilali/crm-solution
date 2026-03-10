@@ -16,6 +16,7 @@ type Card = {
   label: string;
   intent: string;
   messages: string[];
+  reason_short?: string;
 };
 
 type FallbackGenerationMeta = {
@@ -210,11 +211,12 @@ function normalizeTopReplyCard(value: unknown): Card | null {
   const row = value as Record<string, unknown>;
   const label = String(row.label || "").trim();
   const intent = String(row.intent || "").trim();
+  const reasonShort = String(row.reason_short || row.reasonShort || "").trim();
   const messages = Array.isArray(row.messages)
     ? row.messages.map((m) => String(m || "")).map((m) => m.trim()).filter(Boolean)
     : [];
   if (!label || !messages.length) return null;
-  return { label, intent, messages };
+  return { label, intent, messages, ...(reasonShort ? { reason_short: reasonShort } : {}) };
 }
 
 function buildFallbackCacheKey(leadId: string, latestMessage: { id: string; createdAt: string } | null): string {
@@ -573,7 +575,8 @@ export async function buildMobileLabLeadCards(
         const topReplyCard = {
           label: String(cachedTop.label || "").trim(),
           intent: String(cachedTop.intent || "").trim(),
-          messages: cachedMessages
+          messages: cachedMessages,
+          reason_short: String(cachedTop.reason_short || cachedTop.reasonShort || "").trim() || undefined
         };
         const fallbackMetaFromCache = (() => {
           const providers = cached?.providers && typeof cached.providers === "object" ? cached.providers : null;
@@ -836,7 +839,8 @@ export async function buildMobileLabLeadCards(
         ? {
             label: String(replyCards[0].label || "").trim(),
             intent: String(replyCards[0].intent || "").trim(),
-            messages: Array.isArray(replyCards[0].messages) ? replyCards[0].messages.map((m) => String(m || "")).filter(Boolean) : []
+            messages: Array.isArray(replyCards[0].messages) ? replyCards[0].messages.map((m) => String(m || "")).filter(Boolean) : [],
+            reason_short: String(replyCards[0].reason_short || "").trim() || undefined
           }
         : null;
       const status = topReplyCard ? "enriched" : "no_generation_needed";
@@ -950,7 +954,8 @@ export async function buildMobileLabLeadCards(
         ? reactivation.replyOptions.map((option) => ({
             label: String(option.label || "").trim(),
             intent: String(option.intent || "").trim(),
-            messages: Array.isArray(option.messages) ? option.messages.map((m) => String(m || "")).filter(Boolean) : []
+            messages: Array.isArray(option.messages) ? option.messages.map((m) => String(m || "")).filter(Boolean) : [],
+            reason_short: String(option.reason_short || "").trim() || undefined
           }))
         : [];
       const status = reactivation.shouldGenerate && replyCards.length ? "enriched" : "no_generation_needed";

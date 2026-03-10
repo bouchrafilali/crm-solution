@@ -70,6 +70,7 @@ import { syncZokoConversationHistory } from "../services/zokoConversationSync.js
 import { dispatchWhatsAppFollowUp } from "../services/whatsappChannelProvider.js";
 import { suggestReplyRulesFirst } from "../services/whatsappSuggestEngine.js";
 import { buildSuggestions } from "../services/suggestions.js";
+import { buildSuggestionReasonShort } from "../services/whatsappSuggestionReasonService.js";
 import { getProductPreviews } from "../services/shopifyProductPreviews.js";
 import { extractEventDateFromMessages, inferEventDateFacts } from "../services/eventDateExtractor.js";
 import { extractDestinationFromMessages } from "../services/destinationExtractor.js";
@@ -4778,6 +4779,19 @@ async function handleAiSuggestionsRegenerate(req: Request, res: Response) {
         const raw = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
         const messages = normalizeGeneratedSuggestionMessages(raw);
         const text = messages.length ? messages.join("\n\n") : String(raw.text || raw.reply || "").trim();
+        const reason_short = buildSuggestionReasonShort({
+          language: String(raw.language || "").trim().toLowerCase() || "en",
+          stage: lead.stage,
+          suggestionType: String(raw.goal || raw.intent || raw.id || ""),
+          optionIntent: String(raw.goal || raw.intent || ""),
+          optionText: text,
+          urgency: null,
+          dropoffRisk: null,
+          paymentIntent: Boolean(lead.paymentIntent),
+          depositIntent: Boolean(lead.depositIntent),
+          priceIntent: Boolean(lead.priceIntent),
+          confirmationIntent: Boolean(lead.confirmationIntent)
+        });
         let feedback_token: string | null = null;
         if (text) {
           try {
@@ -4805,6 +4819,7 @@ async function handleAiSuggestionsRegenerate(req: Request, res: Response) {
           id: String(raw.id || `ai_${idx + 1}`),
           messages,
           text,
+          reason_short,
           feedback_token
         };
       })
@@ -5886,6 +5901,23 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       .card-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
       .card-title { font-size: 14px; font-weight: 600; }
       .card-tag { font-size: 11px; color: rgba(186,230,253,.9); margin-top: 2px; }
+      .card-why {
+        margin: -2px 0 8px;
+        display: grid;
+        gap: 2px;
+      }
+      .card-why-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: rgba(191, 210, 238, .72);
+      }
+      .card-why-text {
+        font-size: 11px;
+        line-height: 1.45;
+        color: rgba(214, 229, 249, .86);
+      }
       .card-zap {
         width: 32px; height: 32px; border-radius: 14px;
         border: 1px solid rgba(103,232,249,.2);
@@ -6925,7 +6957,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   id: safeLeadId + "-top-card",
                   title: clampText(String(topReplyCard.label || "AI card")),
                   tag: feedTypeLabel[feedType],
-                  messages: topMessages
+                  messages: topMessages,
+                  reason_short: String(topReplyCard.reason_short || "").trim()
                 }
               ]
             : [],
@@ -6944,11 +6977,15 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           .map((card, index) => {
             const topMessages = card && Array.isArray(card.messages) ? ensureBubbleSet(card.messages) : [];
             if (!topMessages.length) return null;
+            const reasonShort = String(
+              (card && (card.reason_short || card.reasonShort || card.reason)) || ""
+            ).trim();
             return {
               id: String(leadId || "") + "-on-demand-card-" + String(index + 1),
               title: clampText(String((card && card.label) || "AI card")),
               tag,
-              messages: topMessages
+              messages: topMessages,
+              reason_short: reasonShort
             };
           })
           .filter(Boolean);
@@ -9119,6 +9156,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                   {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
                   ? selectedLead.suggestions.map((card) => {
                       const selectedForCard = selectedMessagesForCard(card);
+                      const reasonShort = String(card.reason_short || "").trim();
                       const actionLane = buildActionLaneSummary(selectedLead);
                       return (
                         <div key={card.id} className="card">
@@ -9149,6 +9187,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                             </div>
                             <div className="card-zap">⚡</div>
                           </div>
+                          {reasonShort ? (
+                            <div className="card-why">
+                              <span className="card-why-label">Why</span>
+                              <span className="card-why-text">{reasonShort}</span>
+                            </div>
+                          ) : null}
                           <div className="snips">
                             {normalizeBubbleSet(card.messages).map((msg, i) => (
                               <div
@@ -9403,6 +9447,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                     {suggestions.length
                       ? suggestions.map((card) => {
                         const selectedForCard = selectedStreamMessagesForCard(safeLeadId, card);
+                        const reasonShort = String(card.reason_short || "").trim();
                         return (
                           <div key={card.id} className="card">
                             <div className="card-top">
@@ -9412,6 +9457,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               </div>
                               <div className="card-zap">⚡</div>
                             </div>
+                            {reasonShort ? (
+                              <div className="card-why">
+                                <span className="card-why-label">Why</span>
+                                <span className="card-why-text">{reasonShort}</span>
+                              </div>
+                            ) : null}
                             <div className="snips">
                               {normalizeBubbleSet(card.messages).map((msg, i) => (
                                 <div
@@ -9663,6 +9714,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
                                 ? selectedLead.suggestions.map((card) => {
                                   const selectedForCard = selectedMessagesForCard(card);
+                                  const reasonShort = String(card.reason_short || "").trim();
                                   const actionLane = buildActionLaneSummary(selectedLead);
                                   return (
                                     <div key={card.id} className="card">
@@ -9693,6 +9745,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                         </div>
                                         <div className="card-zap">⚡</div>
                                       </div>
+                                      {reasonShort ? (
+                                        <div className="card-why">
+                                          <span className="card-why-label">Why</span>
+                                          <span className="card-why-text">{reasonShort}</span>
+                                        </div>
+                                      ) : null}
                                       <div className="snips">
                                         {normalizeBubbleSet(card.messages).map((msg, i) => (
                                           <div
@@ -9877,6 +9935,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                               {selectedLead && Array.isArray(selectedLead.suggestions) && selectedLead.suggestions.length
                                 ? selectedLead.suggestions.map((card) => {
                                   const selectedForCard = selectedMessagesForCard(card);
+                                  const reasonShort = String(card.reason_short || "").trim();
                                   const actionLane = buildActionLaneSummary(selectedLead);
                                   return (
                                     <div key={card.id} className="card">
@@ -9907,6 +9966,12 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
                                         </div>
                                         <div className="card-zap">⚡</div>
                                       </div>
+                                      {reasonShort ? (
+                                        <div className="card-why">
+                                          <span className="card-why-label">Why</span>
+                                          <span className="card-why-text">{reasonShort}</span>
+                                        </div>
+                                      ) : null}
                                       <div className="snips">
                                         {normalizeBubbleSet(card.messages).map((msg, i) => (
                                           <div
@@ -15109,7 +15174,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
           const id = String(card && card.id ? card.id : "");
           const title = String(card && card.title ? card.title : "Suggestion");
           const text = String(card && card.text ? card.text : "");
-          const reason = String(card && card.reason ? card.reason : "");
+          const reason = String(card && (card.reason_short || card.reason) ? (card.reason_short || card.reason) : "");
           const priority = Number(card && card.priority != null ? card.priority : 0);
 
           const timing = card && card.timing ? card.timing : null;

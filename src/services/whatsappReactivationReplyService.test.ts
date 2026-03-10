@@ -186,5 +186,6 @@ test("successful validated response", async () => {
   assert.equal(result.reactivationDecision.shouldReactivate, true);
   assert.equal(result.replyOptions.length, 3);
   assert.equal(result.replyOptions[2].messages.length, 3);
+  assert.ok(String(result.replyOptions[0].reason_short || "").length > 10);
   assert.equal(result.provider, "openai");
 });

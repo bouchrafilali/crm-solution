@@ -4,6 +4,7 @@ import { sanitizeForPrompt } from "./aiTextService.js";
 import { buildLeadTranscript, type LeadTranscriptResult } from "./whatsappTranscriptFormatter.js";
 import { buildAiCardsViewModel, type AiCardsViewModel } from "./whatsappAiCardsService.js";
 import { buildLeadReactivationCheck, type ReactivationDecision } from "./whatsappReactivationEngineService.js";
+import { attachReasonShortToReplyOptions } from "./whatsappSuggestionReasonService.js";
 
 const MESSAGE_MAX_LENGTH = 280;
 
@@ -11,7 +12,8 @@ const ReactivationReplyOptionSchema = z
   .object({
     label: z.string().min(1),
     intent: z.string().min(1),
-    messages: z.array(z.string().min(1).max(MESSAGE_MAX_LENGTH)).min(2).max(3)
+    messages: z.array(z.string().min(1).max(MESSAGE_MAX_LENGTH)).min(2).max(3),
+    reason_short: z.string().min(1).max(220).optional()
   })
   .strict();
 
@@ -271,7 +273,13 @@ export async function buildReactivationRepliesFromContext(input: {
   return {
     shouldGenerate: true,
     reactivationDecision: input.reactivationDecision,
-    replyOptions: validated.replyOptions,
+    replyOptions: attachReasonShortToReplyOptions(validated.replyOptions, {
+      language: "en",
+      stage: input.reactivationDecision.stalledStage,
+      urgency: input.reactivationDecision.reactivationPriority,
+      dropoffRisk: "high",
+      reactivation: true
+    }),
     provider: modelResult.provider,
     model: modelResult.model,
     timestamp: new Date().toISOString()

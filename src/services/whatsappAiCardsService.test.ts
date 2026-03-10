@@ -105,7 +105,8 @@ const brandFixture: BrandGuardianResult = {
       {
         label: "Option 1",
         intent: "Direct close",
-        messages: ["Parfait, nous pouvons confirmer aujourd'hui.", "Je vous transmets les coordonnées de virement."]
+        messages: ["Parfait, nous pouvons confirmer aujourd'hui.", "Je vous transmets les coordonnées de virement."],
+        reason_short: "The client is ready to move forward, so this option supports reservation."
       },
       {
         label: "Option 2",
@@ -221,6 +222,7 @@ test("correct response mapping shape", async () => {
   assert.equal(vm.facts.paymentMethodPreference, "bank transfer");
   assert.equal(vm.strategy.primaryGoal, "Secure payment with a clear next step.");
   assert.equal(vm.replyCards[0].messages[0], "Parfait, nous pouvons confirmer aujourd'hui.");
+  assert.equal(vm.replyCards[0].reason_short, "The client is ready to move forward, so this option supports reservation.");
   assert.equal(vm.brandGuardian.issues.length, 0);
   assert.equal(vm.meta.timestamp, "2026-03-07T10:00:03.000Z");
 });

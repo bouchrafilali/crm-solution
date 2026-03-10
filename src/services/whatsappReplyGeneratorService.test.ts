@@ -194,6 +194,8 @@ test("successful validated response", async () => {
 
   assert.equal(result.replyOptions.reply_options.length, 3);
   assert.equal(result.replyOptions.reply_options[0].messages.length, 3);
+  assert.ok(String(result.replyOptions.reply_options[0].reason_short || "").length > 12);
+  assert.equal(String(result.replyOptions.reply_options[0].reason_short || "").includes(". "), false);
   assert.equal(result.strategy.recommended_action, "reduce_friction_to_payment");
   assert.equal(result.stageAnalysis.stage, "QUALIFIED");
   assert.equal(result.provider, "openai");
