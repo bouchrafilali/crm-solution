@@ -292,6 +292,19 @@ create table if not exists whatsapp_suggestion_feedback (
   updated_at timestamptz not null default now()
 );
 
+alter table whatsapp_suggestion_feedback add column if not exists conversation_id uuid references whatsapp_leads(id) on delete set null;
+alter table whatsapp_suggestion_feedback add column if not exists operator_id text;
+alter table whatsapp_suggestion_feedback add column if not exists suggestion_status text not null default 'GENERATED';
+alter table whatsapp_suggestion_feedback add column if not exists stage_before_reply text;
+alter table whatsapp_suggestion_feedback add column if not exists stage_after_reply text;
+alter table whatsapp_suggestion_feedback add column if not exists was_ai_generated boolean not null default true;
+alter table whatsapp_suggestion_feedback add column if not exists final_human_text text;
+alter table whatsapp_suggestion_feedback add column if not exists send_message_id uuid references whatsapp_lead_messages(id) on delete set null;
+alter table whatsapp_suggestion_feedback add column if not exists generated_at timestamptz not null default now();
+alter table whatsapp_suggestion_feedback add column if not exists acted_at timestamptz;
+alter table whatsapp_suggestion_feedback add column if not exists outcome_status text;
+alter table whatsapp_suggestion_feedback add column if not exists outcome_evaluated_at timestamptz;
+
 create index if not exists idx_whatsapp_suggestion_feedback_lead on whatsapp_suggestion_feedback(lead_id, created_at desc);
 create index if not exists idx_whatsapp_suggestion_feedback_status on whatsapp_suggestion_feedback(review_status, created_at desc);
 create index if not exists idx_whatsapp_suggestion_feedback_outcome on whatsapp_suggestion_feedback(outcome_label, created_at desc);
