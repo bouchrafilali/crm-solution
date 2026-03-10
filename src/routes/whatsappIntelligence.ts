@@ -6234,7 +6234,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         color: #0f172a;
       }
       .bubble .text { font-size: 14px; line-height: 1.45; }
-      .bubble .text .line { white-space: pre-wrap; word-break: break-word; }
+      .bubble .text .line { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; min-height: 0; }
+      .bubble .text .line-empty { min-height: .7em; }
       .bubble .text a {
         color: inherit;
         text-decoration: underline;
@@ -6263,10 +6264,17 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         border-radius: 10px;
         padding: 7px 9px;
         margin-bottom: 8px;
-        cursor: pointer;
       }
+      .quote-box-link { cursor: pointer; }
       .quote-box .q-author { font-size: 11px; color: rgba(179, 218, 255, .92); margin-bottom: 4px; }
-      .quote-box .q-text { font-size: 12px; color: rgba(226, 240, 255, .84); }
+      .quote-box .q-text {
+        font-size: 12px;
+        color: rgba(226, 240, 255, .84);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
       .media-wrap {
         border-radius: 12px;
         overflow: hidden;
@@ -7008,8 +7016,44 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         return Number.isFinite(ts) ? ts : fallback;
       }
 
+      function normalizeReplySenderName(raw) {
+        const value = String(raw || "").trim();
+        if (!value) return "";
+        const lower = value.toLowerCase();
+        if (["you", "me", "moi"].includes(lower)) return "You";
+        if (["client", "customer"].includes(lower)) return "Client";
+        return value.length > 36 ? value.slice(0, 33) + "..." : value;
+      }
+
+      function cleanReplyPreviewText(raw) {
+        return String(raw || "")
+          .replace(/\\[[^\\]]+\\]/g, " ")
+          .replace(/https?:\\/\\/\\S+/g, " ")
+          .replace(/\\s+/g, " ")
+          .trim()
+          .slice(0, 180);
+      }
+
+      function normalizeMessageTextForBubble(raw) {
+        const base = String(raw || "").replace(/\\r\\n?/g, "\\n");
+        const compacted = base
+          .replace(/[\\t ]+$/gm, "")
+          .replace(/\\n{3,}/g, "\\n\\n")
+          .trimEnd();
+        return compacted;
+      }
+
       function mapMessagesFromApi(items) {
-        return (Array.isArray(items) ? items : []).map((item, index) => {
+        const rawItems = Array.isArray(items) ? items : [];
+        const byId = new Map();
+        const byExternalId = new Map();
+        rawItems.forEach((row) => {
+          const id = String((row && row.id) || "").trim();
+          if (id) byId.set(id, row);
+          const externalId = String((row && row.external_id) || "").trim();
+          if (externalId) byExternalId.set(externalId, row);
+        });
+        return rawItems.map((item, index) => {
           const isBrand = String((item && item.direction) || "").toUpperCase() === "OUT";
           const metadata = item && item.metadata && typeof item.metadata === "object" ? item.metadata : null;
           const rawType = String(
@@ -7017,7 +7061,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             (metadata && (metadata.message_type || metadata.type || metadata.media_type)) ||
             "text"
           ).trim().toLowerCase();
-          const textRaw = String((item && item.text) || "");
+          const textRaw = normalizeMessageTextForBubble((item && item.text) || "");
           const textUrlMatch = textRaw.match(/https?:\\/\\/[^\\s<>"')]+/i);
           const mediaUrl = String(
             (metadata && (metadata.media_url || metadata.mediaUrl || metadata.url || metadata.link || metadata.file_url || metadata.fileUrl || metadata.image_url)) ||
@@ -7025,12 +7069,50 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             ""
           ).trim();
           const mimeType = String((metadata && (metadata.mime_type || metadata.mimeType || metadata.content_type)) || "").trim().toLowerCase();
-          const hasReply = item && item.reply_to && typeof item.reply_to === "object";
-          const replyTo = hasReply
+          const replyToRecord =
+            (item && item.reply_to && typeof item.reply_to === "object" ? item.reply_to : null) ||
+            (metadata && metadata.reply_to && typeof metadata.reply_to === "object" ? metadata.reply_to : null) ||
+            null;
+          const quotedRecord =
+            metadata && metadata.quoted_message && typeof metadata.quoted_message === "object"
+              ? metadata.quoted_message
+              : null;
+          const directReplyId = String(
+            (metadata && (metadata.reply_to_message_id || metadata.reply_message_id || metadata.parent_message_id)) ||
+              (replyToRecord && (replyToRecord.id || replyToRecord.message_id || replyToRecord.messageId)) ||
+              ""
+          ).trim();
+          const directReplyExternalId = String(
+            (metadata && (metadata.reply_to_external_id || metadata.reply_external_id || metadata.reply_to)) ||
+              (item && item.reply_to_external_id) ||
+              ""
+          ).trim();
+          const targetRaw =
+            (directReplyId && byId.get(directReplyId)) ||
+            (directReplyExternalId && byExternalId.get(directReplyExternalId)) ||
+            null;
+          const fallbackReplyText = String(
+            (replyToRecord && (replyToRecord.text || replyToRecord.body)) ||
+              (quotedRecord && (quotedRecord.text || quotedRecord.body)) ||
+              (metadata && (metadata.reply_to_text || metadata.reply_text || metadata.quoted_text)) ||
+              ""
+          ).trim();
+          const previewText = cleanReplyPreviewText(targetRaw ? targetRaw.text : fallbackReplyText);
+          const targetDirection = targetRaw && String(targetRaw.direction || "").toUpperCase() === "OUT" ? "OUT" : "IN";
+          const replySenderName =
+            normalizeReplySenderName(
+              (replyToRecord && (replyToRecord.sender_name || replyToRecord.sender || replyToRecord.author)) ||
+                (quotedRecord && (quotedRecord.sender_name || quotedRecord.sender || quotedRecord.author || quotedRecord.from)) ||
+                (metadata && (metadata.reply_to_sender_name || metadata.reply_sender_name || metadata.reply_author || metadata.reply_from)) ||
+                ""
+            ) ||
+            (targetRaw ? (targetDirection === "OUT" ? "You" : "Client") : (isBrand ? "Client" : "You"));
+          const replyTargetId = String((targetRaw && targetRaw.id) || directReplyId || "").trim();
+          const replyTo = (previewText || replyTargetId)
             ? {
-                id: String(item.reply_to.id || "").trim(),
-                senderName: String(item.reply_to.sender_name || "").trim() || (isBrand ? "Client" : "You"),
-                text: String(item.reply_to.text || "").trim()
+                id: replyTargetId,
+                senderName: replySenderName,
+                text: previewText || "Original message"
               }
             : null;
           const reactionsRaw =
@@ -7084,6 +7166,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
             createdAt: String((item && item.created_at) || ""),
             kind,
             messageType: rawType,
+            repliedToMessageId: replyTo ? String(replyTo.id || "") : "",
             mediaUrl,
             thumbnailUrl: String((metadata && (metadata.thumbnail_url || metadata.preview_url || metadata.poster_url)) || "").trim(),
             caption: String((metadata && metadata.caption) || "").trim(),
@@ -7593,7 +7676,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
       }
 
       function renderTextWithLinks(text) {
-        const source = String(text || "");
+        const source = normalizeMessageTextForBubble(text);
+        if (!source) return [<div key="line-empty" className="line line-empty"></div>];
         const lines = source.split(/\\n/);
         return lines.map((line, lineIndex) => {
           const parts = [];
@@ -7609,7 +7693,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           if (cursor < line.length) parts.push({ type: "text", value: line.slice(cursor) });
           if (!parts.length) parts.push({ type: "text", value: "" });
           return (
-            <div key={"line-" + lineIndex} className="line">
+            <div key={"line-" + lineIndex} className={"line" + (line === "" ? " line-empty" : "")}>
               {parts.map((part, idx) => (
                 part.type === "url"
                   ? <a key={"p-" + lineIndex + "-" + idx} href={part.value} target="_blank" rel="noreferrer noopener">{part.value}</a>
@@ -7782,8 +7866,9 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
               <div className={"bubble " + (own ? "brand" : "client")}>
                 {message.replyTo && String(message.replyTo.text || "").trim() ? (
                   <div
-                    className="quote-box"
+                    className={"quote-box" + (message.replyTo.id ? " quote-box-link" : "")}
                     onClick={() => {
+                      if (!message.replyTo.id) return;
                       if (opts && typeof opts.onJumpToMessage === "function") opts.onJumpToMessage(message.replyTo.id);
                     }}
                   >
@@ -8561,34 +8646,8 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
           return "Envoi WhatsApp échoué: " + raw;
         }
 
-        async function createSuggestionFeedbackPayload(leadId, cardId, cardText) {
-          const safeLeadId = String(leadId || "").trim();
-          const safeCardId = String(cardId || "").trim();
-          const safeText = String(cardText || "").trim();
-          if (!safeLeadId || !safeCardId || !safeText) return null;
-          try {
-            const payload = await fetchJson("/api/whatsapp/suggestions/cards/feedback-draft", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                leadId: safeLeadId,
-                cardId: safeCardId,
-                cardText: safeText
-              })
-            });
-            const token = String(payload && payload.feedback_token ? payload.feedback_token : "").trim();
-            if (!token) return null;
-            return {
-              id: token,
-              source: "manual",
-              suggestion_type: safeCardId,
-              suggested_text: safeText,
-              accepted: true
-            };
-          } catch (error) {
-            console.warn("[mobile-lab] feedback draft create failed", { leadId: safeLeadId, cardId: safeCardId, error });
-            return null;
-          }
+        async function createSuggestionFeedbackPayload() {
+          return null;
         }
 
         function appendOptimisticOutboundMessages(leadId, lines) {
@@ -12421,6 +12480,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
     let productParsingOk = true;
     let productPreviewsMap = {};
     let pendingSuggestionFeedback = null;
+    const ENABLE_AI_SUGGESTIONS_UI = false;
     window.selectedLeadId = selectedLeadId;
 
     const statusLineEl = document.getElementById("statusLine");
@@ -12546,6 +12606,14 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
     const aiInsightDrawerCloseBtnEl = document.getElementById("aiInsightDrawerCloseBtn");
     const aiInsightDrawerUpdatedAtEl = document.getElementById("aiInsightDrawerUpdatedAt");
     const aiInsightDrawerContentEl = document.getElementById("aiInsightDrawerContent");
+
+    if (!ENABLE_AI_SUGGESTIONS_UI) {
+      if (aiCardsSectionEl instanceof HTMLElement) aiCardsSectionEl.style.display = "none";
+      if (conversationGenerateAiSuggestionsBtnEl instanceof HTMLButtonElement) {
+        conversationGenerateAiSuggestionsBtnEl.style.display = "none";
+        conversationGenerateAiSuggestionsBtnEl.disabled = true;
+      }
+    }
     const auditPanelEl = document.getElementById("auditPanel");
     const auditCopyBtnEl = document.getElementById("auditCopyBtn");
     const suggestionTemplateOptionsEl = document.getElementById("suggestionTemplateOptions");
@@ -12761,6 +12829,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
     }
 
     function setAiActiveTab(tab) {
+      if (!ENABLE_AI_SUGGESTIONS_UI) return;
       aiActiveTab = tab === "flow" ? "flow" : "cards";
       if (aiCardsPanelEl) aiCardsPanelEl.classList.toggle("active", aiActiveTab === "cards");
       if (agentFlowPanelEl) agentFlowPanelEl.classList.toggle("active", aiActiveTab === "flow");
@@ -12884,6 +12953,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
     }
 
     async function loadAiFlowForLead(leadId, opts) {
+      if (!ENABLE_AI_SUGGESTIONS_UI) return;
       const options = opts && typeof opts === "object" ? opts : {};
       if (!leadId) {
         currentAiFlow = null;
@@ -12936,6 +13006,10 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
 
     function renderAiCards() {
       if (!aiCardsSectionEl || !aiCardsListEl) return;
+      if (!ENABLE_AI_SUGGESTIONS_UI) {
+        aiCardsSectionEl.style.display = "none";
+        return;
+      }
       renderAgentStatusPill();
       if (!selectedLead()) {
         aiCardsSectionEl.style.display = "none";
@@ -13255,6 +13329,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
     }
 
     async function loadAiLatestForLead(leadId, opts) {
+      if (!ENABLE_AI_SUGGESTIONS_UI) return;
       // Manual verification checklist:
       // 1) Open a lead, wait for AI cards, click "Why this?" and verify stage/signals/missing/risk/metadata render.
       // 2) Click "Refresh" in drawer and confirm cards + drawer update without closing.
@@ -15327,28 +15402,9 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         return;
       }
       if (!(conversationTextEl instanceof HTMLTextAreaElement)) return;
-      const lead = selectedLead();
-      let feedbackToken = "";
-      if (lead && lead.id) {
-        try {
-          const payload = await fetchJson("/api/whatsapp/suggestions/cards/feedback-draft" + qs, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              leadId: lead.id,
-              cardId: id,
-              cardText: text
-            })
-          });
-          feedbackToken = payload && payload.feedback_token ? String(payload.feedback_token) : "";
-        } catch {
-          feedbackToken = "";
-        }
-      }
       conversationTextEl.value = text;
       conversationTextEl.focus();
       pendingSuggestionFeedback = {
-        id: feedbackToken,
         source: "manual",
         suggestion_type: id,
         suggested_text: text
@@ -17126,7 +17182,6 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         );
         renderSuggestionTemplateOptions(payload && Array.isArray(payload.template_options) ? payload.template_options : []);
         pendingSuggestionFeedback = {
-          id: payload && payload.feedback_token ? String(payload.feedback_token) : "",
           source: "rules_suggest_reply",
           suggestion_type: String(payload && payload.suggestion_type ? payload.suggestion_type : ""),
           suggested_text: text
@@ -17171,7 +17226,6 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         const suggestedMessage = payload.next_question || payload.suggested_message || "";
         pendingSuggestionFeedback = suggestedMessage
           ? {
-              id: payload && payload.feedback_token ? String(payload.feedback_token) : "",
               source: "ai_classify",
               suggestion_type: String(payload && payload.suggestion_type ? payload.suggestion_type : "CLASSIFY"),
               suggested_text: String(suggestedMessage || "")
@@ -17273,7 +17327,6 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         if (followupBoxEl) followupBoxEl.textContent = String(payload.text || "No suggestion");
         pendingSuggestionFeedback = payload && payload.text
           ? {
-              id: payload.feedback_token ? String(payload.feedback_token) : "",
               source: "ai_followup",
               suggestion_type: String(type || "FOLLOWUP"),
               suggested_text: String(payload.text || "")
@@ -18377,6 +18430,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
 
     if (conversationGenerateAiSuggestionsBtnEl) {
       conversationGenerateAiSuggestionsBtnEl.addEventListener("click", async () => {
+        if (!ENABLE_AI_SUGGESTIONS_UI) return;
         logClicked("Generate AI Suggestions");
         const lead = selectedLead();
         if (!lead || !lead.id) {
@@ -19207,17 +19261,6 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
             : "text";
         if (!text) return;
         try {
-          const feedback = pendingSuggestionFeedback && pendingSuggestionFeedback.id
-            ? {
-                id: String(pendingSuggestionFeedback.id),
-                source: String(pendingSuggestionFeedback.source || "manual"),
-                suggestion_type: String(pendingSuggestionFeedback.suggestion_type || ""),
-                suggested_text: String(pendingSuggestionFeedback.suggested_text || ""),
-                accepted:
-                  String((pendingSuggestionFeedback.suggested_text || "").trim()).toLowerCase() ===
-                  String((text || "").trim()).toLowerCase()
-              }
-            : undefined;
           await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(lead.id) + "/messages" + qs, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -19226,8 +19269,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
               text,
               provider: "manual",
               message_type: messageType,
-              send_whatsapp: true,
-              suggestion_feedback: feedback
+              send_whatsapp: true
             })
           });
           if (conversationTextEl instanceof HTMLTextAreaElement) conversationTextEl.value = "";
