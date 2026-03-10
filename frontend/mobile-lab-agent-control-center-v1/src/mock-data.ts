@@ -10,7 +10,7 @@ import {
   StrategicAnalysis,
   SuggestedReply
 } from "./types.js";
-import { generateStrategicAdvisorAnalysisRecord, StrategicAdvisorContext } from "./strategicAdvisorAgentV1.js";
+import { generateStrategicAdvisorAnalysisRecord, StrategicAdvisorContext } from "./strategicAdvisorAgentV1";
 
 const agents: Agent[] = [
   {

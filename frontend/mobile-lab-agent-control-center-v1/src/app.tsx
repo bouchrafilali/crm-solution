@@ -10,7 +10,7 @@ import { LeadWorkspacePage } from "./pages/LeadWorkspacePage.js";
 import { ApprovalsPage } from "./pages/ApprovalsPage.js";
 import { LearningPage } from "./pages/LearningPage.js";
 import { SystemArchitectureMapPage } from "./pages/SystemArchitectureMapPage.js";
-import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1.js";
+import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1";
 import { cn, initials } from "./utils.js";
 
 interface SidebarItem {
