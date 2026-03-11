@@ -320,11 +320,50 @@ function renderAgentControlCenterShell(): string {
   <body>
     <div id="root">${
       assetsLoaded
-        ? ""
+        ? `<div id="acc-boot-fallback" style="padding:24px;font-family:Sora,system-ui,sans-serif;color:#e4e4e7;background:#07090f;min-height:100vh;">
+             <div style="max-width:840px;margin:0 auto;">
+               <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#67e8f9;margin:0 0 8px 0;">Mobile-Lab</p>
+               <h1 style="font-size:22px;line-height:1.3;margin:0 0 8px 0;">Agent Control Center Booting…</h1>
+               <p id="acc-boot-fallback-message" style="margin:0;color:#9ca3af;font-size:14px;">
+                 Initializing frontend modules. If this message stays visible, a runtime bootstrap error occurred.
+               </p>
+             </div>
+           </div>`
         : `<div style="padding:24px;font-family:Sora,system-ui,sans-serif;color:#e4e4e7;background:#07090f;min-height:100vh;">
              Agent Control Center assets are missing. Build frontend/mobile-lab-agent-control-center-v1 before loading this route.
            </div>`
     }</div>
+
+    <script>
+      (function () {
+        var fallback = document.getElementById("acc-boot-fallback");
+        var fallbackMessage = document.getElementById("acc-boot-fallback-message");
+        function showError(message) {
+          if (!fallback || !fallbackMessage) return;
+          fallback.style.display = "block";
+          fallbackMessage.textContent = message;
+          fallbackMessage.style.color = "#fecaca";
+        }
+        window.addEventListener("error", function (event) {
+          var reason = event && event.message ? event.message : "Unknown runtime error";
+          showError("Frontend failed to start: " + reason);
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          var reason = event && event.reason ? String(event.reason) : "Unknown promise rejection";
+          showError("Frontend failed to start: " + reason);
+        });
+        setTimeout(function () {
+          if (window.__ACC_BOOTED__) {
+            if (fallback) fallback.style.display = "none";
+            return;
+          }
+          var message = window.__ACC_BOOT_ERROR__
+            ? "Frontend failed to start: " + window.__ACC_BOOT_ERROR__
+            : "Frontend did not finish booting. Open browser console and check failed module/script requests.";
+          showError(message);
+        }, 3500);
+      })();
+    </script>
 
     <script type="importmap">
       {
