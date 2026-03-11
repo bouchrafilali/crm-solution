@@ -11,9 +11,10 @@ import { ApprovalsPage } from "./pages/ApprovalsPage.js";
 import { LearningPage } from "./pages/LearningPage.js";
 import { SystemArchitectureMapPage } from "./pages/SystemArchitectureMapPage.js";
 import { SystemBrainPage } from "./pages/SystemBrainPage.js";
-import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1";
+import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1.js";
 import { cn, initials } from "./utils.js";
 import { systemBrainMock } from "./system-brain-mock.js";
+import { AppErrorBoundary } from "./components/AppErrorBoundary.js";
 
 interface SidebarItem {
   id: Exclude<NavPage, "lead-workspace">;
@@ -47,7 +48,7 @@ function isNavPage(value: string): value is NavPage {
 
 function readPageFromHash(): NavPage | null {
   if (typeof window === "undefined") return null;
-  const hashValue = window.location.hash.replace(/^#/, "");
+  const hashValue = window.location.hash.replace(/^#/, "").replace(/^\//, "");
   return isNavPage(hashValue) ? hashValue : null;
 }
 
@@ -92,7 +93,7 @@ export function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const targetHash = `#${activePage}`;
+    const targetHash = `#/${activePage}`;
     if (window.location.hash !== targetHash) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${targetHash}`);
     }
@@ -200,30 +201,32 @@ export function App() {
             </select>
             </div>
 
-            <AnimatePresence mode="wait">
-              {activePage === "dashboard" ? <DashboardPage key="page-dashboard" data={{ ...mockData, approvals }} onOpenLead={openLeadWorkspace} /> : null}
-              {activePage === "agents" ? <AgentsPage key="page-agents" agents={mockData.agents} /> : null}
-              {activePage === "runs" ? (
-                <RunsPage key="page-runs" runs={mockData.runs} leads={mockData.leads} agents={mockData.agents} onOpenLead={openLeadWorkspace} />
-              ) : null}
-              {activePage === "leads" ? <LeadsPage key="page-leads" leads={mockData.leads} onOpenLead={openLeadWorkspace} /> : null}
-              {activePage === "lead-workspace" && selectedLead && selectedLeadAnalysis ? (
-                <LeadWorkspacePage
-                  key={`page-workspace-${selectedLead.id}`}
-                  lead={selectedLead}
-                  analysis={selectedLeadAnalysis}
-                  suggestedReplies={selectedLeadReplies}
-                  runs={mockData.runs}
-                  learningEvents={mockData.learningEvents}
-                  messages={mockData.conversations}
-                  onBackToLeads={() => navigateToPage("leads")}
-                />
-              ) : null}
-              {activePage === "approvals" ? <ApprovalsPage key="page-approvals" approvals={approvals} onDecision={handleApprovalDecision} /> : null}
-              {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={mockData.learningEvents} /> : null}
-              {activePage === "system-architecture-map" ? <SystemArchitectureMapPage key="page-system-architecture-map" /> : null}
-              {activePage === "system-brain" ? <SystemBrainPage key="page-system-brain" data={systemBrainMock} /> : null}
-            </AnimatePresence>
+            <AppErrorBoundary onReset={() => navigateToPage("dashboard")}>
+              <AnimatePresence mode="wait">
+                {activePage === "dashboard" ? <DashboardPage key="page-dashboard" data={{ ...mockData, approvals }} onOpenLead={openLeadWorkspace} /> : null}
+                {activePage === "agents" ? <AgentsPage key="page-agents" agents={mockData.agents} /> : null}
+                {activePage === "runs" ? (
+                  <RunsPage key="page-runs" runs={mockData.runs} leads={mockData.leads} agents={mockData.agents} onOpenLead={openLeadWorkspace} />
+                ) : null}
+                {activePage === "leads" ? <LeadsPage key="page-leads" leads={mockData.leads} onOpenLead={openLeadWorkspace} /> : null}
+                {activePage === "lead-workspace" && selectedLead && selectedLeadAnalysis ? (
+                  <LeadWorkspacePage
+                    key={`page-workspace-${selectedLead.id}`}
+                    lead={selectedLead}
+                    analysis={selectedLeadAnalysis}
+                    suggestedReplies={selectedLeadReplies}
+                    runs={mockData.runs}
+                    learningEvents={mockData.learningEvents}
+                    messages={mockData.conversations}
+                    onBackToLeads={() => navigateToPage("leads")}
+                  />
+                ) : null}
+                {activePage === "approvals" ? <ApprovalsPage key="page-approvals" approvals={approvals} onDecision={handleApprovalDecision} /> : null}
+                {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={mockData.learningEvents} /> : null}
+                {activePage === "system-architecture-map" ? <SystemArchitectureMapPage key="page-system-architecture-map" /> : null}
+                {activePage === "system-brain" ? <SystemBrainPage key="page-system-brain" data={systemBrainMock} /> : null}
+              </AnimatePresence>
+            </AppErrorBoundary>
           </div>
         </main>
       </div>
