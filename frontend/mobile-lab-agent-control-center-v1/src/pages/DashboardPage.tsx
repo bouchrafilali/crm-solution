@@ -20,6 +20,8 @@ const cardAnimation = {
 };
 
 export function DashboardPage({ data, onOpenLead }: DashboardPageProps) {
+  const leadById = new Map(data.leads.map((lead) => [lead.id, lead]));
+  const agentById = new Map(data.agents.map((agent) => [agent.id, agent]));
   const activeAgents = data.agents.filter((agent) => agent.status === "running").length;
   const pendingApprovals = data.approvals.filter((approval) => approval.decision === "pending").length;
   const highPriorityLeads = data.leads.filter((lead) => lead.priorityScore >= 85).length;
@@ -70,7 +72,7 @@ export function DashboardPage({ data, onOpenLead }: DashboardPageProps) {
             action={<StatusBadge value={blockedFlows > 0 ? "blocked" : "success"} />}
           />
 
-          <ActivityFeed events={data.activityFeed} runs={data.runs} onOpenLead={onOpenLead} />
+          <ActivityFeed events={data.activityFeed} runs={data.runs} leads={data.leads} agents={data.agents} onOpenLead={onOpenLead} />
         </motion.section>
 
         <div className="space-y-4">
@@ -78,7 +80,13 @@ export function DashboardPage({ data, onOpenLead }: DashboardPageProps) {
             <SectionHeader title="Pending Approvals Snapshot" subtitle="Highest urgency approvals requiring immediate operator review." />
             <div className="space-y-2">
               {criticalApprovals.map((approval) => (
-                <ApprovalMiniCard key={approval.id} item={approval} onOpenLead={onOpenLead} />
+                <ApprovalMiniCard
+                  key={approval.id}
+                  item={approval}
+                  leadName={leadById.get(approval.leadId)?.name}
+                  requestedByName={agentById.get(approval.requestedByAgentId)?.name}
+                  onOpenLead={onOpenLead}
+                />
               ))}
             </div>
           </motion.section>
@@ -87,7 +95,7 @@ export function DashboardPage({ data, onOpenLead }: DashboardPageProps) {
             <SectionHeader title="Recent Learning Events" subtitle="Latest AI-to-human corrections and quality deltas." />
             <div className="space-y-2">
               {recentLearning.map((event) => (
-                <LearningEventCard key={event.id} event={event} onOpenLead={onOpenLead} />
+                <LearningEventCard key={event.id} event={event} leadName={leadById.get(event.leadId)?.name} onOpenLead={onOpenLead} />
               ))}
             </div>
           </motion.section>

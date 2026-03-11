@@ -85,27 +85,27 @@ export function App() {
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [approvals, setApprovals] = useState<ApprovalItem[]>(mockData.approvals);
 
-  const agents = useMemo(() => (Array.isArray(liveData?.agents) && liveData.agents.length ? liveData.agents : mockData.agents), [liveData]);
-  const leads = useMemo(() => (Array.isArray(liveData?.leads) && liveData.leads.length ? liveData.leads : mockData.leads), [liveData]);
-  const runs = useMemo(() => (Array.isArray(liveData?.runs) && liveData.runs.length ? liveData.runs : mockData.runs), [liveData]);
+  const agents = useMemo(() => (Array.isArray(liveData?.agents) ? liveData.agents : mockData.agents), [liveData]);
+  const leads = useMemo(() => (Array.isArray(liveData?.leads) ? liveData.leads : mockData.leads), [liveData]);
+  const runs = useMemo(() => (Array.isArray(liveData?.runs) ? liveData.runs : mockData.runs), [liveData]);
   const learningEvents = useMemo(
-    () => (Array.isArray(liveData?.learningEvents) && liveData.learningEvents.length ? liveData.learningEvents : mockData.learningEvents),
+    () => (Array.isArray(liveData?.learningEvents) ? liveData.learningEvents : mockData.learningEvents),
     [liveData]
   );
   const suggestedReplies = useMemo(
-    () => (Array.isArray(liveData?.suggestedReplies) && liveData.suggestedReplies.length ? liveData.suggestedReplies : mockData.suggestedReplies),
+    () => (Array.isArray(liveData?.suggestedReplies) ? liveData.suggestedReplies : mockData.suggestedReplies),
     [liveData]
   );
   const strategicAnalyses = useMemo(
-    () => (Array.isArray(liveData?.strategicAnalyses) && liveData.strategicAnalyses.length ? liveData.strategicAnalyses : mockData.strategicAnalyses),
+    () => (Array.isArray(liveData?.strategicAnalyses) ? liveData.strategicAnalyses : mockData.strategicAnalyses),
     [liveData]
   );
   const conversations = useMemo(
-    () => (Array.isArray(liveData?.conversations) && liveData.conversations.length ? liveData.conversations : mockData.conversations),
+    () => (Array.isArray(liveData?.conversations) ? liveData.conversations : mockData.conversations),
     [liveData]
   );
   const activityFeed = useMemo(
-    () => (Array.isArray(liveData?.activityFeed) && liveData.activityFeed.length ? liveData.activityFeed : mockData.activityFeed),
+    () => (Array.isArray(liveData?.activityFeed) ? liveData.activityFeed : mockData.activityFeed),
     [liveData]
   );
   const appData = useMemo<AppMockData>(

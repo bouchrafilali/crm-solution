@@ -1,12 +1,12 @@
 import { LearningEvent } from "../types.js";
-import { byId } from "../mock-data.js";
 
 interface LearningEventCardProps {
   event: LearningEvent;
+  leadName?: string;
   onOpenLead: (leadId: string) => void;
 }
 
-export function LearningEventCard({ event, onOpenLead }: LearningEventCardProps) {
+export function LearningEventCard({ event, leadName, onOpenLead }: LearningEventCardProps) {
   return (
     <button
       type="button"
@@ -14,7 +14,7 @@ export function LearningEventCard({ event, onOpenLead }: LearningEventCardProps)
       className="ml-panel-soft ml-interactive w-full rounded-xl p-3 text-left"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-100">{byId.lead[event.leadId]?.name ?? event.leadId}</p>
+        <p className="text-sm font-semibold text-slate-100">{leadName ?? event.leadId}</p>
         <span className="ml-code text-[11px] text-slate-500">{event.timestamp}</span>
       </div>
 

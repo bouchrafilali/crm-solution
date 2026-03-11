@@ -1,10 +1,11 @@
-import { ActivityEvent, RunRecord } from "../types.js";
-import { byId } from "../mock-data.js";
+import { ActivityEvent, Agent, Lead, RunRecord } from "../types.js";
 import { StatusBadge } from "./StatusBadge.js";
 
 interface ActivityFeedProps {
   events: ActivityEvent[];
   runs: RunRecord[];
+  leads: Lead[];
+  agents: Agent[];
   onOpenLead: (leadId: string) => void;
 }
 
@@ -28,7 +29,9 @@ function toEventTypeLabel(type: ActivityEvent["type"]): string {
   return type.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-export function ActivityFeed({ events, runs, onOpenLead }: ActivityFeedProps) {
+export function ActivityFeed({ events, runs, leads, agents, onOpenLead }: ActivityFeedProps) {
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
   return (
     <div className="ml-table-shell overflow-hidden rounded-xl">
       <div className="max-h-[420px] overflow-y-auto scroll-dark">
@@ -47,8 +50,8 @@ export function ActivityFeed({ events, runs, onOpenLead }: ActivityFeedProps) {
               const relatedRun = runs.find((run) => run.leadId === event.leadId && run.timestamp.includes(event.timestamp))
                 ?? runs.find((run) => run.leadId === event.leadId);
 
-              const leadName = byId.lead[event.leadId]?.name ?? event.leadId;
-              const agentName = relatedRun ? (byId.agent[relatedRun.triggeredAgentId]?.name ?? relatedRun.triggeredAgentId) : mapDefaultAgent(event.type);
+              const leadName = leadById.get(event.leadId)?.name ?? event.leadId;
+              const agentName = relatedRun ? (agentById.get(relatedRun.triggeredAgentId)?.name ?? relatedRun.triggeredAgentId) : mapDefaultAgent(event.type);
               const status = relatedRun?.status ?? mapDefaultStatus(event.type);
 
               return (
