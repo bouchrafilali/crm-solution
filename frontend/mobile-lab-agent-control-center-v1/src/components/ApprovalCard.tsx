@@ -1,14 +1,15 @@
 import { motion } from "framer-motion";
 import { ApprovalItem, ApprovalDecision } from "../types.js";
-import { byId } from "../mock-data.js";
 import { StatusBadge } from "./StatusBadge.js";
 
 interface ApprovalCardProps {
   item: ApprovalItem;
+  leadName?: string;
+  requestedByName?: string;
   onDecision: (id: string, decision: ApprovalDecision) => void;
 }
 
-export function ApprovalCard({ item, onDecision }: ApprovalCardProps) {
+export function ApprovalCard({ item, leadName, requestedByName, onDecision }: ApprovalCardProps) {
   return (
     <motion.article
       layout
@@ -16,7 +17,7 @@ export function ApprovalCard({ item, onDecision }: ApprovalCardProps) {
       className="ml-panel ml-interactive rounded-2xl p-4"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-100">{byId.lead[item.leadId]?.name ?? item.leadId}</p>
+        <p className="text-sm font-semibold text-slate-100">{leadName ?? item.leadId}</p>
         <StatusBadge value={item.urgency} />
       </div>
       <p className="mt-2 text-xs leading-relaxed text-slate-400">{item.reason}</p>
@@ -24,7 +25,7 @@ export function ApprovalCard({ item, onDecision }: ApprovalCardProps) {
 
       <div className="mt-3 flex items-center justify-between">
         <p className="text-[11px] text-slate-500">
-          Requested by {byId.agent[item.requestedByAgentId]?.name ?? item.requestedByAgentId} at {item.requestedAt}
+          Requested by {requestedByName ?? item.requestedByAgentId} at {item.requestedAt}
         </p>
         <StatusBadge value={item.decision} />
       </div>

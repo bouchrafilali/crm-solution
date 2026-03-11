@@ -33,11 +33,39 @@ function toIsoDate(value: string | null | undefined): string {
   return date.toISOString();
 }
 
-function mapRunStatus(status: string): "success" | "waiting_human_input" | "error" {
+type AgentControlRunStatus =
+  | "success"
+  | "error"
+  | "blocked"
+  | "waiting_human_input"
+  | "waiting_human_approval"
+  | "skipped"
+  | "pending"
+  | "unknown";
+
+function mapRunStatus(status: string): AgentControlRunStatus {
   const normalized = String(status || "").trim().toLowerCase();
-  if (normalized === "success") return "success";
-  if (normalized === "error") return "error";
-  return "waiting_human_input";
+  const statusMap: Record<string, AgentControlRunStatus> = {
+    success: "success",
+    completed: "success",
+    done: "success",
+    error: "error",
+    failed: "error",
+    failure: "error",
+    blocked: "blocked",
+    waiting_human_input: "waiting_human_input",
+    waiting_input: "waiting_human_input",
+    needs_human_input: "waiting_human_input",
+    waiting_human_approval: "waiting_human_approval",
+    pending_approval: "waiting_human_approval",
+    awaiting_approval: "waiting_human_approval",
+    skipped: "skipped",
+    pending: "pending",
+    queued: "pending",
+    running: "pending",
+    processing: "pending"
+  };
+  return statusMap[normalized] ?? "unknown";
 }
 
 function mapPriority(score: number): "high" | "medium" | "low" {

@@ -130,7 +130,7 @@ export function LeadsPage({ leads, onOpenLead }: LeadsPageProps) {
   ];
 
   const filteredLeads = useMemo(() => {
-    const now = new Date("2026-03-09T00:00:00Z");
+    const now = new Date();
 
     const result = leads.filter((lead) => {
       if (filters.stage !== "all" && lead.currentStage !== filters.stage) return false;

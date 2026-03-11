@@ -1,14 +1,15 @@
 import { motion } from "framer-motion";
 import { useMemo } from "react";
-import { LearningEvent } from "../types.js";
+import { LearningEvent, Lead } from "../types.js";
 import { SectionHeader } from "../components/SectionHeader.js";
-import { byId } from "../mock-data.js";
 
 interface LearningPageProps {
   learningEvents: LearningEvent[];
+  leads: Lead[];
 }
 
-export function LearningPage({ learningEvents }: LearningPageProps) {
+export function LearningPage({ learningEvents, leads }: LearningPageProps) {
+  const leadById = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads]);
   const patternCounts = useMemo(() => {
     const countMap = new Map<string, number>();
     for (const event of learningEvents) {
@@ -58,7 +59,7 @@ export function LearningPage({ learningEvents }: LearningPageProps) {
               {learningEvents.map((event) => (
                 <tr key={event.id}>
                   <td className="ml-code px-3 py-3 text-[11px] text-slate-400">{event.timestamp}</td>
-                  <td className="px-3 py-3 font-medium text-slate-200">{byId.lead[event.leadId]?.name ?? event.leadId}</td>
+                  <td className="px-3 py-3 font-medium text-slate-200">{leadById.get(event.leadId)?.name ?? event.leadId}</td>
                   <td className="max-w-[280px] truncate px-3 py-3 text-slate-400">{event.aiSuggestion}</td>
                   <td className="max-w-[280px] truncate px-3 py-3 text-slate-300">{event.finalHumanVersion}</td>
                   <td className="px-3 py-3 text-slate-400">{event.deltaSummary}</td>

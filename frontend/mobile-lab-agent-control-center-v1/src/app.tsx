@@ -77,6 +77,8 @@ interface AgentControlCenterLivePayload {
   activityFeed?: ActivityEvent[];
 }
 
+type DataSourceMode = "live" | "mixed" | "mock_fallback";
+
 export function App() {
   const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash() ?? "dashboard");
   const [liveData, setLiveData] = useState<AgentControlCenterLivePayload | null>(null);
@@ -122,6 +124,23 @@ export function App() {
     }),
     [agents, leads, runs, activityFeed, approvals, learningEvents, suggestedReplies, strategicAnalyses, conversations]
   );
+  const dataSourceMode = useMemo<DataSourceMode>(() => {
+    if (!liveData) return "mock_fallback";
+    const requiredKeys: Array<keyof AgentControlCenterLivePayload> = [
+      "agents",
+      "leads",
+      "runs",
+      "approvals",
+      "learningEvents",
+      "suggestedReplies",
+      "strategicAnalyses",
+      "conversations",
+      "activityFeed"
+    ];
+    const presentCount = requiredKeys.filter((key) => Array.isArray(liveData[key])).length;
+    if (presentCount === requiredKeys.length) return "live";
+    return "mixed";
+  }, [liveData]);
 
   const selectedLead = useMemo(
     () => leads.find((lead) => lead.id === selectedLeadId) ?? leads[0] ?? null,
@@ -313,13 +332,24 @@ export function App() {
                 <div className="ml-panel mb-3 rounded-xl border border-amber-300/35 px-3 py-2 text-xs text-amber-100">
                   Live Mobile-Lab feed unavailable ({liveDataError}). Showing fallback data.
                 </div>
-              ) : lastSyncAt ? (
-                <div className="mb-2 text-[11px] text-slate-500">
-                  Synced with Mobile-Lab at <span className="ml-code text-slate-400">{new Date(lastSyncAt).toLocaleTimeString()}</span>
-                </div>
               ) : null}
+              <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500">
+                <span>
+                  Data source:
+                  <span className="ml-code ml-1 text-slate-300">
+                    {dataSourceMode === "live" ? "live" : dataSourceMode === "mixed" ? "mixed" : "mock_fallback"}
+                  </span>
+                </span>
+                {lastSyncAt ? (
+                  <span>
+                    Synced at <span className="ml-code text-slate-400">{new Date(lastSyncAt).toLocaleTimeString()}</span>
+                  </span>
+                ) : null}
+              </div>
               <AnimatePresence mode="wait">
-                {activePage === "dashboard" ? <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} /> : null}
+                {activePage === "dashboard" ? (
+                  <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} lastSyncAt={lastSyncAt} />
+                ) : null}
                 {activePage === "agents" ? <AgentsPage key="page-agents" agents={agents} /> : null}
                 {activePage === "runs" ? (
                   <RunsPage key="page-runs" runs={runs} leads={leads} agents={agents} strategicAnalyses={strategicAnalyses} onOpenLead={openLeadWorkspace} />
@@ -337,10 +367,12 @@ export function App() {
                     onBackToLeads={() => navigateToPage("leads")}
                   />
                 ) : null}
-                {activePage === "approvals" ? <ApprovalsPage key="page-approvals" approvals={approvals} onDecision={handleApprovalDecision} /> : null}
-                {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={learningEvents} /> : null}
+                {activePage === "approvals" ? (
+                  <ApprovalsPage key="page-approvals" approvals={approvals} leads={leads} agents={agents} onDecision={handleApprovalDecision} />
+                ) : null}
+                {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={learningEvents} leads={leads} /> : null}
                 {activePage === "system-architecture-map" ? <SystemArchitectureMapPage key="page-system-architecture-map" /> : null}
-                {activePage === "system-brain" ? <SystemBrainPage key="page-system-brain" data={systemBrainMock} /> : null}
+                {activePage === "system-brain" ? <SystemBrainPage key="page-system-brain" data={systemBrainMock} dataMode="mock" /> : null}
               </AnimatePresence>
             </AppErrorBoundary>
           </div>

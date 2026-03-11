@@ -17,7 +17,9 @@ export type RunStatus =
   | "waiting_human_approval"
   | "blocked"
   | "error"
-  | "skipped";
+  | "skipped"
+  | "pending"
+  | "unknown";
 
 export type ApprovalGroup =
   | "Waiting Price Approval"

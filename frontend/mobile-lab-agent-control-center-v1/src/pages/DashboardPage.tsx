@@ -11,6 +11,7 @@ import { LearningEventCard } from "../components/LearningEventCard.js";
 interface DashboardPageProps {
   data: AppMockData;
   onOpenLead: (leadId: string) => void;
+  lastSyncAt?: string | null;
 }
 
 const cardAnimation = {
@@ -19,7 +20,7 @@ const cardAnimation = {
   transition: { duration: 0.22 }
 };
 
-export function DashboardPage({ data, onOpenLead }: DashboardPageProps) {
+export function DashboardPage({ data, onOpenLead, lastSyncAt = null }: DashboardPageProps) {
   const leadById = new Map(data.leads.map((lead) => [lead.id, lead]));
   const agentById = new Map(data.agents.map((agent) => [agent.id, agent]));
   const activeAgents = data.agents.filter((agent) => agent.status === "running").length;
@@ -52,7 +53,9 @@ export function DashboardPage({ data, onOpenLead }: DashboardPageProps) {
         <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-200">System Stable</span>
         <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">Ops Window 08:00-22:00</span>
         <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">Luxury WhatsApp Sales</span>
-        <span className="ml-auto text-slate-500">Last sync: <span className="ml-code text-slate-400">2026-03-09 08:42</span></span>
+        <span className="ml-auto text-slate-500">
+          Last sync: <span className="ml-code text-slate-400">{lastSyncAt ? new Date(lastSyncAt).toLocaleString() : "n/a"}</span>
+        </span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">

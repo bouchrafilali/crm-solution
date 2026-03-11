@@ -35,7 +35,9 @@ const allStatus: RunStatus[] = [
   "waiting_human_approval",
   "blocked",
   "error",
-  "skipped"
+  "skipped",
+  "pending",
+  "unknown"
 ];
 
 const preferredEventTypes = [
@@ -129,10 +131,9 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
   const selectedAgent = selectedRun ? agents.find((agent) => agent.id === selectedRun.triggeredAgentId) ?? null : null;
   const selectedStrategicAnalysis = selectedRun ? strategicAnalyses.find((analysis) => analysis.leadId === selectedRun.leadId) ?? null : null;
 
-  const blockedRuns = useMemo(
-    () => filteredRuns.filter((run) => run.status === "blocked" || run.status === "error").length,
-    [filteredRuns]
-  );
+  const errorRuns = useMemo(() => filteredRuns.filter((run) => run.status === "error").length, [filteredRuns]);
+  const blockedRuns = useMemo(() => filteredRuns.filter((run) => run.status === "blocked").length, [filteredRuns]);
+  const failedRuns = blockedRuns + errorRuns;
   const waitingHumanApprovalRuns = useMemo(
     () => filteredRuns.filter((run) => run.status === "waiting_human_approval").length,
     [filteredRuns]
@@ -141,11 +142,13 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
     () => filteredRuns.filter((run) => run.status === "waiting_human_input").length,
     [filteredRuns]
   );
+  const waitingRuns = waitingHumanApprovalRuns + waitingHumanInputRuns;
+  const interventionRuns = failedRuns + waitingRuns;
   const averageRuntimeMs = useMemo(() => {
     if (filteredRuns.length === 0) return 0;
     return Math.round(filteredRuns.reduce((total, run) => total + run.durationMs, 0) / filteredRuns.length);
   }, [filteredRuns]);
-  const blockedRatio = filteredRuns.length ? blockedRuns / filteredRuns.length : 0;
+  const interventionRatio = filteredRuns.length ? interventionRuns / filteredRuns.length : 0;
   const hasActiveFilters = query.trim().length > 0 || Object.values(filters).some((value) => value !== "all");
   const requiresHumanGate = selectedRun ? runNeedsHumanGate(selectedRun) : false;
 
@@ -158,10 +161,10 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
         tone: "neutral" as const
       },
       {
-        label: "Blocked Runs",
-        value: blockedRuns,
-        delta: blockedRuns > 0 ? "Needs intervention" : "No blockers",
-        tone: blockedRuns > 0 ? ("attention" as const) : ("good" as const)
+        label: "Failed Runs",
+        value: failedRuns,
+        delta: failedRuns > 0 ? "Errors or blocked states" : "No failures",
+        tone: failedRuns > 0 ? ("attention" as const) : ("good" as const)
       },
       {
         label: "Waiting Human Approval",
@@ -176,7 +179,45 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
         tone: "neutral" as const
       }
     ];
-  }, [averageRuntimeMs, blockedRuns, filteredRuns.length, runs.length, waitingHumanApprovalRuns, waitingHumanInputRuns]);
+  }, [averageRuntimeMs, failedRuns, filteredRuns.length, runs.length, waitingHumanApprovalRuns, waitingHumanInputRuns]);
+
+  const alertSummary = useMemo(() => {
+    if (filteredRuns.length <= 2 || interventionRatio < 0.35) return null;
+    if (failedRuns > 0 && waitingRuns === 0) {
+      const title = blockedRuns > 0 && errorRuns > 0
+        ? "Blocked and error runs are elevated"
+        : blockedRuns > 0
+          ? "Blocked runs are elevated"
+          : "Error runs are elevated";
+      return {
+        title,
+        detail: `${failedRuns} of ${filteredRuns.length} visible runs are failed (blocked: ${blockedRuns}, error: ${errorRuns}).`,
+        badge: blockedRuns > 0 ? "blocked" : "error"
+      };
+    }
+    if (waitingRuns > failedRuns) {
+      return {
+        title: "Human-wait states are elevated",
+        detail: `${interventionRuns} of ${filteredRuns.length} runs need intervention (waiting input: ${waitingHumanInputRuns}, waiting approval: ${waitingHumanApprovalRuns}, failed: ${failedRuns}).`,
+        badge: waitingHumanApprovalRuns > 0 ? "waiting_human_approval" : "waiting_human_input"
+      };
+    }
+    return {
+      title: "Intervention-required runs are elevated",
+      detail: `${interventionRuns} of ${filteredRuns.length} runs need intervention (failed: ${failedRuns}, waiting states: ${waitingRuns}).`,
+      badge: failedRuns > 0 ? "blocked" : "waiting_human_input"
+    };
+  }, [
+    blockedRuns,
+    errorRuns,
+    failedRuns,
+    filteredRuns.length,
+    interventionRatio,
+    interventionRuns,
+    waitingHumanApprovalRuns,
+    waitingHumanInputRuns,
+    waitingRuns
+  ]);
 
   const eventOptions = useMemo(() => {
     const discovered = Array.from(new Set(runs.map((run) => run.eventType)));
@@ -260,7 +301,7 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
         subtitle="Execution observability for orchestrated agent decisions, governance checks, and human-gated actions."
         action={
           <div className="flex items-center gap-2 text-xs">
-            <StatusBadge value={blockedRatio >= 0.35 ? "degraded" : "running"} />
+            <StatusBadge value={interventionRatio >= 0.35 ? "degraded" : "running"} />
             <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">
               {filteredRuns.length} visible
             </span>
@@ -274,16 +315,14 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
         ))}
       </div>
 
-      {blockedRatio >= 0.35 && filteredRuns.length > 2 ? (
+      {alertSummary ? (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="ml-panel mb-4 rounded-2xl px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-amber-100">Blocked and error runs are elevated</p>
-              <p className="mt-1 text-xs text-amber-100/80">
-                {blockedRuns} of {filteredRuns.length} visible runs require intervention. Prioritize blocked runs before continuing outbound actions.
-              </p>
+              <p className="text-sm font-semibold text-amber-100">{alertSummary.title}</p>
+              <p className="mt-1 text-xs text-amber-100/80">{alertSummary.detail}</p>
             </div>
-            <StatusBadge value="blocked" />
+            <StatusBadge value={alertSummary.badge} />
           </div>
         </motion.div>
       ) : null}
@@ -308,7 +347,9 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
 
       <div className="mb-3 mt-[-10px] flex items-center justify-between px-1 text-[11px] text-slate-500">
         <span>{filteredRuns.length} run records shown</span>
-        <span className="ml-code text-slate-500">Last ingest: 2026-03-09 08:42</span>
+        <span className="ml-code text-slate-500">
+          Last ingest: {runs[0]?.timestamp ? new Date(runs[0].timestamp).toLocaleString() : "n/a"}
+        </span>
       </div>
 
       {isFiltering ? (
@@ -323,7 +364,7 @@ export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLe
           }
         />
       ) : (
-        <RunTable runs={filteredRuns} onSelect={handleSelectRun} selectedRunId={selectedRun?.id ?? null} />
+        <RunTable runs={filteredRuns} leads={leads} agents={agents} onSelect={handleSelectRun} selectedRunId={selectedRun?.id ?? null} />
       )}
 
       <DetailDrawer

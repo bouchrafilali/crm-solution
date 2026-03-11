@@ -9,7 +9,9 @@ import { PipelineEditorSection } from "../components/system-brain/PipelineEditor
 import { MobileLabSystemBrainData } from "../system-brain-types.js";
 import { SectionErrorBoundary } from "../components/SectionErrorBoundary.js";
 
-export function SystemBrainPage({ data }: { data: MobileLabSystemBrainData }) {
+type SystemBrainDataMode = "mock" | "live";
+
+export function SystemBrainPage({ data, dataMode = "live" }: { data: MobileLabSystemBrainData; dataMode?: SystemBrainDataMode }) {
   const minimalMode =
     typeof window !== "undefined" &&
     (window.location.search.includes("sb_minimal=1") || window.location.hash.includes("sb-minimal"));
@@ -51,12 +53,24 @@ export function SystemBrainPage({ data }: { data: MobileLabSystemBrainData }) {
     <motion.div key="system-brain" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <SectionHeader
         title="Mobile-Lab System Brain"
-        subtitle="Elite AI operations command center for orchestration, prompt governance, token economy, and lead-level execution intelligence."
+        subtitle={
+          dataMode === "mock"
+            ? "System Brain preview mode. Metrics and traces are placeholder data until runtime integration is connected."
+            : "AI operations command center for orchestration, prompt governance, token economy, and lead-level execution intelligence."
+        }
       />
+
+      {dataMode === "mock" ? (
+        <div className="ml-panel mb-4 rounded-2xl border border-amber-300/35 px-3 py-2.5 text-xs text-amber-100">
+          Mock Mode active: this page is not connected to live runtime data yet.
+        </div>
+      ) : null}
 
       <div className="ml-panel mb-4 flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2.5 text-xs">
         <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-cyan-200">Brain Mode</span>
-        <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-200">Production Visibility</span>
+        <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">
+          {dataMode === "mock" ? "Mock Placeholder" : "Live Runtime"}
+        </span>
         <span className="ml-chip rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">Deterministic + Auditable</span>
         <span className="ml-auto text-slate-500">Pipeline build: <span className="ml-code text-slate-300">flow@2.8.0</span></span>
       </div>
