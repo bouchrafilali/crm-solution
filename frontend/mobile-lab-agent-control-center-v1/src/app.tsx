@@ -10,8 +10,10 @@ import { LeadWorkspacePage } from "./pages/LeadWorkspacePage.js";
 import { ApprovalsPage } from "./pages/ApprovalsPage.js";
 import { LearningPage } from "./pages/LearningPage.js";
 import { SystemArchitectureMapPage } from "./pages/SystemArchitectureMapPage.js";
+import { SystemBrainPage } from "./pages/SystemBrainPage.js";
 import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1";
 import { cn, initials } from "./utils.js";
+import { systemBrainMock } from "./system-brain-mock.js";
 
 interface SidebarItem {
   id: Exclude<NavPage, "lead-workspace">;
@@ -25,7 +27,8 @@ const sidebarItems: SidebarItem[] = [
   { id: "leads", label: "Leads" },
   { id: "approvals", label: "Approvals" },
   { id: "learning", label: "Learning" },
-  { id: "system-architecture-map", label: "System Map" }
+  { id: "system-architecture-map", label: "System Map" },
+  { id: "system-brain", label: "System Brain" }
 ];
 
 function isNavPage(value: string): value is NavPage {
@@ -37,7 +40,8 @@ function isNavPage(value: string): value is NavPage {
     "lead-workspace",
     "approvals",
     "learning",
-    "system-architecture-map"
+    "system-architecture-map",
+    "system-brain"
   ].includes(value);
 }
 
@@ -218,6 +222,7 @@ export function App() {
               {activePage === "approvals" ? <ApprovalsPage key="page-approvals" approvals={approvals} onDecision={handleApprovalDecision} /> : null}
               {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={mockData.learningEvents} /> : null}
               {activePage === "system-architecture-map" ? <SystemArchitectureMapPage key="page-system-architecture-map" /> : null}
+              {activePage === "system-brain" ? <SystemBrainPage key="page-system-brain" data={systemBrainMock} /> : null}
             </AnimatePresence>
           </div>
         </main>

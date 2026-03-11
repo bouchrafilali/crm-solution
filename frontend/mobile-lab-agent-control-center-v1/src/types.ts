@@ -6,7 +6,8 @@ export type NavPage =
   | "lead-workspace"
   | "approvals"
   | "learning"
-  | "system-architecture-map";
+  | "system-architecture-map"
+  | "system-brain";
 
 export type AgentStatus = "running" | "idle" | "degraded" | "paused";
 
