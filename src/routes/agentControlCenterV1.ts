@@ -122,6 +122,7 @@ agentControlCenterV1Router.use("/agent-control-center-v1", (req, res, next) => {
 function renderAgentControlCenterShell(): string {
   const assetsDir = resolveAssetsDir();
   const assetsLoaded = Boolean(assetsDir);
+  const assetsHasBundle = Boolean(assetsDir && existsSync(join(assetsDir, "bundle.js")));
 
   return `<!doctype html>
 <html lang="en">
@@ -365,7 +366,9 @@ function renderAgentControlCenterShell(): string {
       })();
     </script>
 
-    <script type="importmap">
+    ${
+      assetsLoaded && !assetsHasBundle
+        ? `<script type="importmap">
       {
         "imports": {
           "react": "https://esm.sh/react@19.2.4",
@@ -374,9 +377,15 @@ function renderAgentControlCenterShell(): string {
           "framer-motion": "https://esm.sh/framer-motion@12.34.3?bundle"
         }
       }
-    </script>
+    </script>`
+        : ""
+    }
 
-    ${assetsLoaded ? '<script type="module" src="/agent-control-center-v1/main.js"></script>' : ""}
+    ${
+      assetsLoaded
+        ? `<script type="module" src="/agent-control-center-v1/${assetsHasBundle ? "bundle.js" : "main.js"}"></script>`
+        : ""
+    }
   </body>
 </html>`;
 }
