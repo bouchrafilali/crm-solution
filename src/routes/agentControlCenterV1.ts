@@ -1,6 +1,9 @@
 import express, { Router } from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { getDbPool } from "../db/client.js";
+import { listWhatsAppLeads, listRecentMessagesByLeadIds } from "../db/whatsappLeadsRepo.js";
+import { listSuggestionFeedbackQueue } from "../db/whatsappSuggestionFeedbackRepo.js";
 
 export const agentControlCenterV1Router = Router();
 
@@ -23,6 +26,288 @@ function resolveAssetsDirs(): string[] {
 function resolveAssetsDir(): string | null {
   return firstExistingPath(resolveAssetsDirs());
 }
+
+function toIsoDate(value: string | null | undefined): string {
+  const date = value ? new Date(String(value)) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString();
+  return date.toISOString();
+}
+
+function mapRunStatus(status: string): "success" | "waiting_human_input" | "error" {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "success") return "success";
+  if (normalized === "error") return "error";
+  return "waiting_human_input";
+}
+
+function mapPriority(score: number): "high" | "medium" | "low" {
+  if (score >= 85) return "high";
+  if (score >= 70) return "medium";
+  return "low";
+}
+
+function mapLanguage(country: string | null): string {
+  const normalized = String(country || "").trim().toUpperCase();
+  if (normalized === "MA" || normalized === "FR") return "fr";
+  return "en";
+}
+
+function mapNextBestAction(stage: string): string {
+  const normalized = String(stage || "").toUpperCase();
+  if (normalized === "NEW" || normalized === "PRODUCT_INTEREST") return "Qualify intent and event details";
+  if (normalized === "QUALIFICATION_PENDING") return "Close missing info before price";
+  if (normalized === "QUALIFIED" || normalized === "PRICE_SENT") return "Advance to payment clarity";
+  if (normalized === "VIDEO_PROPOSED") return "Confirm availability and timing";
+  if (normalized === "DEPOSIT_PENDING") return "Secure reservation with deposit";
+  if (normalized === "CONFIRMED") return "Confirm execution details";
+  return "Re-engage conversation momentum";
+}
+
+function mapPaymentStatus(stage: string, paymentReceived: boolean, depositPaid: boolean): "not_started" | "quote_sent" | "deposit_pending" | "confirmed" {
+  if (paymentReceived || depositPaid || String(stage || "").toUpperCase() === "CONVERTED") return "confirmed";
+  if (String(stage || "").toUpperCase() === "DEPOSIT_PENDING") return "deposit_pending";
+  if (String(stage || "").toUpperCase() === "PRICE_SENT") return "quote_sent";
+  return "not_started";
+}
+
+agentControlCenterV1Router.get("/api/agent-control-center-v1/data", async (_req, res) => {
+  try {
+    const leads = await listWhatsAppLeads({ days: 90, stage: "ALL", limit: 240 });
+    const leadIds = leads.map((lead) => String(lead.id || "")).filter(Boolean);
+    const recentMessagesByLead = await listRecentMessagesByLeadIds(leadIds, 24);
+
+    const db = getDbPool();
+    if (!db) {
+      return res.status(503).json({ error: "db_unavailable" });
+    }
+
+    const [runsQ, pendingApprovalsQ, learningQueue] = await Promise.all([
+      db.query<{
+        id: string;
+        lead_id: string;
+        message_id: string;
+        status: string;
+        trigger_source: string | null;
+        model: string | null;
+        latency_ms: number | null;
+        error_text: string | null;
+        created_at: string;
+      }>(
+        `
+          select id, lead_id, message_id, status, trigger_source, model, latency_ms, error_text, created_at
+          from ai_agent_runs
+          order by created_at desc
+          limit 220
+        `
+      ),
+      db.query<{
+        id: string;
+        lead_id: string;
+        created_at: string;
+        product_title: string;
+      }>(
+        `
+          select id, lead_id, created_at, product_title
+          from quote_requests
+          where status = 'PENDING'
+          order by created_at desc
+          limit 120
+        `
+      ),
+      listSuggestionFeedbackQueue({ status: "ALL", limit: 200 })
+    ]);
+
+    const pendingApprovalsByLead = new Map<string, Array<{ id: string; createdAt: string; productTitle: string }>>();
+    for (const row of pendingApprovalsQ.rows) {
+      const leadId = String(row.lead_id || "").trim();
+      if (!leadId) continue;
+      const arr = pendingApprovalsByLead.get(leadId) || [];
+      arr.push({
+        id: String(row.id || ""),
+        createdAt: toIsoDate(row.created_at),
+        productTitle: String(row.product_title || "Quote request")
+      });
+      pendingApprovalsByLead.set(leadId, arr);
+    }
+
+    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+
+    const leadItems = leads.map((lead) => {
+      const messages = recentMessagesByLead.get(lead.id) || [];
+      const lastMessage = messages.length ? messages[messages.length - 1] : null;
+      const destination = [lead.shipCity, lead.shipRegion, lead.shipCountry]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(", ");
+      const estimatedValue = Number(lead.ticketValue || lead.conversionValue || 0);
+      const priorityScore = Math.max(1, Math.min(100, Math.round(Number(lead.score || 0))));
+      const missingFields: string[] = [];
+      if (!lead.eventDate) missingFields.push("Event date");
+      if (!destination && !lead.shipDestinationText) missingFields.push("Destination");
+      if (!lead.productReference) missingFields.push("Product reference");
+      const openTasks = (pendingApprovalsByLead.get(lead.id) || []).slice(0, 2).map((approval) => ({
+        id: approval.id,
+        title: `Approve quote: ${approval.productTitle}`,
+        due: approval.createdAt.slice(0, 10),
+        done: false
+      }));
+
+      return {
+        id: lead.id,
+        name: lead.clientName || "Unknown lead",
+        country: String(lead.country || "MA"),
+        language: mapLanguage(lead.country),
+        currentStage: String(lead.stage || "NEW"),
+        priorityScore,
+        estimatedValue,
+        eventDate: toIsoDate(lead.eventDate),
+        destination: destination || String(lead.shipDestinationText || "Not set"),
+        lastMessage: String(lastMessage?.text || ""),
+        assignedOperator: "Mobile-Lab Operator",
+        nextBestAction: mapNextBestAction(lead.stage),
+        approvalStatus: pendingApprovalsByLead.has(lead.id) ? "pending" : "none",
+        paymentIntent: lead.depositIntent || lead.paymentIntent ? "high" : lead.hasPaymentQuestion ? "medium" : "low",
+        waitingReply: Boolean(lastMessage && lastMessage.direction === "OUT"),
+        highValue: estimatedValue >= 18000,
+        qualificationStatus: missingFields.length === 0 ? "complete" : missingFields.length <= 1 ? "partial" : "missing",
+        paymentStatus: mapPaymentStatus(lead.stage, lead.paymentReceived, lead.depositPaid),
+        detectedSignals: Array.isArray(lead.detectedSignals?.tags) ? lead.detectedSignals.tags.slice(0, 8) : [],
+        missingFields,
+        openTasks
+      };
+    });
+
+    const conversations = Array.from(recentMessagesByLead.entries())
+      .flatMap(([leadId, messages]) =>
+        messages.map((message) => ({
+          id: message.id,
+          leadId,
+          actor: message.direction === "IN" ? "client" : "operator",
+          text: String(message.text || ""),
+          timestamp: toIsoDate(message.createdAt),
+          state: message.direction === "IN" ? "read" : "sent"
+        }))
+      )
+      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+
+    const runs = runsQ.rows.map((row) => {
+      const lead = leadById.get(String(row.lead_id || ""));
+      const model = String(row.model || "unknown");
+      const mappedStatus = mapRunStatus(row.status);
+      const runtimeMs = Math.max(0, Math.round(Number(row.latency_ms || 0)));
+      const priority = mapPriority(Math.round(Number(lead?.score || 0)));
+      const timelineBase = toIsoDate(row.created_at);
+      return {
+        id: String(row.id || ""),
+        timestamp: timelineBase,
+        eventType: String(row.trigger_source || "message_persisted"),
+        leadId: String(row.lead_id || ""),
+        conversationId: String(row.lead_id || ""),
+        triggeredAgentId: model.includes("gpt")
+          ? "agent-reply-generator"
+          : model.includes("claude")
+            ? "agent-strategic-advisor"
+            : "agent-stage-detection",
+        decisionSummary: row.error_text
+          ? `Run failed: ${String(row.error_text)}`
+          : `Model ${model} processed latest lead state.`,
+        status: mappedStatus,
+        durationMs: runtimeMs,
+        nextStep: mappedStatus === "success" ? "continue_pipeline" : mappedStatus === "error" ? "needs_manual_review" : "await_completion",
+        priority,
+        trace: {
+          eventContext: `Lead ${String(row.lead_id || "")} · source ${String(row.trigger_source || "message_persisted")}`,
+          inputSnapshot: [
+            `lead_id=${String(row.lead_id || "")}`,
+            `message_id=${String(row.message_id || "")}`,
+            `model=${model}`
+          ],
+          decisionSummary: row.error_text
+            ? `Execution failed with error: ${String(row.error_text)}`
+            : `Execution completed successfully with ${model}.`,
+          agentsInvoked: ["Stage Detection", "Strategic Advisor", "Reply Generator", "Brand Guardian"],
+          output: row.error_text
+            ? `error: ${String(row.error_text)}`
+            : `status=${mappedStatus}; next=continue_pipeline`,
+          timeline: [
+            {
+              id: `${String(row.id || "")}-started`,
+              time: timelineBase,
+              title: "Run started",
+              detail: "Inbound event accepted for orchestration.",
+              status: "success"
+            },
+            {
+              id: `${String(row.id || "")}-completed`,
+              time: timelineBase,
+              title: mappedStatus === "error" ? "Run failed" : "Run completed",
+              detail: row.error_text ? String(row.error_text) : `Model ${model} returned output.`,
+              status: mappedStatus
+            }
+          ]
+        }
+      };
+    });
+
+    const approvals = pendingApprovalsQ.rows.map((row) => ({
+      id: String(row.id || ""),
+      group: "Waiting Price Approval",
+      leadId: String(row.lead_id || ""),
+      urgency: "high",
+      reason: `Price approval pending for ${String(row.product_title || "requested item")}`,
+      requestedByAgentId: "agent-quote-approvals",
+      requestedAt: toIsoDate(row.created_at),
+      contentPreview: `Approve quote for ${String(row.product_title || "item")}.`,
+      decision: "pending"
+    }));
+
+    const learningEvents = learningQueue
+      .filter((item) => String(item.final_human_text || item.final_text || "").trim().length > 0)
+      .slice(0, 120)
+      .map((item) => ({
+        id: String(item.id || ""),
+        timestamp: toIsoDate(item.updated_at),
+        leadId: String(item.lead_id || ""),
+        aiSuggestion: String(item.suggestion_text || ""),
+        finalHumanVersion: String(item.final_human_text || item.final_text || ""),
+        deltaSummary: String(item.accepted === true ? "Suggestion accepted" : "Suggestion edited by operator"),
+        correctionPattern: String(item.suggestion_status || "REVIEWED")
+      }));
+
+    const activityFeed = [
+      ...runs.slice(0, 120).map((run) => ({
+        id: `run-${run.id}`,
+        timestamp: run.timestamp,
+        title: `Run ${run.status.toUpperCase()}`,
+        detail: run.decisionSummary,
+        type: run.status === "error" ? "blocked" : "orchestrator",
+        leadId: run.leadId
+      })),
+      ...conversations.slice(-120).map((message) => ({
+        id: `msg-${message.id}`,
+        timestamp: message.timestamp,
+        title: message.actor === "client" ? "Inbound message" : "Outbound message",
+        detail: String(message.text || "").slice(0, 220),
+        type: message.actor === "client" ? "inbound" : "reply",
+        leadId: message.leadId
+      }))
+    ]
+      .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+      .slice(0, 200);
+
+    return res.status(200).json({
+      leads: leadItems,
+      runs,
+      approvals,
+      learningEvents,
+      conversations,
+      activityFeed
+    });
+  } catch (error) {
+    console.error("[agent-control-center-v1] live data build failed", { error });
+    return res.status(503).json({ error: "agent_control_center_data_unavailable" });
+  }
+});
 
 agentControlCenterV1Router.get("/agent-control-center-v1/strategicAdvisorAgentV1.js", (req, res, next) => {
   const assetsDir = resolveAssetsDir();

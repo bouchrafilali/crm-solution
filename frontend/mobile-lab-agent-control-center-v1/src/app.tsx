@@ -1,7 +1,17 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { mockData } from "./mock-data.js";
-import { ApprovalDecision, NavPage } from "./types.js";
+import {
+  ActivityEvent,
+  AppMockData,
+  ApprovalDecision,
+  ApprovalItem,
+  ConversationMessage,
+  LearningEvent,
+  Lead,
+  NavPage,
+  RunRecord
+} from "./types.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
 import { AgentsPage } from "./pages/AgentsPage.js";
 import { RunsPage } from "./pages/RunsPage.js";
@@ -52,14 +62,54 @@ function readPageFromHash(): NavPage | null {
   return isNavPage(hashValue) ? hashValue : null;
 }
 
+interface AgentControlCenterLivePayload {
+  leads?: Lead[];
+  runs?: RunRecord[];
+  approvals?: ApprovalItem[];
+  learningEvents?: LearningEvent[];
+  conversations?: ConversationMessage[];
+  activityFeed?: ActivityEvent[];
+}
+
 export function App() {
   const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash() ?? "dashboard");
-  const [selectedLeadId, setSelectedLeadId] = useState(mockData.leads[0]?.id ?? "");
-  const [approvals, setApprovals] = useState(mockData.approvals);
+  const [liveData, setLiveData] = useState<AgentControlCenterLivePayload | null>(null);
+  const [liveDataError, setLiveDataError] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState("");
+  const [approvals, setApprovals] = useState<ApprovalItem[]>(mockData.approvals);
+
+  const leads = useMemo(() => (Array.isArray(liveData?.leads) && liveData.leads.length ? liveData.leads : mockData.leads), [liveData]);
+  const runs = useMemo(() => (Array.isArray(liveData?.runs) && liveData.runs.length ? liveData.runs : mockData.runs), [liveData]);
+  const learningEvents = useMemo(
+    () => (Array.isArray(liveData?.learningEvents) && liveData.learningEvents.length ? liveData.learningEvents : mockData.learningEvents),
+    [liveData]
+  );
+  const conversations = useMemo(
+    () => (Array.isArray(liveData?.conversations) && liveData.conversations.length ? liveData.conversations : mockData.conversations),
+    [liveData]
+  );
+  const activityFeed = useMemo(
+    () => (Array.isArray(liveData?.activityFeed) && liveData.activityFeed.length ? liveData.activityFeed : mockData.activityFeed),
+    [liveData]
+  );
+  const appData = useMemo<AppMockData>(
+    () => ({
+      agents: mockData.agents,
+      leads,
+      runs,
+      activityFeed,
+      approvals,
+      learningEvents,
+      suggestedReplies: mockData.suggestedReplies,
+      strategicAnalyses: mockData.strategicAnalyses,
+      conversations
+    }),
+    [leads, runs, activityFeed, approvals, learningEvents, conversations]
+  );
 
   const selectedLead = useMemo(
-    () => mockData.leads.find((lead) => lead.id === selectedLeadId) ?? mockData.leads[0] ?? null,
-    [selectedLeadId]
+    () => leads.find((lead) => lead.id === selectedLeadId) ?? leads[0] ?? null,
+    [selectedLeadId, leads]
   );
   const selectedLeadAnalysis = useMemo(() => {
     if (!selectedLead) return null;
@@ -71,7 +121,7 @@ export function App() {
         id: `wa-${selectedLead.id}`,
         label: `Conversation ${selectedLead.id}`
       },
-      recentMessages: mockData.conversations
+      recentMessages: conversations
         .filter((message) => message.leadId === selectedLead.id)
         .slice(-6),
       currentStage: selectedLead.currentStage,
@@ -81,11 +131,40 @@ export function App() {
       missingFields: selectedLead.missingFields,
       lastOperatorAction: null
     });
-  }, [selectedLead]);
+  }, [selectedLead, conversations]);
   const selectedLeadReplies = useMemo(
     () => (selectedLead ? mockData.suggestedReplies.filter((reply) => reply.leadId === selectedLead.id) : []),
     [selectedLead]
   );
+
+  useEffect(() => {
+    if (selectedLeadId && leads.some((lead) => lead.id === selectedLeadId)) return;
+    setSelectedLeadId(leads[0]?.id ?? "");
+  }, [leads, selectedLeadId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLiveData(): Promise<void> {
+      try {
+        setLiveDataError(null);
+        const response = await fetch("/api/agent-control-center-v1/data");
+        if (!response.ok) throw new Error(`HTTP_${response.status}`);
+        const payload = (await response.json()) as AgentControlCenterLivePayload;
+        if (cancelled) return;
+        setLiveData(payload);
+        if (Array.isArray(payload.approvals)) {
+          setApprovals(payload.approvals);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setLiveDataError(error instanceof Error ? error.message : "live_data_unavailable");
+      }
+    }
+    void loadLiveData();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function navigateToPage(page: NavPage): void {
     setActivePage(page);
@@ -202,27 +281,32 @@ export function App() {
             </div>
 
             <AppErrorBoundary onReset={() => navigateToPage("dashboard")}>
+              {liveDataError ? (
+                <div className="ml-panel mb-3 rounded-xl border border-amber-300/35 px-3 py-2 text-xs text-amber-100">
+                  Live Mobile-Lab feed unavailable ({liveDataError}). Showing fallback data.
+                </div>
+              ) : null}
               <AnimatePresence mode="wait">
-                {activePage === "dashboard" ? <DashboardPage key="page-dashboard" data={{ ...mockData, approvals }} onOpenLead={openLeadWorkspace} /> : null}
+                {activePage === "dashboard" ? <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} /> : null}
                 {activePage === "agents" ? <AgentsPage key="page-agents" agents={mockData.agents} /> : null}
                 {activePage === "runs" ? (
-                  <RunsPage key="page-runs" runs={mockData.runs} leads={mockData.leads} agents={mockData.agents} onOpenLead={openLeadWorkspace} />
+                  <RunsPage key="page-runs" runs={runs} leads={leads} agents={mockData.agents} onOpenLead={openLeadWorkspace} />
                 ) : null}
-                {activePage === "leads" ? <LeadsPage key="page-leads" leads={mockData.leads} onOpenLead={openLeadWorkspace} /> : null}
+                {activePage === "leads" ? <LeadsPage key="page-leads" leads={leads} onOpenLead={openLeadWorkspace} /> : null}
                 {activePage === "lead-workspace" && selectedLead && selectedLeadAnalysis ? (
                   <LeadWorkspacePage
                     key={`page-workspace-${selectedLead.id}`}
                     lead={selectedLead}
                     analysis={selectedLeadAnalysis}
                     suggestedReplies={selectedLeadReplies}
-                    runs={mockData.runs}
-                    learningEvents={mockData.learningEvents}
-                    messages={mockData.conversations}
+                    runs={runs}
+                    learningEvents={learningEvents}
+                    messages={conversations}
                     onBackToLeads={() => navigateToPage("leads")}
                   />
                 ) : null}
                 {activePage === "approvals" ? <ApprovalsPage key="page-approvals" approvals={approvals} onDecision={handleApprovalDecision} /> : null}
-                {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={mockData.learningEvents} /> : null}
+                {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={learningEvents} /> : null}
                 {activePage === "system-architecture-map" ? <SystemArchitectureMapPage key="page-system-architecture-map" /> : null}
                 {activePage === "system-brain" ? <SystemBrainPage key="page-system-brain" data={systemBrainMock} /> : null}
               </AnimatePresence>
