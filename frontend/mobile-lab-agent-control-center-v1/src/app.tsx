@@ -81,6 +81,7 @@ export function App() {
   const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash() ?? "dashboard");
   const [liveData, setLiveData] = useState<AgentControlCenterLivePayload | null>(null);
   const [liveDataError, setLiveDataError] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [approvals, setApprovals] = useState<ApprovalItem[]>(mockData.approvals);
 
@@ -159,14 +160,16 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
+
     async function loadLiveData(): Promise<void> {
       try {
         setLiveDataError(null);
-        const response = await fetch("/api/agent-control-center-v1/data");
+        const response = await fetch("/api/agent-control-center-v1/data?range=30&stage=ALL", { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP_${response.status}`);
         const payload = (await response.json()) as AgentControlCenterLivePayload;
         if (cancelled) return;
         setLiveData(payload);
+        setLastSyncAt(new Date().toISOString());
         if (Array.isArray(payload.approvals)) {
           setApprovals(payload.approvals);
         }
@@ -175,9 +178,19 @@ export function App() {
         setLiveDataError(error instanceof Error ? error.message : "live_data_unavailable");
       }
     }
+
     void loadLiveData();
+    const interval = window.setInterval(() => {
+      void loadLiveData();
+    }, 15000);
+    const onVisible = (): void => {
+      if (document.visibilityState === "visible") void loadLiveData();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -299,6 +312,10 @@ export function App() {
               {liveDataError ? (
                 <div className="ml-panel mb-3 rounded-xl border border-amber-300/35 px-3 py-2 text-xs text-amber-100">
                   Live Mobile-Lab feed unavailable ({liveDataError}). Showing fallback data.
+                </div>
+              ) : lastSyncAt ? (
+                <div className="mb-2 text-[11px] text-slate-500">
+                  Synced with Mobile-Lab at <span className="ml-code text-slate-400">{new Date(lastSyncAt).toLocaleTimeString()}</span>
                 </div>
               ) : null}
               <AnimatePresence mode="wait">

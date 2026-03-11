@@ -70,6 +70,43 @@ function mapPaymentStatus(stage: string, paymentReceived: boolean, depositPaid: 
   return "not_started";
 }
 
+function parseDays(input: unknown): number {
+  const raw = Number(input ?? 30);
+  if (!Number.isFinite(raw)) return 30;
+  return Math.max(1, Math.min(365, Math.round(raw)));
+}
+
+type AgentControlStage =
+  | "ALL"
+  | "NEW"
+  | "PRODUCT_INTEREST"
+  | "QUALIFICATION_PENDING"
+  | "QUALIFIED"
+  | "PRICE_SENT"
+  | "VIDEO_PROPOSED"
+  | "DEPOSIT_PENDING"
+  | "CONFIRMED"
+  | "CONVERTED"
+  | "LOST";
+
+function parseStage(input: unknown): AgentControlStage {
+  const stage = String(input || "ALL").trim().toUpperCase();
+  const allowed = new Set([
+    "ALL",
+    "NEW",
+    "PRODUCT_INTEREST",
+    "QUALIFICATION_PENDING",
+    "QUALIFIED",
+    "PRICE_SENT",
+    "VIDEO_PROPOSED",
+    "DEPOSIT_PENDING",
+    "CONFIRMED",
+    "CONVERTED",
+    "LOST"
+  ]);
+  return allowed.has(stage) ? (stage as AgentControlStage) : "ALL";
+}
+
 function mapStrategicAction(stage: string): string {
   const normalized = String(stage || "").toUpperCase();
   if (normalized === "NEW") return "clarify_missing_info";
@@ -90,11 +127,13 @@ function mapMomentum(score: number): string {
   return "low";
 }
 
-agentControlCenterV1Router.get("/api/agent-control-center-v1/data", async (_req, res) => {
+agentControlCenterV1Router.get("/api/agent-control-center-v1/data", async (req, res) => {
   try {
-    const leads = await listWhatsAppLeads({ days: 90, stage: "ALL", limit: 240 });
+    const days = parseDays(req.query.range ?? req.query.days);
+    const stage = parseStage(req.query.stage);
+    const leads = await listWhatsAppLeads({ days, stage, limit: 600 });
     const leadIds = leads.map((lead) => String(lead.id || "")).filter(Boolean);
-    const recentMessagesByLead = await listRecentMessagesByLeadIds(leadIds, 24);
+    const recentMessagesByLead = await listRecentMessagesByLeadIds(leadIds, 20);
 
     const db = getDbPool();
     if (!db) {
