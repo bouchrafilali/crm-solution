@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Agent, Lead, RunRecord, RunStatus } from "../types.js";
-import { byId } from "../mock-data.js";
+import { Agent, Lead, RunRecord, RunStatus, StrategicAnalysis } from "../types.js";
 import { formatDurationMs } from "../utils.js";
 import { DetailDrawer } from "../components/DetailDrawer.js";
 import { EmptyState } from "../components/EmptyState.js";
@@ -17,6 +16,7 @@ interface RunsPageProps {
   runs: RunRecord[];
   leads: Lead[];
   agents: Agent[];
+  strategicAnalyses?: StrategicAnalysis[];
   onOpenLead: (leadId: string) => void;
 }
 
@@ -68,7 +68,7 @@ function runNeedsHumanGate(run: RunRecord): boolean {
   return run.status === "waiting_human_approval" || run.trace.agentsInvoked.some((agent) => agent.toLowerCase().includes("human"));
 }
 
-export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
+export function RunsPage({ runs, leads, agents, strategicAnalyses = [], onOpenLead }: RunsPageProps) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(runs[0]?.id ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filters, setFilters] = useState<FiltersState>({
@@ -94,6 +94,8 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
   }, [filters.agent, filters.date, filters.eventType, filters.lead, filters.priority, filters.status, query]);
 
   const filteredRuns = useMemo(() => {
+    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+    const agentById = new Map(agents.map((agent) => [agent.id, agent]));
     return runs.filter((run) => {
       if (filters.agent !== "all" && run.triggeredAgentId !== filters.agent) return false;
       if (filters.status !== "all" && run.status !== filters.status) return false;
@@ -102,14 +104,14 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
       if (filters.eventType !== "all" && run.eventType !== filters.eventType) return false;
       if (filters.date !== "all" && !run.timestamp.startsWith(filters.date)) return false;
       if (query.trim()) {
-        const leadName = byId.lead[run.leadId]?.name ?? run.leadId;
-        const agentName = byId.agent[run.triggeredAgentId]?.name ?? run.triggeredAgentId;
+        const leadName = leadById.get(run.leadId)?.name ?? run.leadId;
+        const agentName = agentById.get(run.triggeredAgentId)?.name ?? run.triggeredAgentId;
         const source = `${run.id} ${run.decisionSummary} ${run.nextStep} ${run.eventType} ${leadName} ${agentName} ${run.conversationId}`.toLowerCase();
         if (!source.includes(query.trim().toLowerCase())) return false;
       }
       return true;
     });
-  }, [filters, query, runs]);
+  }, [filters, query, runs, leads, agents]);
 
   useEffect(() => {
     if (!filteredRuns.length) {
@@ -123,10 +125,9 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
   }, [filteredRuns, selectedRunId]);
 
   const selectedRun = useMemo(() => (selectedRunId ? filteredRuns.find((run) => run.id === selectedRunId) ?? null : null), [filteredRuns, selectedRunId]);
-  const selectedLead = selectedRun ? byId.lead[selectedRun.leadId] ?? null : null;
-  const selectedAgent = selectedRun ? byId.agent[selectedRun.triggeredAgentId] ?? null : null;
-  const selectedStrategicAnalysis = selectedRun ? byId.strategicAnalysis[selectedRun.leadId] ?? null : null;
-  const selectedStrategicRecord = selectedRun ? byId.strategicAdvisorRecord[selectedRun.leadId] ?? null : null;
+  const selectedLead = selectedRun ? leads.find((lead) => lead.id === selectedRun.leadId) ?? null : null;
+  const selectedAgent = selectedRun ? agents.find((agent) => agent.id === selectedRun.triggeredAgentId) ?? null : null;
+  const selectedStrategicAnalysis = selectedRun ? strategicAnalyses.find((analysis) => analysis.leadId === selectedRun.leadId) ?? null : null;
 
   const blockedRuns = useMemo(
     () => filteredRuns.filter((run) => run.status === "blocked" || run.status === "error").length,
@@ -458,17 +459,6 @@ export function RunsPage({ runs, leads, agents, onOpenLead }: RunsPageProps) {
                 <InfoRow label="Duration" value={formatDurationMs(selectedRun.durationMs)} mono />
                 <InfoRow label="Next Step" value={selectedRun.nextStep} />
               </div>
-              {selectedStrategicRecord ? (
-                <div className="mt-3 rounded-xl border border-slate-600/25 bg-slate-900/55 px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-slate-500">Analysis Record</p>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <InfoRow label="Provider" value={selectedStrategicRecord.provider} mono />
-                    <InfoRow label="Model" value={selectedStrategicRecord.model} mono />
-                    <InfoRow label="Stage Confidence" value={`${Math.round(selectedStrategicRecord.confidenceIndicators.stageConfidence * 100)}%`} />
-                    <InfoRow label="Action Confidence" value={`${Math.round(selectedStrategicRecord.confidenceIndicators.actionConfidence * 100)}%`} />
-                  </div>
-                </div>
-              ) : null}
             </section>
 
             <section className="ml-panel-soft rounded-xl p-3">

@@ -10,7 +10,10 @@ import {
   LearningEvent,
   Lead,
   NavPage,
-  RunRecord
+  RunRecord,
+  StrategicAnalysis,
+  SuggestedReply,
+  Agent
 } from "./types.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
 import { AgentsPage } from "./pages/AgentsPage.js";
@@ -63,10 +66,13 @@ function readPageFromHash(): NavPage | null {
 }
 
 interface AgentControlCenterLivePayload {
+  agents?: Agent[];
   leads?: Lead[];
   runs?: RunRecord[];
   approvals?: ApprovalItem[];
   learningEvents?: LearningEvent[];
+  suggestedReplies?: SuggestedReply[];
+  strategicAnalyses?: StrategicAnalysis[];
   conversations?: ConversationMessage[];
   activityFeed?: ActivityEvent[];
 }
@@ -78,10 +84,19 @@ export function App() {
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [approvals, setApprovals] = useState<ApprovalItem[]>(mockData.approvals);
 
+  const agents = useMemo(() => (Array.isArray(liveData?.agents) && liveData.agents.length ? liveData.agents : mockData.agents), [liveData]);
   const leads = useMemo(() => (Array.isArray(liveData?.leads) && liveData.leads.length ? liveData.leads : mockData.leads), [liveData]);
   const runs = useMemo(() => (Array.isArray(liveData?.runs) && liveData.runs.length ? liveData.runs : mockData.runs), [liveData]);
   const learningEvents = useMemo(
     () => (Array.isArray(liveData?.learningEvents) && liveData.learningEvents.length ? liveData.learningEvents : mockData.learningEvents),
+    [liveData]
+  );
+  const suggestedReplies = useMemo(
+    () => (Array.isArray(liveData?.suggestedReplies) && liveData.suggestedReplies.length ? liveData.suggestedReplies : mockData.suggestedReplies),
+    [liveData]
+  );
+  const strategicAnalyses = useMemo(
+    () => (Array.isArray(liveData?.strategicAnalyses) && liveData.strategicAnalyses.length ? liveData.strategicAnalyses : mockData.strategicAnalyses),
     [liveData]
   );
   const conversations = useMemo(
@@ -94,17 +109,17 @@ export function App() {
   );
   const appData = useMemo<AppMockData>(
     () => ({
-      agents: mockData.agents,
+      agents,
       leads,
       runs,
       activityFeed,
       approvals,
       learningEvents,
-      suggestedReplies: mockData.suggestedReplies,
-      strategicAnalyses: mockData.strategicAnalyses,
+      suggestedReplies,
+      strategicAnalyses,
       conversations
     }),
-    [leads, runs, activityFeed, approvals, learningEvents, conversations]
+    [agents, leads, runs, activityFeed, approvals, learningEvents, suggestedReplies, strategicAnalyses, conversations]
   );
 
   const selectedLead = useMemo(
@@ -113,7 +128,7 @@ export function App() {
   );
   const selectedLeadAnalysis = useMemo(() => {
     if (!selectedLead) return null;
-    const mapped = mockData.strategicAnalyses.find((analysis) => analysis.leadId === selectedLead?.id);
+    const mapped = strategicAnalyses.find((analysis) => analysis.leadId === selectedLead?.id);
     if (mapped) return mapped;
     return generateStrategicAdvisorAnalysis({
       lead: selectedLead,
@@ -131,10 +146,10 @@ export function App() {
       missingFields: selectedLead.missingFields,
       lastOperatorAction: null
     });
-  }, [selectedLead, conversations]);
+  }, [selectedLead, strategicAnalyses, conversations]);
   const selectedLeadReplies = useMemo(
-    () => (selectedLead ? mockData.suggestedReplies.filter((reply) => reply.leadId === selectedLead.id) : []),
-    [selectedLead]
+    () => (selectedLead ? suggestedReplies.filter((reply) => reply.leadId === selectedLead.id) : []),
+    [selectedLead, suggestedReplies]
   );
 
   useEffect(() => {
@@ -288,9 +303,9 @@ export function App() {
               ) : null}
               <AnimatePresence mode="wait">
                 {activePage === "dashboard" ? <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} /> : null}
-                {activePage === "agents" ? <AgentsPage key="page-agents" agents={mockData.agents} /> : null}
+                {activePage === "agents" ? <AgentsPage key="page-agents" agents={agents} /> : null}
                 {activePage === "runs" ? (
-                  <RunsPage key="page-runs" runs={runs} leads={leads} agents={mockData.agents} onOpenLead={openLeadWorkspace} />
+                  <RunsPage key="page-runs" runs={runs} leads={leads} agents={agents} strategicAnalyses={strategicAnalyses} onOpenLead={openLeadWorkspace} />
                 ) : null}
                 {activePage === "leads" ? <LeadsPage key="page-leads" leads={leads} onOpenLead={openLeadWorkspace} /> : null}
                 {activePage === "lead-workspace" && selectedLead && selectedLeadAnalysis ? (

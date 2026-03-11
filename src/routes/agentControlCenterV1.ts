@@ -70,6 +70,26 @@ function mapPaymentStatus(stage: string, paymentReceived: boolean, depositPaid: 
   return "not_started";
 }
 
+function mapStrategicAction(stage: string): string {
+  const normalized = String(stage || "").toUpperCase();
+  if (normalized === "NEW") return "clarify_missing_info";
+  if (normalized === "PRODUCT_INTEREST") return "qualify_before_price";
+  if (normalized === "QUALIFICATION_PENDING") return "qualify_before_price";
+  if (normalized === "QUALIFIED") return "send_contextualized_price";
+  if (normalized === "PRICE_SENT") return "reassure_and_progress";
+  if (normalized === "VIDEO_PROPOSED") return "propose_video_call";
+  if (normalized === "DEPOSIT_PENDING") return "advance_to_deposit";
+  if (normalized === "CONFIRMED") return "hold_until_confirmation";
+  return "reactivate_gently";
+}
+
+function mapMomentum(score: number): string {
+  if (score >= 90) return "critical";
+  if (score >= 75) return "high";
+  if (score >= 50) return "medium";
+  return "low";
+}
+
 agentControlCenterV1Router.get("/api/agent-control-center-v1/data", async (_req, res) => {
   try {
     const leads = await listWhatsAppLeads({ days: 90, stage: "ALL", limit: 240 });
@@ -295,11 +315,174 @@ agentControlCenterV1Router.get("/api/agent-control-center-v1/data", async (_req,
       .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
       .slice(0, 200);
 
+    const strategicAnalyses = leads.map((lead) => {
+      const score = Math.max(0, Math.min(100, Math.round(Number(lead.score || 0))));
+      const keySignals = Array.isArray(lead.detectedSignals?.tags) ? lead.detectedSignals.tags.slice(0, 6) : [];
+      const risks: string[] = [];
+      if (lead.risk?.isAtRisk) risks.push("Lead at risk of momentum drop");
+      if (!lead.eventDate) risks.push("Event date not confirmed");
+      if (!lead.productReference) risks.push("Product reference incomplete");
+      const opportunities: string[] = [];
+      if (lead.depositIntent || lead.paymentIntent) opportunities.push("Payment readiness signal detected");
+      if (lead.hasVideoProposed) opportunities.push("Video step can accelerate confidence");
+      if (lead.hasPriceSent) opportunities.push("Price already shared, conversion window open");
+      const missingInformation: string[] = [];
+      if (!lead.eventDate) missingInformation.push("Event date");
+      if (!lead.shipDestinationText && !lead.shipCity) missingInformation.push("Delivery destination");
+      if (!lead.productReference) missingInformation.push("Product target");
+      return {
+        leadId: lead.id,
+        probableStage: String(lead.stage || "NEW"),
+        stageConfidence: Math.max(0.45, Math.min(0.99, score / 100)),
+        momentum: mapMomentum(score),
+        priorityRecommendation: score >= 85 ? "high" : score >= 65 ? "medium" : "low",
+        keySignals,
+        risks,
+        opportunities,
+        missingInformation,
+        nextBestAction: mapStrategicAction(lead.stage),
+        replyObjective: mapNextBestAction(lead.stage),
+        rationale: `Lead stage is ${String(lead.stage || "NEW")}, so the system prioritizes commercial progression with controlled risk.`,
+        humanApprovalRequired: pendingApprovalsByLead.has(lead.id)
+      };
+    });
+
+    const suggestionRows = learningQueue
+      .filter((row) => String(row.suggestion_text || "").trim().length > 0)
+      .sort((a, b) => Date.parse(toIsoDate(b.created_at)) - Date.parse(toIsoDate(a.created_at)));
+    const suggestedRepliesByLead = new Map<string, Array<{
+      id: string;
+      leadId: string;
+      label: string;
+      intent: string;
+      tone: string;
+      language: string;
+      content: string;
+      reason_short?: string;
+    }>>();
+    for (const row of suggestionRows) {
+      const leadId = String(row.lead_id || "").trim();
+      if (!leadId) continue;
+      const current = suggestedRepliesByLead.get(leadId) || [];
+      if (current.length >= 3) continue;
+      current.push({
+        id: String(row.id || ""),
+        leadId,
+        label: `Option ${current.length + 1}`,
+        intent: String(row.suggestion_type || row.source || "follow_up"),
+        tone: "premium",
+        language: mapLanguage(leadById.get(leadId)?.country || "MA"),
+        content: String(row.suggestion_text || ""),
+        reason_short: String(row.outcome_status || row.suggestion_status || "").trim() || undefined
+      });
+      suggestedRepliesByLead.set(leadId, current);
+    }
+
+    const suggestedReplies = leadItems.flatMap((lead) => {
+      const existing = suggestedRepliesByLead.get(lead.id) || [];
+      if (existing.length) return existing;
+      return [
+        {
+          id: `fallback-${lead.id}`,
+          leadId: lead.id,
+          label: "Option 1",
+          intent: "follow_up",
+          tone: "premium",
+          language: lead.language,
+          content: `Merci ${lead.name.split(" ")[0] || ""}, ${mapNextBestAction(lead.currentStage).toLowerCase()}.`,
+          reason_short: "Built from current stage and lead momentum."
+        }
+      ];
+    });
+
+    const nowIso = new Date().toISOString();
+    const baseAgents = [
+      { id: "agent-stage-detection", name: "Stage Detection", role: "Lifecycle inference", dependencies: ["whatsapp_lead_messages"] },
+      { id: "agent-strategic-advisor", name: "Strategic Advisor", role: "Commercial strategy", dependencies: ["stage_detection"] },
+      { id: "agent-reply-generator", name: "Reply Generator", role: "Response synthesis", dependencies: ["strategic_advisor"] },
+      { id: "agent-brand-guardian", name: "Brand Guardian", role: "Tone and compliance guard", dependencies: ["reply_generator"] },
+      { id: "agent-quote-approvals", name: "Quote Approvals", role: "Human approval queue", dependencies: ["quote_requests"] }
+    ];
+    const runsByAgent = new Map<string, typeof runsQ.rows>();
+    for (const run of runsQ.rows) {
+      const model = String(run.model || "").toLowerCase();
+      const key = model.includes("gpt")
+        ? "agent-reply-generator"
+        : model.includes("claude")
+          ? "agent-strategic-advisor"
+          : "agent-stage-detection";
+      const arr = runsByAgent.get(key) || [];
+      arr.push(run);
+      runsByAgent.set(key, arr);
+    }
+    const quoteApprovalRuns = pendingApprovalsQ.rows.map((row) => ({
+      id: row.id,
+      lead_id: row.lead_id,
+      message_id: row.id,
+      status: "pending",
+      trigger_source: "quote_request",
+      model: "policy",
+      latency_ms: 0,
+      error_text: null,
+      created_at: row.created_at
+    }));
+    runsByAgent.set("agent-quote-approvals", quoteApprovalRuns);
+    const agents = baseAgents.map((base) => {
+      const agentRuns = runsByAgent.get(base.id) || [];
+      const totalRuns = agentRuns.length;
+      const successRuns = agentRuns.filter((run) => String(run.status || "").toLowerCase() === "success").length;
+      const errors = agentRuns.filter((run) => String(run.status || "").toLowerCase() === "error");
+      const avgRuntimeSec =
+        totalRuns > 0
+          ? Math.round(
+              agentRuns.reduce((acc, run) => acc + Math.max(0, Number(run.latency_ms || 0)), 0) /
+                totalRuns /
+                1000
+            )
+          : 0;
+      const lastRunAt = agentRuns[0]?.created_at ? toIsoDate(agentRuns[0].created_at) : nowIso;
+      const status = errors.length > 0 ? "degraded" : totalRuns === 0 ? "idle" : "running";
+      return {
+        id: base.id,
+        name: base.name,
+        role: base.role,
+        version: "v1",
+        status,
+        autonomyLevel: base.id === "agent-quote-approvals" ? "manual_guarded" : "semi_autonomous",
+        lastRun: lastRunAt,
+        totalRuns,
+        successRate: totalRuns > 0 ? Math.round((successRuns / totalRuns) * 1000) / 10 : 0,
+        avgRuntimeSec,
+        primaryTriggers: ["whatsapp_inbound", "orchestrator_state_change"],
+        mission: `${base.name} executes its stage in the Mobile-Lab pipeline.`,
+        triggers: ["message_persisted", "manual_recompute", "operator_action"],
+        expectedInputs: ["lead_state", "latest_message", "stage_context"],
+        expectedOutputs: ["decision", "structured_payload"],
+        dependencies: base.dependencies,
+        recentRuns: agentRuns.slice(0, 5).map((run) => ({
+          id: String(run.id || ""),
+          timestamp: toIsoDate(run.created_at),
+          summary: String(run.error_text || `Processed ${String(run.lead_id || "").slice(0, 8)}...`),
+          status: String(run.status || "").toLowerCase() === "error" ? "error" : "success",
+          durationSec: Math.round(Math.max(0, Number(run.latency_ms || 0)) / 1000)
+        })),
+        recentIssues: errors.slice(0, 5).map((run) => ({
+          id: String(run.id || ""),
+          timestamp: toIsoDate(run.created_at),
+          type: "error",
+          message: String(run.error_text || "Unknown error")
+        }))
+      };
+    });
+
     return res.status(200).json({
+      agents,
       leads: leadItems,
       runs,
       approvals,
       learningEvents,
+      suggestedReplies,
+      strategicAnalyses,
       conversations,
       activityFeed
     });

@@ -10,7 +10,6 @@ import { StrategicAnalysisCard } from "../components/StrategicAnalysisCard.js";
 import { SuggestedReplyCard } from "../components/SuggestedReplyCard.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { TraceTimeline } from "../components/TraceTimeline.js";
-import { byId } from "../mock-data.js";
 
 interface LeadWorkspacePageProps {
   lead: Lead;
@@ -219,7 +218,7 @@ export function LeadWorkspacePage({
             </div>
             {latestRun ? (
               <div className="mt-3 space-y-2 text-xs">
-                <Info label="Last triggered agent" value={byId.agent[latestRun.triggeredAgentId]?.name ?? latestRun.triggeredAgentId} compact />
+                <Info label="Last triggered agent" value={latestRun.triggeredAgentId} compact />
                 <Info label="Last run time" value={latestRun.timestamp} compact />
                 <div className="ml-panel-soft rounded-xl px-3 py-2">
                   <p className="text-slate-500">Trace snippet</p>
