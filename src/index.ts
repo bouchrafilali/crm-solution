@@ -399,7 +399,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
 app.get("/", (req, res) => {
   const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   if (isShopifyLaunch(req)) {
-    res.redirect(`/whatsapp-intelligence/mobile-lab${query}`);
+    res.redirect(`/admin/control-center${query}`);
     return;
   }
   res.redirect(`/admin${query}`);
