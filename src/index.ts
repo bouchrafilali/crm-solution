@@ -253,7 +253,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       </div>
       <aside class="summary">
         <h3>Résumé Système</h3>
-        <div class="stat"><span>Modules</span><strong>7</strong></div>
+        <div class="stat"><span>Modules</span><strong>9</strong></div>
         <div class="stat"><span>Structure</span><strong style="color:var(--green)">Structurée</strong></div>
         <div class="stat"><span>Navigation</span><strong>Claire</strong></div>
       </aside>
@@ -328,12 +328,30 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
+          <a class="row module-row" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
+            <div class="icon">◇</div>
+            <div class="content">
+              <p class="title">Blueprint</p>
+              <p class="subtitle">Vue architecture système et cartographie des flux applicatifs</p>
+            </div>
+            <span class="status active">Actif</span>
+            <span class="arrow">›</span>
+          </a>
         </div>
       </section>
 
       <section class="section section-block">
         <p class="section-title">Business</p>
         <div class="rows">
+          <a class="row module-row" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
+            <div class="icon">◔</div>
+            <div class="content">
+              <p class="title">Créer une nouvelle facture</p>
+              <p class="subtitle">Accès direct au générateur de facture et à l’aperçu PDF</p>
+            </div>
+            <span class="status active">Actif</span>
+            <span class="arrow">›</span>
+          </a>
           <a class="row module-row" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
             <div class="icon">◐</div>
             <div class="content">
