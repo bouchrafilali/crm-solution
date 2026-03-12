@@ -71,6 +71,16 @@ const navAliases: Record<string, NavPage> = {
   "system-brain": "system-brain"
 };
 
+const quickNavItems: Array<{ id: NavPage; label: string }> = [
+  { id: "control-center", label: "Control Center" },
+  { id: "agent-control-center", label: "Dashboard" },
+  { id: "leads", label: "Leads" },
+  { id: "runs", label: "Runs" },
+  { id: "approvals", label: "Approvals" },
+  { id: "learning", label: "Learning" },
+  { id: "system-brain", label: "System Brain" }
+];
+
 const externalModules: Partial<
   Record<
     NavPage,
@@ -342,6 +352,25 @@ export function App() {
                 Synced at <span className="text-slate-300">{new Date(lastSyncAt).toLocaleTimeString()}</span>
               </span>
             ) : null}
+          </div>
+          <div className="mb-4 flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-2">
+            {quickNavItems.map((item) => {
+              const active = activePage === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => navigateToPage(item.id)}
+                  className={`shrink-0 rounded-xl px-3 py-2 text-xs font-medium transition ${
+                    active
+                      ? "bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-300/40"
+                      : "text-slate-300 hover:bg-white/[0.06] hover:text-slate-100"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
 
           <AnimatePresence mode="wait">
