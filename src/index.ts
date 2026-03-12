@@ -46,12 +46,8 @@ app.get("/", (req, res) => {
 });
 
 app.get("/admin", (req, res, next) => {
-  if (!isShopifyLaunch(req)) {
-    next();
-    return;
-  }
   const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-  res.redirect(`/whatsapp-intelligence/mobile-lab${query}`);
+  res.redirect(`/agent-control-center-v1/#/index${query}`);
 });
 
 app.get(["/spline", "/admin/spline"], (_req, res) => {
