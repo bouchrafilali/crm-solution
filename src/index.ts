@@ -149,6 +149,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       display:grid;
       gap:14px;
     }
+    .mobile-tabs{
+      display:none;
+    }
     .section{
       border:1px solid var(--line);
       border-radius:24px;
@@ -299,6 +302,30 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       .sections-grid{
         gap:10px;
       }
+      .mobile-tabs{
+        display:grid;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:8px;
+        margin-bottom:10px;
+        border:1px solid var(--line);
+        border-radius:14px;
+        background:rgba(255,255,255,.03);
+        padding:4px;
+      }
+      .mobile-tab{
+        border:0;
+        border-radius:10px;
+        background:transparent;
+        color:var(--muted);
+        padding:8px 6px;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:.02em;
+      }
+      .mobile-tab.active{
+        background:rgba(125,211,252,.15);
+        color:#d9f4ff;
+      }
       .section{
         border-radius:16px;
         padding:10px;
@@ -374,8 +401,14 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <input id="moduleSearch" class="search" type="search" placeholder="Rechercher un module..." />
     </header>
 
+    <div class="mobile-tabs" id="mobileTabs">
+      <button type="button" class="mobile-tab active" data-section-target="operations">Opérations</button>
+      <button type="button" class="mobile-tab" data-section-target="intelligence">Intelligence</button>
+      <button type="button" class="mobile-tab" data-section-target="business">Business</button>
+    </div>
+
     <div class="sections-grid">
-      <section class="section section-block">
+      <section class="section section-block" data-section="operations">
         <p class="section-title">Opérations</p>
         <div class="rows">
           <a class="row module-row" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
@@ -399,7 +432,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         </div>
       </section>
 
-      <section class="section section-block">
+      <section class="section section-block" data-section="intelligence">
         <p class="section-title">Intelligence</p>
         <div class="rows">
           <a class="row module-row" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
@@ -441,7 +474,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         </div>
       </section>
 
-      <section class="section section-block">
+      <section class="section section-block" data-section="business">
         <p class="section-title">Business</p>
         <div class="rows">
           <a class="row module-row" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
@@ -479,6 +512,32 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     const input = document.getElementById("moduleSearch");
     const rows = Array.from(document.querySelectorAll(".module-row"));
     const sections = Array.from(document.querySelectorAll(".section-block"));
+    const tabs = Array.from(document.querySelectorAll(".mobile-tab"));
+    let activeMobileSection = "operations";
+    const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
+
+    function applyVisibility() {
+      const q = String((input && input.value) || "").toLowerCase().trim();
+      sections.forEach((section) => {
+        const allRows = Array.from(section.querySelectorAll(".module-row"));
+        const visibleRows = allRows.filter((row) => row.style.display !== "none");
+        const hasVisibleRows = visibleRows.length > 0;
+        const sectionKey = String(section.getAttribute("data-section") || "");
+        const showByTab = !isMobile() || q.length > 0 || sectionKey === activeMobileSection;
+        section.style.display = hasVisibleRows && showByTab ? "block" : "none";
+      });
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        activeMobileSection = String(tab.getAttribute("data-section-target") || "operations");
+        tabs.forEach((item) => item.classList.toggle("active", item === tab));
+        applyVisibility();
+      });
+    });
+
+    window.addEventListener("resize", applyVisibility);
+
     if (input) {
       input.addEventListener("input", (event) => {
         const q = String(event.target.value || "").toLowerCase().trim();
@@ -486,12 +545,10 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           const hay = String(row.getAttribute("data-search") || "").toLowerCase();
           row.style.display = q && !hay.includes(q) ? "none" : "flex";
         });
-        sections.forEach((section) => {
-          const visibleRows = Array.from(section.querySelectorAll(".module-row")).some((row) => row.style.display !== "none");
-          section.style.display = visibleRows ? "block" : "none";
-        });
+        applyVisibility();
       });
     }
+    applyVisibility();
   </script>
 </body>
 </html>`;
