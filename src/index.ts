@@ -111,6 +111,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .summary h3{margin:0 0 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
     .stat{display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);padding:10px 12px;border-radius:12px;margin-top:8px;font-size:14px}
     .orientation{margin-top:18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .orientation::-webkit-scrollbar{display:none}
     .tile{
       border:1px solid var(--line);
       border-radius:18px;
@@ -263,7 +264,14 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         padding:16px 14px;
         gap:12px;
       }
-      .orientation{grid-template-columns:1fr}
+      .orientation{
+        display:flex;
+        gap:10px;
+        overflow-x:auto;
+        scroll-snap-type:x mandatory;
+        -webkit-overflow-scrolling:touch;
+        padding-bottom:2px;
+      }
       .modules-head{align-items:flex-start;flex-direction:column}
       .search{width:100%}
       h1{
@@ -285,6 +293,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       .tile{
         border-radius:14px;
         padding:12px 12px 11px;
+        min-width:85%;
+        flex:0 0 85%;
+        scroll-snap-align:start;
       }
       .tile .v{
         font-size:22px;
