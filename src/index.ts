@@ -80,7 +80,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         linear-gradient(180deg, #060a12 0%, #070b13 48%, #070c14 100%);
       min-height:100vh;
     }
-    .wrap{max-width:1160px;margin:0 auto;padding:28px 18px 42px}
+    .wrap{max-width:1320px;margin:0 auto;padding:28px 20px 42px}
     .hero{
       border:1px solid var(--line);
       border-radius:30px;
@@ -134,8 +134,11 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       outline:none;
     }
     .search:focus{border-color:var(--line-strong);box-shadow:0 0 0 3px rgba(125,211,252,.08)}
+    .sections-grid{
+      display:grid;
+      gap:14px;
+    }
     .section{
-      margin-top:18px;
       border:1px solid var(--line);
       border-radius:24px;
       background:linear-gradient(180deg,var(--panel-soft) 0%, rgba(13,18,29,.40) 100%);
@@ -199,9 +202,11 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       margin:4px 0 0;
       font-size:13px;
       color:var(--muted);
-      white-space:nowrap;
+      white-space:normal;
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
       overflow:hidden;
-      text-overflow:ellipsis;
     }
     .status{
       font-size:10px;
@@ -223,6 +228,12 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     }
     @media (max-width:1150px){
       .hero{grid-template-columns:1fr}
+    }
+    @media (min-width:1080px){
+      .sections-grid{
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        align-items:start;
+      }
     }
     @media (max-width:760px){
       .orientation{grid-template-columns:1fr}
@@ -262,96 +273,103 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <input id="moduleSearch" class="search" type="search" placeholder="Search modules..." />
     </header>
 
-    <section class="section">
-      <p class="section-title">Operations</p>
-      <div class="rows">
-        <a class="row module-row" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
-          <div class="icon">◎</div>
-          <div class="content">
-            <p class="title">Agent Control Center V1</p>
-            <p class="subtitle">AI operations cockpit for runs, approvals, leads, and system monitoring</p>
-          </div>
-          <span class="status active">Active</span>
-          <span class="arrow">›</span>
-        </a>
-        <a class="row module-row" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
-          <div class="icon">◉</div>
-          <div class="content">
-            <p class="title">Mobile App</p>
-            <p class="subtitle">Operational workspace for fast daily execution with operator workflows</p>
-          </div>
-          <span class="status progress">In Progress</span>
-          <span class="arrow">›</span>
-        </a>
-      </div>
-    </section>
+    <div class="sections-grid">
+      <section class="section section-block">
+        <p class="section-title">Operations</p>
+        <div class="rows">
+          <a class="row module-row" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
+            <div class="icon">◎</div>
+            <div class="content">
+              <p class="title">Agent Control Center V1</p>
+              <p class="subtitle">AI operations cockpit for runs, approvals, leads, and system monitoring</p>
+            </div>
+            <span class="status active">Active</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
+            <div class="icon">◉</div>
+            <div class="content">
+              <p class="title">Mobile App</p>
+              <p class="subtitle">Operational workspace for fast daily execution with operator workflows</p>
+            </div>
+            <span class="status progress">In Progress</span>
+            <span class="arrow">›</span>
+          </a>
+        </div>
+      </section>
 
-    <section class="section">
-      <p class="section-title">Intelligence</p>
-      <div class="rows">
-        <a class="row module-row" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
-          <div class="icon">◌</div>
-          <div class="content">
-            <p class="title">Insights</p>
-            <p class="subtitle">Business intelligence and actionable analysis across performance signals</p>
-          </div>
-          <span class="status active">Active</span>
-          <span class="arrow">›</span>
-        </a>
-        <a class="row module-row" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
-          <div class="icon">◍</div>
-          <div class="content">
-            <p class="title">Forecast</p>
-            <p class="subtitle">Revenue, demand, and operational projection control</p>
-          </div>
-          <span class="status active">Active</span>
-          <span class="arrow">›</span>
-        </a>
-        <a class="row module-row" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
-          <div class="icon">◈</div>
-          <div class="content">
-            <p class="title">WhatsApp Intelligence</p>
-            <p class="subtitle">Conversation analysis, priorities, and strategic operator guidance</p>
-          </div>
-          <span class="status active">Active</span>
-          <span class="arrow">›</span>
-        </a>
-      </div>
-    </section>
+      <section class="section section-block">
+        <p class="section-title">Intelligence</p>
+        <div class="rows">
+          <a class="row module-row" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
+            <div class="icon">◌</div>
+            <div class="content">
+              <p class="title">Insights</p>
+              <p class="subtitle">Business intelligence and actionable analysis across performance signals</p>
+            </div>
+            <span class="status active">Active</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
+            <div class="icon">◍</div>
+            <div class="content">
+              <p class="title">Forecast</p>
+              <p class="subtitle">Revenue, demand, and operational projection control</p>
+            </div>
+            <span class="status active">Active</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
+            <div class="icon">◈</div>
+            <div class="content">
+              <p class="title">WhatsApp Intelligence</p>
+              <p class="subtitle">Conversation analysis, priorities, and strategic operator guidance</p>
+            </div>
+            <span class="status active">Active</span>
+            <span class="arrow">›</span>
+          </a>
+        </div>
+      </section>
 
-    <section class="section">
-      <p class="section-title">Business</p>
-      <div class="rows">
-        <a class="row module-row" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
-          <div class="icon">◐</div>
-          <div class="content">
-            <p class="title">Orders & Payments</p>
-            <p class="subtitle">Commercial flow visibility for orders, deposits, balances, and payment state</p>
-          </div>
-          <span class="status active">Active</span>
-          <span class="arrow">›</span>
-        </a>
-        <a class="row module-row" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
-          <div class="icon">◒</div>
-          <div class="content">
-            <p class="title">Appointments</p>
-            <p class="subtitle">Showroom scheduling, confirmations, reminders, and coordination</p>
-          </div>
-          <span class="status active">Active</span>
-          <span class="arrow">›</span>
-        </a>
-      </div>
-    </section>
+      <section class="section section-block">
+        <p class="section-title">Business</p>
+        <div class="rows">
+          <a class="row module-row" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
+            <div class="icon">◐</div>
+            <div class="content">
+              <p class="title">Orders & Payments</p>
+              <p class="subtitle">Commercial flow visibility for orders, deposits, balances, and payment state</p>
+            </div>
+            <span class="status active">Active</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
+            <div class="icon">◒</div>
+            <div class="content">
+              <p class="title">Appointments</p>
+              <p class="subtitle">Showroom scheduling, confirmations, reminders, and coordination</p>
+            </div>
+            <span class="status active">Active</span>
+            <span class="arrow">›</span>
+          </a>
+        </div>
+      </section>
+    </div>
   </main>
   <script>
     const input = document.getElementById("moduleSearch");
     const rows = Array.from(document.querySelectorAll(".module-row"));
+    const sections = Array.from(document.querySelectorAll(".section-block"));
     if (input) {
       input.addEventListener("input", (event) => {
         const q = String(event.target.value || "").toLowerCase().trim();
         rows.forEach((row) => {
           const hay = String(row.getAttribute("data-search") || "").toLowerCase();
           row.style.display = q && !hay.includes(q) ? "none" : "flex";
+        });
+        sections.forEach((section) => {
+          const visibleRows = Array.from(section.querySelectorAll(".module-row")).some((row) => row.style.display !== "none");
+          section.style.display = visibleRows ? "block" : "none";
         });
       });
     }
