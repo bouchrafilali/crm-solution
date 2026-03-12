@@ -70,6 +70,10 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       --amber:#fcd34d;
     }
     *{box-sizing:border-box}
+    html{
+      -webkit-text-size-adjust:100%;
+      text-size-adjust:100%;
+    }
     body{
       margin:0;
       font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Inter,Arial,sans-serif;
@@ -79,6 +83,10 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         radial-gradient(720px 340px at 95% 0%, rgba(52,211,153,.09), transparent 48%),
         linear-gradient(180deg, #060a12 0%, #070b13 48%, #070c14 100%);
       min-height:100vh;
+      min-height:100dvh;
+      padding-left:max(0px, env(safe-area-inset-left));
+      padding-right:max(0px, env(safe-area-inset-right));
+      padding-bottom:max(0px, env(safe-area-inset-bottom));
     }
     .wrap{max-width:1320px;margin:0 auto;padding:28px 20px 42px}
     .hero{
@@ -129,9 +137,12 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       border-radius:999px;
       background:rgba(255,255,255,.03);
       color:var(--text);
-      padding:11px 14px;
+      padding:12px 14px;
       font-size:14px;
+      min-height:44px;
       outline:none;
+      -webkit-appearance:none;
+      appearance:none;
     }
     .search:focus{border-color:var(--line-strong);box-shadow:0 0 0 3px rgba(125,211,252,.08)}
     .sections-grid{
@@ -169,6 +180,8 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       text-decoration:none;
       color:inherit;
       transition:border-color .2s ease, transform .2s ease, background .2s ease;
+      min-height:56px;
+      -webkit-tap-highlight-color:rgba(125,211,252,.2);
     }
     .row:hover{
       border-color:rgba(255,255,255,.18);
@@ -176,8 +189,8 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       transform:translateY(-1px);
     }
     .icon{
-      width:34px;
-      height:34px;
+      width:36px;
+      height:36px;
       border-radius:10px;
       border:1px solid rgba(255,255,255,.14);
       background:rgba(125,211,252,.08);
@@ -185,7 +198,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       place-items:center;
       color:#d8f2ff;
       font-size:15px;
-      flex:0 0 34px;
+      flex:0 0 36px;
     }
     .content{
       min-width:0;
@@ -217,6 +230,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       border:1px solid;
       flex:0 0 auto;
       margin-left:6px;
+      min-height:28px;
+      display:inline-flex;
+      align-items:center;
     }
     .active{color:#d9ffe9;background:rgba(34,197,94,.13);border-color:rgba(74,222,128,.35)}
     .progress{color:#ffefcf;background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35)}
@@ -236,10 +252,95 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       }
     }
     @media (max-width:760px){
+      .wrap{
+        padding:16px 14px calc(24px + env(safe-area-inset-bottom));
+      }
+      .hero{
+        border-radius:22px;
+        padding:16px 14px;
+        gap:12px;
+      }
       .orientation{grid-template-columns:1fr}
       .modules-head{align-items:flex-start;flex-direction:column}
       .search{width:100%}
-      h1{font-size:34px}
+      h1{
+        font-size:30px;
+        line-height:1.08;
+      }
+      .subtitle{
+        font-size:15px;
+        line-height:1.45;
+      }
+      .summary{
+        border-radius:16px;
+        padding:10px 10px 8px;
+      }
+      .stat{
+        padding:9px 10px;
+        font-size:13px;
+      }
+      .tile{
+        border-radius:14px;
+        padding:12px 12px 11px;
+      }
+      .tile .v{
+        font-size:22px;
+      }
+      .modules-head{
+        margin:18px 0 10px;
+        gap:8px;
+      }
+      .modules-head h2{
+        font-size:21px;
+      }
+      .modules-head p{
+        font-size:13px;
+      }
+      .sections-grid{
+        gap:10px;
+      }
+      .section{
+        border-radius:16px;
+        padding:10px;
+      }
+      .section-title{
+        margin:1px 4px 8px;
+        font-size:11px;
+      }
+      .rows{
+        gap:8px;
+      }
+      .row{
+        border-radius:14px;
+        padding:10px 11px;
+        min-height:54px;
+      }
+      .title{
+        font-size:16px;
+      }
+      .subtitle{
+        font-size:12px;
+        -webkit-line-clamp:2;
+      }
+      .arrow{
+        font-size:18px;
+      }
+      .status{
+        font-size:9px;
+        letter-spacing:.10em;
+        padding:6px 8px;
+      }
+    }
+    @media (max-width:420px){
+      h1{font-size:28px}
+      .icon{
+        width:34px;
+        height:34px;
+        flex:0 0 34px;
+      }
+      .status{
+        padding:5px 7px;
+      }
     }
   </style>
 </head>
