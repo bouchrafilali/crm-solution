@@ -150,8 +150,44 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       display:grid;
       gap:14px;
     }
-    .mobile-tabs{
+    .apps-rail{
       display:none;
+    }
+    .apps-track{
+      display:flex;
+      gap:8px;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      scrollbar-width:none;
+    }
+    .apps-track::-webkit-scrollbar{display:none}
+    .app-chip{
+      flex:0 0 auto;
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      min-height:36px;
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:999px;
+      background:rgba(255,255,255,.03);
+      color:#d5def0;
+      text-decoration:none;
+      font-size:12px;
+      font-weight:600;
+      padding:8px 11px;
+      white-space:nowrap;
+    }
+    .app-chip:hover{
+      border-color:rgba(125,211,252,.35);
+      background:rgba(125,211,252,.10);
+      color:#e8f7ff;
+    }
+    .app-dot{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:rgba(125,211,252,.65);
+      box-shadow:0 0 10px rgba(125,211,252,.45);
     }
     .section{
       border:1px solid var(--line);
@@ -313,29 +349,17 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       .sections-grid{
         gap:10px;
       }
-      .mobile-tabs{
-        display:grid;
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:8px;
-        margin-bottom:10px;
+      .apps-rail{
+        position:sticky;
+        top:10px;
+        z-index:5;
+        display:block;
+        margin:0 0 10px;
         border:1px solid var(--line);
         border-radius:14px;
-        background:rgba(255,255,255,.03);
-        padding:4px;
-      }
-      .mobile-tab{
-        border:0;
-        border-radius:10px;
-        background:transparent;
-        color:var(--muted);
-        padding:8px 6px;
-        font-size:11px;
-        font-weight:600;
-        letter-spacing:.02em;
-      }
-      .mobile-tab.active{
-        background:rgba(125,211,252,.15);
-        color:#d9f4ff;
+        background:rgba(10,16,28,.78);
+        backdrop-filter:blur(10px);
+        padding:6px;
       }
       .section{
         border-radius:16px;
@@ -412,10 +436,17 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <input id="moduleSearch" class="search" type="search" placeholder="Rechercher un module..." />
     </header>
 
-    <div class="mobile-tabs" id="mobileTabs">
-      <button type="button" class="mobile-tab active" data-section-target="operations">Opérations</button>
-      <button type="button" class="mobile-tab" data-section-target="intelligence">Intelligence</button>
-      <button type="button" class="mobile-tab" data-section-target="business">Business</button>
+    <div class="apps-rail" id="appsRail">
+      <div class="apps-track">
+        <a class="app-chip" href="/agent-control-center-v1/#/index${navSuffix}"><span class="app-dot"></span>Agent Control Center</a>
+        <a class="app-chip" href="/whatsapp-intelligence/mobile-lab${navSuffix}"><span class="app-dot"></span>Mobile App</a>
+        <a class="app-chip" href="/admin/insights${navSuffix}"><span class="app-dot"></span>Insights</a>
+        <a class="app-chip" href="/admin/forecast-v4${navSuffix}"><span class="app-dot"></span>Forecast</a>
+        <a class="app-chip" href="/whatsapp-intelligence${navSuffix}"><span class="app-dot"></span>WhatsApp Intelligence</a>
+        <a class="app-chip" href="/blueprint${navSuffix}"><span class="app-dot"></span>Blueprint</a>
+        <a class="app-chip" href="/admin/invoices${navSuffix}"><span class="app-dot"></span>Créer une facture</a>
+        <a class="app-chip" href="/admin/appointments-v2${navSuffix}"><span class="app-dot"></span>Appointments</a>
+      </div>
     </div>
 
     <div class="sections-grid">
@@ -523,31 +554,15 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     const input = document.getElementById("moduleSearch");
     const rows = Array.from(document.querySelectorAll(".module-row"));
     const sections = Array.from(document.querySelectorAll(".section-block"));
-    const tabs = Array.from(document.querySelectorAll(".mobile-tab"));
-    let activeMobileSection = "operations";
-    const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
-
     function applyVisibility() {
       const q = String((input && input.value) || "").toLowerCase().trim();
       sections.forEach((section) => {
         const allRows = Array.from(section.querySelectorAll(".module-row"));
         const visibleRows = allRows.filter((row) => row.style.display !== "none");
         const hasVisibleRows = visibleRows.length > 0;
-        const sectionKey = String(section.getAttribute("data-section") || "");
-        const showByTab = !isMobile() || q.length > 0 || sectionKey === activeMobileSection;
-        section.style.display = hasVisibleRows && showByTab ? "block" : "none";
+        section.style.display = hasVisibleRows ? "block" : "none";
       });
     }
-
-    tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        activeMobileSection = String(tab.getAttribute("data-section-target") || "operations");
-        tabs.forEach((item) => item.classList.toggle("active", item === tab));
-        applyVisibility();
-      });
-    });
-
-    window.addEventListener("resize", applyVisibility);
 
     if (input) {
       input.addEventListener("input", (event) => {
