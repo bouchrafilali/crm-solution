@@ -105,8 +105,10 @@ import { createQuoteAction } from "../db/quoteApprovalRepo.js";
 import {
   getAiAgentRunById,
   getLatestAiAgentRunByLead,
+  getLatestSuccessfulAiAgentRunByLead,
   listAiAgentRunsByLead
 } from "../db/aiAgentRunsRepo.js";
+import { getWhatsAppAgentLeadState } from "../db/whatsappAgentRunsRepo.js";
 import {
   estimateAdvisorCostUsd,
   formatEstimatedCostUsd,
@@ -125,10 +127,30 @@ import {
   isQuoteApprovalReadyForClientSend
 } from "../services/quoteRequestService.js";
 import { buildLeadTranscript } from "../services/whatsappTranscriptFormatter.js";
-import { detectLeadStage, StageDetectionError } from "../services/whatsappStageDetectionService.js";
-import { getLeadStrategicAdvisor, StrategicAdvisorError } from "../services/whatsappStrategicAdvisorService.js";
-import { getLeadReplyGenerator, ReplyGeneratorError } from "../services/whatsappReplyGeneratorService.js";
-import { getLeadBrandGuardian, BrandGuardianError } from "../services/whatsappBrandGuardianService.js";
+import {
+  detectLeadStage,
+  detectStageFromTranscript,
+  StageDetectionError,
+  type StageDetectionAnalysis
+} from "../services/whatsappStageDetectionService.js";
+import {
+  buildStrategicAdvisorFromContext,
+  getLeadStrategicAdvisor,
+  StrategicAdvisorError,
+  type StrategicAdvisorStrategy
+} from "../services/whatsappStrategicAdvisorService.js";
+import {
+  buildReplyGeneratorFromContext,
+  getLeadReplyGenerator,
+  ReplyGeneratorError,
+  type ReplyGeneratorPayload
+} from "../services/whatsappReplyGeneratorService.js";
+import {
+  buildBrandGuardianFromContext,
+  getLeadBrandGuardian,
+  BrandGuardianError,
+  type BrandGuardianReview
+} from "../services/whatsappBrandGuardianService.js";
 import { buildAiCardsViewModel, AiCardsOrchestrationError } from "../services/whatsappAiCardsService.js";
 import { buildLeadPriorityScore, buildPriorityDeskQueue, PriorityDeskError } from "../services/whatsappPriorityDeskService.js";
 import { buildPriorityDeskView, PriorityDeskViewError } from "../services/whatsappPriorityDeskViewService.js";
@@ -178,7 +200,16 @@ import {
 } from "../services/operatorLearningLoopService.js";
 
 export const whatsappRouter = Router();
-const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 200;
+const DEFAULT_MANUAL_AI_ANALYZE_MESSAGE_LIMIT = 40;
+const LEGACY_ADVISOR_PROMPT_VERSION = "legacy_advisor_prompt_v1";
+const LEGACY_ADVISOR_CONTEXT_VERSION = "legacy_context_v1";
+const MANUAL_AI_ANALYZE_MESSAGE_LIMIT = (() => {
+  const parsed = Number(env.WHATSAPP_MANUAL_AI_ANALYZE_MESSAGE_LIMIT);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.max(1, Math.min(200, Math.round(parsed)));
+  }
+  return DEFAULT_MANUAL_AI_ANALYZE_MESSAGE_LIMIT;
+})();
 
 const daysQuerySchema = z.object({
   days: z.coerce.number().int().min(1).max(365).optional(),
@@ -3488,6 +3519,59 @@ function resolveAdvisorProvider(raw: unknown): "claude" | "gpt" {
   return "claude";
 }
 
+function resolveAdvisorModelForProvider(provider: "claude" | "gpt"): string {
+  if (provider === "gpt") {
+    return String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini";
+  }
+  return String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001";
+}
+
+function parseForceFlag(value: unknown): boolean {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+function normalizeProviderFromRunModel(model: unknown): "claude" | "gpt" {
+  const raw = String(model || "").trim().toLowerCase();
+  if (!raw) return "gpt";
+  if (raw.includes("claude")) return "claude";
+  return "gpt";
+}
+
+function buildLegacyAdvisorStateSignature(input: {
+  leadId: string;
+  latestMessageId: string;
+  provider: "claude" | "gpt";
+  model: string;
+  messageLimit: number;
+}): string {
+  return [
+    String(input.leadId || "").trim(),
+    String(input.latestMessageId || "").trim(),
+    input.provider,
+    String(input.model || "").trim(),
+    LEGACY_ADVISOR_PROMPT_VERSION,
+    LEGACY_ADVISOR_CONTEXT_VERSION,
+    String(Math.max(1, Math.round(Number(input.messageLimit || MANUAL_AI_ANALYZE_MESSAGE_LIMIT))))
+  ].join("|");
+}
+
+function buildLegacyAdvisorStateSignatureFromRun(input: {
+  leadId: string;
+  provider: "claude" | "gpt";
+  model: string;
+  messageLimit: number;
+  runMessageId: string;
+}): string {
+  return buildLegacyAdvisorStateSignature({
+    leadId: input.leadId,
+    latestMessageId: input.runMessageId,
+    provider: input.provider,
+    model: input.model,
+    messageLimit: input.messageLimit
+  });
+}
+
 async function runAdvisorByProvider(input: {
   provider: "claude" | "gpt";
   leadId: string;
@@ -3511,6 +3595,58 @@ async function runAdvisorByProvider(input: {
   });
 }
 
+async function tryReuseManualAdvisorRun(input: {
+  leadId: string;
+  latestMessageId: string;
+  provider: "claude" | "gpt";
+  messageLimit: number;
+  forceRerun: boolean;
+  triggerLabel: string;
+}): Promise<{ reusedRun: Awaited<ReturnType<typeof getLatestSuccessfulAiAgentRunByLead>> | null; shouldRerun: boolean }> {
+  const expectedModel = resolveAdvisorModelForProvider(input.provider);
+  const targetSignature = buildLegacyAdvisorStateSignature({
+    leadId: input.leadId,
+    latestMessageId: input.latestMessageId,
+    provider: input.provider,
+    model: expectedModel,
+    messageLimit: input.messageLimit
+  });
+  const latestSuccess = await getLatestSuccessfulAiAgentRunByLead(input.leadId);
+  if (!latestSuccess) {
+    return { reusedRun: null, shouldRerun: true };
+  }
+  const runModel = String(latestSuccess.model || "").trim();
+  const runProvider = normalizeProviderFromRunModel(runModel);
+  const latestSignature = buildLegacyAdvisorStateSignatureFromRun({
+    leadId: input.leadId,
+    runMessageId: String(latestSuccess.messageId || "").trim(),
+    provider: runProvider,
+    model: runModel || expectedModel,
+    messageLimit: input.messageLimit
+  });
+  const unchanged = latestSignature === targetSignature;
+  if (!unchanged) {
+    return { reusedRun: null, shouldRerun: true };
+  }
+  if (input.forceRerun) {
+    console.info("[whatsapp] manual-advisor rerun_forced", {
+      leadId: input.leadId,
+      provider: input.provider,
+      trigger: input.triggerLabel,
+      latestMessageId: input.latestMessageId
+    });
+    return { reusedRun: null, shouldRerun: true };
+  }
+  console.info("[whatsapp] manual-advisor rerun_blocked_unchanged_state", {
+    leadId: input.leadId,
+    provider: input.provider,
+    trigger: input.triggerLabel,
+    latestMessageId: input.latestMessageId,
+    runId: latestSuccess.id
+  });
+  return { reusedRun: latestSuccess, shouldRerun: false };
+}
+
 whatsappRouter.post("/api/whatsapp/leads/:id/ai-retry", async (req, res) => {
   const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
   if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
@@ -3518,6 +3654,7 @@ whatsappRouter.post("/api/whatsapp/leads/:id/ai-retry", async (req, res) => {
   const parsedBody = aiAdvisorProviderSchema.safeParse(req.body || {});
   if (!parsedBody.success) return res.status(400).json({ error: "invalid_body" });
   const provider = resolveAdvisorProvider(parsedBody.data.provider);
+  const forceRerun = parseForceFlag((req.query as Record<string, unknown> | undefined)?.force) || parseForceFlag((req.body as Record<string, unknown> | undefined)?.force);
   try {
     const lead = await getWhatsAppLeadById(leadId);
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
@@ -3526,10 +3663,35 @@ whatsappRouter.post("/api/whatsapp/leads/:id/ai-retry", async (req, res) => {
     if (!latestMessage || !latestMessage.id) {
       return res.status(400).json({ error: "no_messages_for_retry" });
     }
+    const latestMessageId = String(latestMessage.id || "").trim();
+    const reuseDecision = await tryReuseManualAdvisorRun({
+      leadId,
+      latestMessageId,
+      provider,
+      messageLimit: MANUAL_AI_ANALYZE_MESSAGE_LIMIT,
+      forceRerun,
+      triggerLabel: "ai_retry"
+    });
+    if (reuseDecision.reusedRun && !reuseDecision.shouldRerun) {
+      console.info("[whatsapp] manual-advisor reused_existing_result", {
+        leadId,
+        provider,
+        endpoint: "ai-retry",
+        runId: reuseDecision.reusedRun.id,
+        latestMessageId
+      });
+      return res.status(200).json({
+        ok: true,
+        runId: reuseDecision.reusedRun.id,
+        status: reuseDecision.reusedRun.status,
+        provider,
+        reused: true
+      });
+    }
     const run = await runAdvisorByProvider({
       provider,
       leadId,
-      messageId: String(latestMessage.id),
+      messageId: latestMessageId,
       triggerSource: "manual_retry_" + provider,
       messageLimit: MANUAL_AI_ANALYZE_MESSAGE_LIMIT
     });
@@ -3547,6 +3709,7 @@ whatsappRouter.post("/api/whatsapp/leads/:id/ai-regenerate", async (req, res) =>
   const parsedBody = aiAdvisorProviderSchema.safeParse(req.body || {});
   if (!parsedBody.success) return res.status(400).json({ error: "invalid_body" });
   const provider = resolveAdvisorProvider(parsedBody.data.provider);
+  const forceRerun = parseForceFlag((req.query as Record<string, unknown> | undefined)?.force) || parseForceFlag((req.body as Record<string, unknown> | undefined)?.force);
   try {
     const lead = await getWhatsAppLeadById(leadId);
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
@@ -3555,10 +3718,30 @@ whatsappRouter.post("/api/whatsapp/leads/:id/ai-regenerate", async (req, res) =>
     if (!latestMessage || !latestMessage.id) {
       return res.status(400).json({ error: "no_messages_for_regenerate" });
     }
+    const latestMessageId = String(latestMessage.id || "").trim();
+    const reuseDecision = await tryReuseManualAdvisorRun({
+      leadId,
+      latestMessageId,
+      provider,
+      messageLimit: MANUAL_AI_ANALYZE_MESSAGE_LIMIT,
+      forceRerun,
+      triggerLabel: "ai_regenerate"
+    });
+    if (reuseDecision.reusedRun && !reuseDecision.shouldRerun) {
+      console.info("[whatsapp] manual-advisor reused_existing_result", {
+        leadId,
+        provider,
+        endpoint: "ai-regenerate",
+        runId: reuseDecision.reusedRun.id,
+        latestMessageId
+      });
+      const normalizedReuse = normalizeAdvisorRun(reuseDecision.reusedRun);
+      return res.status(200).json({ ...normalizedReuse, reused: true });
+    }
     const run = await runAdvisorByProvider({
       provider,
       leadId,
-      messageId: String(latestMessage.id),
+      messageId: latestMessageId,
       triggerSource: "manual_regenerate_" + provider,
       messageLimit: MANUAL_AI_ANALYZE_MESSAGE_LIMIT
     });
@@ -4012,13 +4195,94 @@ whatsappRouter.post("/api/whatsapp/ai/draft", async (req, res) => {
   }
 });
 
+type CachedAdvisorContext = {
+  leadState: Awaited<ReturnType<typeof getWhatsAppAgentLeadState>> | null;
+  latestMessageId: string | null;
+  isFresh: boolean;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function resolveCachedProvider(leadState: Awaited<ReturnType<typeof getWhatsAppAgentLeadState>> | null, key: string): string {
+  const providers = asRecord(leadState?.providers || null);
+  const value = providers ? String(providers[key] || "").trim() : "";
+  return value || "cached";
+}
+
+function resolveCachedReasoningSource(
+  leadState: Awaited<ReturnType<typeof getWhatsAppAgentLeadState>> | null
+): "state_delta" | "transcript_fallback" | undefined {
+  const raw = String(leadState?.reasoningSource || "").trim().toLowerCase();
+  return raw === "state_delta" || raw === "transcript_fallback"
+    ? (raw as "state_delta" | "transcript_fallback")
+    : undefined;
+}
+
+async function loadCachedAdvisorContext(leadId: string): Promise<CachedAdvisorContext> {
+  const [leadState, recentMessages] = await Promise.all([
+    getWhatsAppAgentLeadState(leadId).catch(() => null),
+    listRecentWhatsAppLeadMessages(leadId, 1).catch(() => [])
+  ]);
+  const latestMessageId = recentMessages && recentMessages[0] && recentMessages[0].id
+    ? String(recentMessages[0].id || "").trim()
+    : null;
+  const stateMessageId = String(leadState?.latestMessageId || "").trim() || null;
+  const isFresh = Boolean(latestMessageId && stateMessageId && latestMessageId === stateMessageId);
+  return { leadState, latestMessageId, isFresh };
+}
+
 whatsappRouter.post("/api/whatsapp/leads/:id/strategic-advisor", async (req, res) => {
   const leadId = String(req.params.id || "").trim();
   if (!leadId) return res.status(400).json({ error: "invalid_id" });
   try {
     const lead = await getWhatsAppLeadById(leadId);
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
+    const cached = await loadCachedAdvisorContext(leadId);
+    const cachedStage = asRecord(cached.leadState?.stageAnalysis || null);
+    const cachedStrategy = asRecord(cached.leadState?.strategy || null);
 
+    if (cached.isFresh && cachedStage && cachedStrategy) {
+      console.info("[whatsapp] strategic-advisor reused_orchestrator_state", {
+        leadId,
+        latestMessageId: cached.latestMessageId
+      });
+      return res.status(200).json({
+        strategy: cachedStrategy as unknown as StrategicAdvisorStrategy,
+        stageAnalysis: cachedStage as unknown as StageDetectionAnalysis,
+        transcriptLength: 0,
+        messageCount: 0,
+        source: resolveCachedReasoningSource(cached.leadState),
+        provider: resolveCachedProvider(cached.leadState, "strategic_advisor"),
+        model: "cached",
+        usage: null,
+        timestamp: String(cached.leadState?.updatedAt || new Date().toISOString())
+      });
+    }
+
+    if (cached.isFresh && cachedStage) {
+      console.info("[whatsapp] strategic-advisor recompute_missing_step", {
+        leadId,
+        latestMessageId: cached.latestMessageId,
+        missing: "strategy"
+      });
+      const transcript = await buildLeadTranscript(leadId, 30);
+      const result = await buildStrategicAdvisorFromContext({
+        leadId,
+        transcript,
+        stageAnalysis: cachedStage as unknown as StageDetectionAnalysis
+      });
+      return res.status(200).json(result);
+    }
+
+    console.info("[whatsapp] strategic-advisor recompute_full_chain", {
+      leadId,
+      latestMessageId: cached.latestMessageId,
+      reason: cached.isFresh ? "missing_stage_and_strategy" : "stale_or_missing_orchestrator_state"
+    });
     const result = await getLeadStrategicAdvisor(leadId);
     return res.status(200).json(result);
   } catch (error) {
@@ -4036,8 +4300,83 @@ whatsappRouter.post("/api/whatsapp/leads/:id/reply-generator", async (req, res) 
   try {
     const lead = await getWhatsAppLeadById(leadId);
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
+    const cached = await loadCachedAdvisorContext(leadId);
+    const cachedStage = asRecord(cached.leadState?.stageAnalysis || null);
+    const cachedStrategy = asRecord(cached.leadState?.strategy || null);
+    const cachedReplyOptions = asRecord(cached.leadState?.replyOptions || null);
 
-    const result = await getLeadReplyGenerator(leadId);
+    let result:
+      | {
+          replyOptions: ReplyGeneratorPayload;
+          strategy: StrategicAdvisorStrategy;
+          stageAnalysis: StageDetectionAnalysis;
+          transcriptLength: number;
+          messageCount: number;
+          source?: "state_delta" | "transcript_fallback";
+          provider: string;
+          model: string;
+          usage: null;
+          timestamp: string;
+        }
+      | Awaited<ReturnType<typeof getLeadReplyGenerator>>;
+
+    if (cached.isFresh && cachedStage && cachedStrategy && cachedReplyOptions) {
+      console.info("[whatsapp] reply-generator reused_orchestrator_state", {
+        leadId,
+        latestMessageId: cached.latestMessageId
+      });
+      result = {
+        replyOptions: cachedReplyOptions as unknown as ReplyGeneratorPayload,
+        strategy: cachedStrategy as unknown as StrategicAdvisorStrategy,
+        stageAnalysis: cachedStage as unknown as StageDetectionAnalysis,
+        transcriptLength: 0,
+        messageCount: 0,
+        source: resolveCachedReasoningSource(cached.leadState),
+        provider: resolveCachedProvider(cached.leadState, "reply_generator"),
+        model: "cached",
+        usage: null,
+        timestamp: String(cached.leadState?.updatedAt || new Date().toISOString())
+      };
+    } else if (cached.isFresh && cachedStage && cachedStrategy) {
+      console.info("[whatsapp] reply-generator recompute_missing_step", {
+        leadId,
+        latestMessageId: cached.latestMessageId,
+        missing: "reply_options"
+      });
+      const transcript = await buildLeadTranscript(leadId, 30);
+      result = await buildReplyGeneratorFromContext({
+        leadId,
+        transcript,
+        stageAnalysis: cachedStage as unknown as StageDetectionAnalysis,
+        strategy: cachedStrategy as unknown as StrategicAdvisorStrategy
+      });
+    } else if (cached.isFresh && cachedStage) {
+      console.info("[whatsapp] reply-generator recompute_missing_steps", {
+        leadId,
+        latestMessageId: cached.latestMessageId,
+        missing: "strategy,reply_options"
+      });
+      const transcript = await buildLeadTranscript(leadId, 30);
+      const strategic = await buildStrategicAdvisorFromContext({
+        leadId,
+        transcript,
+        stageAnalysis: cachedStage as unknown as StageDetectionAnalysis
+      });
+      result = await buildReplyGeneratorFromContext({
+        leadId,
+        transcript,
+        stageAnalysis: cachedStage as unknown as StageDetectionAnalysis,
+        strategy: strategic.strategy
+      });
+    } else {
+      console.info("[whatsapp] reply-generator recompute_full_chain", {
+        leadId,
+        latestMessageId: cached.latestMessageId,
+        reason: cached.isFresh ? "missing_stage" : "stale_or_missing_orchestrator_state"
+      });
+      result = await getLeadReplyGenerator(leadId);
+    }
+
     const replyOptions = Array.isArray(result.replyOptions?.reply_options) ? result.replyOptions.reply_options : [];
     const feedback_tokens: string[] = [];
     for (let index = 0; index < replyOptions.length; index += 1) {
@@ -4083,8 +4422,109 @@ whatsappRouter.post("/api/whatsapp/leads/:id/brand-guardian", async (req, res) =
   try {
     const lead = await getWhatsAppLeadById(leadId);
     if (!lead) return res.status(404).json({ error: "lead_not_found" });
+    const cached = await loadCachedAdvisorContext(leadId);
+    const cachedStage = asRecord(cached.leadState?.stageAnalysis || null);
+    const cachedStrategy = asRecord(cached.leadState?.strategy || null);
+    const cachedReplyOptions = asRecord(cached.leadState?.replyOptions || null);
+    const cachedBrandReview = asRecord(cached.leadState?.brandReview || null);
 
-    const result = await getLeadBrandGuardian(leadId);
+    let result:
+      | {
+          review: BrandGuardianReview;
+          replyOptions: ReplyGeneratorPayload;
+          strategy: StrategicAdvisorStrategy;
+          stageAnalysis: StageDetectionAnalysis;
+          transcriptLength: number;
+          messageCount: number;
+          source?: "state_delta" | "transcript_fallback";
+          provider: string;
+          model: string;
+          usage: null;
+          timestamp: string;
+        }
+      | Awaited<ReturnType<typeof getLeadBrandGuardian>>;
+
+    if (cached.isFresh && cachedStage && cachedStrategy && cachedReplyOptions && cachedBrandReview) {
+      console.info("[whatsapp] brand-guardian reused_orchestrator_state", {
+        leadId,
+        latestMessageId: cached.latestMessageId
+      });
+      result = {
+        review: cachedBrandReview as unknown as BrandGuardianReview,
+        replyOptions: cachedReplyOptions as unknown as ReplyGeneratorPayload,
+        strategy: cachedStrategy as unknown as StrategicAdvisorStrategy,
+        stageAnalysis: cachedStage as unknown as StageDetectionAnalysis,
+        transcriptLength: 0,
+        messageCount: 0,
+        source: resolveCachedReasoningSource(cached.leadState),
+        provider: resolveCachedProvider(cached.leadState, "brand_guardian"),
+        model: "cached",
+        usage: null,
+        timestamp: String(cached.leadState?.updatedAt || new Date().toISOString())
+      };
+    } else {
+      const transcript = await buildLeadTranscript(leadId, 30);
+      let stageAnalysis = cached.isFresh && cachedStage
+        ? (cachedStage as unknown as StageDetectionAnalysis)
+        : null;
+      if (!stageAnalysis) {
+        console.info("[whatsapp] brand-guardian recompute_step", {
+          leadId,
+          latestMessageId: cached.latestMessageId,
+          step: "stage_detection"
+        });
+        const stage = await detectStageFromTranscript({ leadId, transcript });
+        stageAnalysis = stage.analysis;
+      }
+
+      let strategy = cached.isFresh && cachedStrategy
+        ? (cachedStrategy as unknown as StrategicAdvisorStrategy)
+        : null;
+      if (!strategy) {
+        console.info("[whatsapp] brand-guardian recompute_step", {
+          leadId,
+          latestMessageId: cached.latestMessageId,
+          step: "strategic_advisor"
+        });
+        const strategic = await buildStrategicAdvisorFromContext({
+          leadId,
+          transcript,
+          stageAnalysis
+        });
+        strategy = strategic.strategy;
+      }
+
+      let replyOptions = cached.isFresh && cachedReplyOptions
+        ? (cachedReplyOptions as unknown as ReplyGeneratorPayload)
+        : null;
+      if (!replyOptions) {
+        console.info("[whatsapp] brand-guardian recompute_step", {
+          leadId,
+          latestMessageId: cached.latestMessageId,
+          step: "reply_generator"
+        });
+        const reply = await buildReplyGeneratorFromContext({
+          leadId,
+          transcript,
+          stageAnalysis,
+          strategy
+        });
+        replyOptions = reply.replyOptions;
+      }
+
+      console.info("[whatsapp] brand-guardian recompute_step", {
+        leadId,
+        latestMessageId: cached.latestMessageId,
+        step: "brand_guardian"
+      });
+      result = await buildBrandGuardianFromContext({
+        leadId,
+        transcript,
+        stageAnalysis,
+        strategy,
+        replyOptions
+      });
+    }
     return res.status(200).json(result);
   } catch (error) {
     if (
@@ -5425,6 +5865,226 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
   const modeRaw = typeof req.query.mode === "string" ? req.query.mode.trim().toLowerCase() : "";
   const mode = modeRaw === "mock" ? "mock" : "live";
   const leadId = typeof req.query.leadId === "string" ? req.query.leadId.trim().slice(0, 120) : "";
+  const bootMode = JSON.stringify(mode);
+  const bootLeadId = JSON.stringify(leadId);
+  const bootNavSuffix = JSON.stringify(navSuffix);
+
+  const modernHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="shopify-api-key" content="${env.SHOPIFY_API_KEY}" />
+    <title>Mobile Lab</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f6f6f7; color: #202223; }
+      .wrap { max-width: 1420px; margin: 0 auto; padding: 24px; display: grid; gap: 16px; }
+      .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+      .title { margin: 0; font-size: 28px; font-weight: 650; line-height: 1.15; }
+      .sub { margin: 6px 0 0; font-size: 13px; color: #6d7175; }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+      .chip { border: 1px solid #d2d5d8; border-radius: 999px; padding: 4px 10px; font-size: 12px; background: #fff; color: #4a4f55; }
+      .chip.good { color: #116149; background: #e9f7ef; border-color: #c3e9d2; }
+      .card { background: #fff; border: 1px solid #e3e5e7; border-radius: 12px; padding: 16px; }
+      .toolbar { display: grid; grid-template-columns: minmax(220px,1fr) 180px auto; gap: 8px; align-items: center; }
+      .input, .select { height: 36px; border: 1px solid #c9cccf; border-radius: 10px; padding: 0 12px; font-size: 13px; background: #fff; color: #202223; }
+      .seg { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+      .seg button { height: 32px; border: 1px solid #d2d5d8; border-radius: 10px; padding: 0 10px; background: #fff; font-size: 12px; color: #4a4f55; cursor: pointer; }
+      .seg button.active { border-color: #babfc3; background: #f1f2f3; color: #202223; }
+      .kpi { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+      .kpi h3 { margin: 0; font-size: 12px; color: #6d7175; font-weight: 500; }
+      .kpi .v { margin-top: 8px; font-size: 24px; font-weight: 650; }
+      .kpi .d { margin-top: 6px; font-size: 12px; color: #8c9196; }
+      .main { display: grid; grid-template-columns: 340px minmax(0,1fr); gap: 12px; }
+      .list { display: grid; gap: 8px; max-height: 740px; overflow: auto; }
+      .row { border: 1px solid #e3e5e7; border-radius: 10px; padding: 10px; text-align: left; cursor: pointer; background: #fff; position: relative; }
+      .row.active { border-color: #b7bcc1; background: #f6f6f7; }
+      .row-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+      .row-name { font-size: 13px; font-weight: 600; }
+      .row-date { font-size: 11px; color: #8c9196; }
+      .row-preview { margin: 8px 0 0; font-size: 12px; color: #6d7175; line-height: 1.4; }
+      .right { display: grid; gap: 12px; }
+      .sec-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+      .sec-title { margin: 0; font-size: 15px; font-weight: 600; }
+      .sec-sub { margin: 2px 0 0; font-size: 12px; color: #8c9196; }
+      .msgs { border: 1px solid #e3e5e7; border-radius: 10px; background: #fbfbfb; padding: 12px; max-height: 420px; overflow: auto; display: grid; gap: 8px; }
+      .mrow { display: flex; }
+      .mbub { max-width: 76%; border-radius: 10px; border: 1px solid #e3e5e7; padding: 8px 10px; background: #fff; }
+      .mbub.out { background: #f1f2f3; }
+      .mtext { margin: 0; font-size: 13px; line-height: 1.4; }
+      .mmeta { margin-top: 6px; display: flex; justify-content: flex-end; gap: 8px; font-size: 11px; color: #8c9196; }
+      .composer { margin-top: 12px; display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; }
+      .btn { height: 36px; border-radius: 10px; padding: 0 12px; font-size: 13px; cursor: pointer; }
+      .btn.primary { border: 1px solid #008060; background: #008060; color: #fff; font-weight: 600; }
+      .btn.secondary { border: 1px solid #c9cccf; background: #fff; color: #202223; }
+      .sgrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+      .scard { border: 1px solid #e3e5e7; border-radius: 10px; padding: 12px; }
+      .badge { border: 1px solid #cdd1d5; border-radius: 999px; padding: 2px 8px; font-size: 10px; color: #5c6065; background: #f6f6f7; }
+      .actions { display: flex; gap: 8px; margin-top: 8px; }
+      .small { font-size: 12px; color: #6d7175; }
+      .empty { border: 1px dashed #d2d5d8; border-radius: 10px; padding: 16px; font-size: 12px; color: #6d7175; }
+      @media (max-width: 1100px) {
+        .toolbar { grid-template-columns: 1fr; }
+        .kpi { grid-template-columns: repeat(2,minmax(0,1fr)); }
+        .main { grid-template-columns: 1fr; }
+        .sgrid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="head">
+        <div>
+          <h1 class="title">Mobile Lab</h1>
+          <p class="sub">Operational conversation workspace for AI-assisted WhatsApp execution.</p>
+        </div>
+        <div class="chips">
+          <span class="chip" id="modeChip"></span>
+          <span class="chip good">System healthy</span>
+          <a class="chip" href="/whatsapp-intelligence${navSuffix}">Back to WhatsApp Intelligence</a>
+        </div>
+      </header>
+      <section class="card">
+        <div class="toolbar">
+          <input class="input" id="searchInput" placeholder="Search conversations" />
+          <select class="select" id="stageFilter">
+            <option value="all">All stages</option>
+            <option value="new">New</option>
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="converted">Converted</option>
+          </select>
+          <div class="seg" id="urgencySeg"></div>
+        </div>
+      </section>
+      <section class="kpi" id="kpi"></section>
+      <section class="main">
+        <article class="card">
+          <div class="sec-head"><h2 class="sec-title">Conversations</h2><p class="sec-sub" id="listCount"></p></div>
+          <div class="list" id="leadList"></div>
+        </article>
+        <div class="right">
+          <article class="card">
+            <div class="sec-head"><div><h2 class="sec-title" id="leadTitle">Conversation</h2><p class="sec-sub" id="leadSub"></p></div><span class="chip" id="leadPriority"></span></div>
+            <div class="msgs" id="messages"></div>
+            <div class="composer">
+              <input class="input" id="replyInput" placeholder="Write a reply or insert an AI suggestion" />
+              <button class="btn secondary" id="clearBtn">Clear</button>
+              <button class="btn primary" id="sendBtn">Send</button>
+            </div>
+          </article>
+          <article class="card">
+            <div class="sec-head"><h2 class="sec-title">AI Suggested Replies</h2><p class="sec-sub">Operational recommendations</p></div>
+            <div class="sgrid" id="suggestions"></div>
+          </article>
+        </div>
+      </section>
+    </div>
+    <script>
+      (function () {
+        const MODE = ${bootMode};
+        const INITIAL_LEAD_ID = ${bootLeadId};
+        const NAV_SUFFIX = ${bootNavSuffix};
+        const state = { leads: [], selectedLeadId: INITIAL_LEAD_ID || "", messagesByLead: {}, suggestionsByLead: {}, query: "", stage: "all", urgency: "all" };
+        const urgencyOptions = ["all", "high", "medium", "low"];
+        const modeChip = document.getElementById("modeChip");
+        modeChip.textContent = "Mode: " + MODE.toUpperCase();
+        const searchInput = document.getElementById("searchInput");
+        const stageFilter = document.getElementById("stageFilter");
+        const urgencySeg = document.getElementById("urgencySeg");
+        const leadList = document.getElementById("leadList");
+        const listCount = document.getElementById("listCount");
+        const kpi = document.getElementById("kpi");
+        const leadTitle = document.getElementById("leadTitle");
+        const leadSub = document.getElementById("leadSub");
+        const leadPriority = document.getElementById("leadPriority");
+        const messages = document.getElementById("messages");
+        const suggestions = document.getElementById("suggestions");
+        const replyInput = document.getElementById("replyInput");
+        const clearBtn = document.getElementById("clearBtn");
+        const sendBtn = document.getElementById("sendBtn");
+        function esc(v){ return String(v == null ? "" : v).replace(/[&<>\\"]/g, function(c){ return ({ "&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;" })[c]; }); }
+        function toDay(v){ const d = new Date(v); return Number.isNaN(d.getTime()) ? "Unknown" : d.toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
+        function stageBucket(stage){ const s = String(stage||"").toUpperCase(); if(["NEW","PRODUCT_INTEREST"].includes(s)) return "new"; if(["QUALIFICATION_PENDING","PRICE_SENT","VIDEO_PROPOSED","DEPOSIT_PENDING"].includes(s)) return "pending"; if(["CONVERTED"].includes(s)) return "converted"; return "active"; }
+        function filterLeads(){ return state.leads.filter(function(l){ if(state.stage!=="all" && stageBucket(l.stage)!==state.stage) return false; if(state.urgency!=="all" && String(l.urgency||"").toLowerCase()!==state.urgency) return false; if(!state.query.trim()) return true; const src = (l.name+" "+l.stage+" "+l.preview).toLowerCase(); return src.includes(state.query.toLowerCase().trim()); }); }
+        function selectedLead(){ return state.leads.find(function(l){ return l.id===state.selectedLeadId; }) || state.leads[0] || null; }
+        async function fetchJson(url, opt){ const r = await fetch(url, opt || {}); if(!r.ok) throw new Error("HTTP_"+r.status); return r.json(); }
+        async function loadFeed(){
+          const q = new URLSearchParams(); q.set("mode","active_first"); q.set("limit","50"); q.set("days","30");
+          const payload = await fetchJson("/api/whatsapp/mobile-lab/feed?" + q.toString());
+          const items = Array.isArray(payload && payload.items) ? payload.items : [];
+          state.leads = items.map(function(it){ return { id:String(it.leadId||""), name:String(it.clientName||"Client"), stage:String(it.stage||"NEW"), urgency:String(it.urgency||"Medium"), lastAt:String(it.lastMessageAt||new Date().toISOString()), preview:String(it.lastMessagePreview||"Conversation WhatsApp"), topReplyCard: it.topReplyCard || null }; }).filter(function(x){ return x.id; });
+          if(!state.selectedLeadId || !state.leads.some(function(l){ return l.id===state.selectedLeadId; })){ state.selectedLeadId = state.leads[0] ? state.leads[0].id : ""; }
+        }
+        async function loadMessages(leadId){
+          if(!leadId) return;
+          try {
+            const payload = await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(leadId) + "/messages?limit=80");
+            const items = Array.isArray(payload && payload.items) ? payload.items : [];
+            state.messagesByLead[leadId] = items.map(function(m){ return { id:String(m.id||""), from:String(m.direction||"").toUpperCase()==="OUT" ? "brand":"client", text:String(m.text||""), time:String(m.created_at||new Date().toISOString()), status:String(m.direction||"").toUpperCase()==="OUT" ? "sent" : "read" }; });
+          } catch (_e) { state.messagesByLead[leadId] = []; }
+        }
+        function loadSuggestions(lead){
+          if(!lead || !lead.id) return;
+          const card = lead.topReplyCard;
+          if(card && Array.isArray(card.messages) && card.messages.length){
+            state.suggestionsByLead[lead.id] = [{ id: lead.id + "-s1", title: String(card.label||"Recommended reply"), rationale: String(card.intent||"Suggested next best response"), messages: card.messages.map(String).slice(0,4) }];
+            return;
+          }
+          state.suggestionsByLead[lead.id] = [{ id: lead.id + "-fallback", title: "Reply with qualification + next step", rationale: "Gather missing context before final quote confirmation.", messages: ["Thank you for your message.", "Could you confirm event date and delivery city so I can send the exact recommendation?"] }];
+        }
+        async function sendReply(){
+          const lead = selectedLead(); if(!lead) return; const text = String(replyInput.value||"").trim(); if(!text) return;
+          try{
+            await fetchJson("/api/whatsapp/leads/" + encodeURIComponent(lead.id) + "/messages" + NAV_SUFFIX, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ direction:"OUT", text:text, provider:"manual", message_type:"text", send_whatsapp:false }) });
+          }catch(_e){}
+          await loadMessages(lead.id); render(); replyInput.value = "";
+        }
+        function renderUrgency(){ urgencySeg.innerHTML = urgencyOptions.map(function(opt){ const active = state.urgency===opt ? "active" : ""; const label = opt==="all" ? "All priority" : opt[0].toUpperCase()+opt.slice(1); return '<button class="'+active+'" data-u="'+opt+'">'+label+'</button>'; }).join(""); Array.from(urgencySeg.querySelectorAll("button")).forEach(function(btn){ btn.addEventListener("click", function(){ state.urgency = btn.getAttribute("data-u") || "all"; render(); }); }); }
+        function render(){
+          const leads = filterLeads();
+          listCount.textContent = leads.length + " items";
+          kpi.innerHTML = '<article class="card"><h3>Conversations</h3><div class="v">'+leads.length+'</div><div class="d">Visible in current filter</div></article>' +
+            '<article class="card"><h3>Pending replies</h3><div class="v">'+leads.filter(function(l){ return String(l.urgency||"").toLowerCase()==="high"; }).length+'</div><div class="d">High-priority conversations</div></article>' +
+            '<article class="card"><h3>AI suggestions</h3><div class="v">'+(state.suggestionsByLead[state.selectedLeadId]||[]).length+'</div><div class="d">Available on selected lead</div></article>' +
+            '<article class="card"><h3>Conversion signals</h3><div class="v">'+leads.filter(function(l){ return ["active","pending","converted"].includes(stageBucket(l.stage)); }).length+'</div><div class="d">Commercial momentum</div></article>';
+          leadList.innerHTML = leads.length ? leads.map(function(l){ const active = l.id===state.selectedLeadId ? "active" : ""; return '<button class="row '+active+'" data-id="'+esc(l.id)+'"><div class="row-top"><span class="row-name">'+esc(l.name)+'</span><span class="row-date">'+toDay(l.lastAt)+'</span></div><p class="row-preview">'+esc(l.preview)+'</p></button>'; }).join("") : '<div class="empty">No conversations found for current filters.</div>';
+          Array.from(leadList.querySelectorAll(".row")).forEach(function(btn){ btn.addEventListener("click", async function(){ state.selectedLeadId = btn.getAttribute("data-id") || ""; const lead = selectedLead(); if(lead){ await loadMessages(lead.id); loadSuggestions(lead); } render(); }); });
+          const lead = selectedLead();
+          if(!lead){ leadTitle.textContent = "No conversation"; leadSub.textContent = ""; leadPriority.textContent = ""; messages.innerHTML = '<div class="empty">No conversation selected.</div>'; suggestions.innerHTML = ""; return; }
+          leadTitle.textContent = lead.name;
+          leadSub.textContent = "Lead #" + lead.id.slice(0,8) + " • " + lead.stage;
+          leadPriority.textContent = lead.urgency + " priority";
+          const msgs = state.messagesByLead[lead.id] || [];
+          messages.innerHTML = msgs.length ? msgs.map(function(m){ const out = m.from==="brand"; return '<div class="mrow" style="justify-content:'+(out?'flex-end':'flex-start')+'"><div class="mbub '+(out?'out':'')+'"><p class="mtext">'+esc(m.text)+'</p><div class="mmeta"><span>'+new Date(m.time).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})+'</span><span>'+esc(m.status||"")+'</span></div></div></div>'; }).join("") : '<div class="empty">No messages for this lead yet.</div>';
+          const cards = state.suggestionsByLead[lead.id] || [];
+          suggestions.innerHTML = cards.length ? cards.map(function(s){ return '<div class="scard"><div class="sec-head" style="margin-bottom:8px"><h3 class="sec-title" style="font-size:13px">'+esc(s.title)+'</h3><span class="badge">AI suggestion</span></div><p class="small" style="margin:0;color:#202223">'+esc((s.messages&&s.messages[0])||"")+'</p><p class="small" style="margin-top:8px">'+esc(s.rationale||"")+'</p><div class="actions"><button class="btn primary" data-act="insert" data-id="'+esc(s.id)+'">Insert</button><button class="btn secondary" data-act="preview" data-id="'+esc(s.id)+'">Preview</button></div></div>'; }).join("") : '<div class="empty">No AI suggestions available.</div>';
+          Array.from(suggestions.querySelectorAll("button[data-act]")).forEach(function(btn){ btn.addEventListener("click", function(){ const id = btn.getAttribute("data-id"); const card = cards.find(function(x){ return x.id===id; }); if(!card) return; replyInput.value = (card.messages||[]).join(" "); if(btn.getAttribute("data-act")==="preview"){ replyInput.focus(); } }); });
+        }
+        searchInput.addEventListener("input", function(){ state.query = searchInput.value || ""; render(); });
+        stageFilter.addEventListener("change", function(){ state.stage = stageFilter.value || "all"; render(); });
+        clearBtn.addEventListener("click", function(){ replyInput.value = ""; });
+        sendBtn.addEventListener("click", function(){ void sendReply(); });
+        renderUrgency();
+        (async function init(){
+          try{
+            await loadFeed();
+            const lead = selectedLead();
+            if(lead){ await loadMessages(lead.id); loadSuggestions(lead); }
+            render();
+          }catch(_e){
+            leadList.innerHTML = '<div class="empty">Unable to load Mobile Lab feed.</div>';
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>`;
+
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.status(200).type("html").send(modernHtml);
+  return;
 
   const html = `<!doctype html>
 <html lang="fr">
