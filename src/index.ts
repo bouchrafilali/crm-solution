@@ -938,11 +938,6 @@ app.get("/", (req, res) => {
   res.redirect(`/admin${query}`);
 });
 
-app.get("/admin", (req, res, next) => {
-  const navSuffix = buildAdminNavSuffix(req);
-  res.redirect(`/admin/control-center${navSuffix}`);
-});
-
 app.get("/admin/control-center", (req, res) => {
   const navSuffix = buildAdminNavSuffix(req);
   res.setHeader("Cache-Control", "no-store, max-age=0");
