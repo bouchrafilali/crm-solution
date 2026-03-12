@@ -3,9 +3,10 @@ import { useMemo, useState } from "react";
 import { HeaderSection } from "../components/control-center/HeaderSection.js";
 import { ModuleSection, ModuleSectionData } from "../components/control-center/ModuleSection.js";
 import { SearchBar } from "../components/control-center/SearchBar.js";
+import { NavPage } from "../types.js";
 
 interface ControlCenterPageProps {
-  onOpenPage: (page: "dashboard" | "leads" | "runs") => void;
+  onOpenPage: (page: NavPage) => void;
 }
 
 export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
@@ -24,7 +25,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Agent Control Center V1",
             subtitle: "AI operations cockpit for runs, validations, leads and system supervision.",
             status: "active",
-            onOpen: () => onOpenPage("dashboard")
+            onOpen: () => onOpenPage("agent-control-center")
           },
           {
             id: "mobile-app",
@@ -32,9 +33,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Mobile App",
             subtitle: "Operational workspace for fast execution and operator workflows.",
             status: "in_progress",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/whatsapp-intelligence/mobile-lab";
-            }
+            onOpen: () => onOpenPage("mobile-app")
           }
         ]
       },
@@ -48,9 +47,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Insights",
             subtitle: "Business intelligence and analytics for strategic signals.",
             status: "active",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/admin/insights";
-            }
+            onOpen: () => onOpenPage("insights")
           },
           {
             id: "forecast",
@@ -58,9 +55,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Forecast",
             subtitle: "Revenue, demand and operational projections.",
             status: "active",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/admin/forecast-v4";
-            }
+            onOpen: () => onOpenPage("forecast")
           },
           {
             id: "whatsapp-intelligence",
@@ -68,9 +63,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "WhatsApp Intelligence",
             subtitle: "Conversation analysis and operator guidance.",
             status: "active",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/whatsapp-intelligence";
-            }
+            onOpen: () => onOpenPage("whatsapp-intelligence")
           },
           {
             id: "blueprint",
@@ -78,9 +71,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Blueprint",
             subtitle: "System architecture view and application flow mapping.",
             status: "active",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/blueprint";
-            }
+            onOpen: () => onOpenPage("blueprint")
           }
         ]
       },
@@ -94,9 +85,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Create Invoice",
             subtitle: "Direct access to invoice generator and PDF preview.",
             status: "active",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/admin/invoices";
-            }
+            onOpen: () => onOpenPage("create-invoice")
           },
           {
             id: "orders-payments",
@@ -104,9 +93,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Orders & Payments",
             subtitle: "Visibility on orders, deposits, balances and payment status.",
             status: "active",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/admin/invoices";
-            }
+            onOpen: () => onOpenPage("orders-payments")
           },
           {
             id: "appointments",
@@ -114,9 +101,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             title: "Appointments",
             subtitle: "Showroom scheduling, confirmations and reminders.",
             status: "active",
-            onOpen: () => {
-              if (typeof window !== "undefined") window.location.href = "/admin/appointments-v2";
-            }
+            onOpen: () => onOpenPage("appointments")
           }
         ]
       }

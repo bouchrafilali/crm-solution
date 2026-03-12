@@ -772,6 +772,26 @@ app.get("/admin/control-center", (req, res) => {
   res.type("html").send(renderAdminControlCenterPage(navSuffix));
 });
 
+const appShellRouteMap: Array<{ path: string; hash: string }> = [
+  { path: "/control-center", hash: "#/control-center" },
+  { path: "/agent-control-center", hash: "#/agent-control-center" },
+  { path: "/mobile-app", hash: "#/mobile-app" },
+  { path: "/insights", hash: "#/insights" },
+  { path: "/forecast", hash: "#/forecast" },
+  { path: "/whatsapp-intelligence-app", hash: "#/whatsapp-intelligence" },
+  { path: "/blueprint-app", hash: "#/blueprint" },
+  { path: "/create-invoice", hash: "#/create-invoice" },
+  { path: "/orders-payments", hash: "#/orders-payments" },
+  { path: "/appointments", hash: "#/appointments" }
+];
+
+for (const route of appShellRouteMap) {
+  app.get(route.path, (req, res) => {
+    const suffix = buildAdminNavSuffix(req);
+    res.redirect(`/agent-control-center-v1/${suffix}${route.hash}`);
+  });
+}
+
 app.get(["/spline", "/admin/spline"], (_req, res) => {
   const sceneUrl = String(env.SPLINE_SCENE_URL || "").trim();
   if (!sceneUrl) {

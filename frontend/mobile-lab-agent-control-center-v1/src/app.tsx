@@ -1,8 +1,26 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
+import { AppErrorBoundary } from "./components/AppErrorBoundary.js";
+import { AppShell } from "./components/shell/AppShell.js";
+import { ExternalModulePage } from "./components/shell/ExternalModulePage.js";
+import { ModulePageHeader } from "./components/shell/ModulePageHeader.js";
+import { PageContainer } from "./components/shell/PageContainer.js";
 import { mockData } from "./mock-data.js";
+import { ControlCenterPage } from "./pages/ControlCenterPage.js";
+import { DashboardPage } from "./pages/DashboardPage.js";
+import { LeadsPage } from "./pages/LeadsPage.js";
+import { LeadWorkspacePage } from "./pages/LeadWorkspacePage.js";
+import { RunsPage } from "./pages/RunsPage.js";
+import { ApprovalsPage } from "./pages/ApprovalsPage.js";
+import { LearningPage } from "./pages/LearningPage.js";
+import { SystemArchitectureMapPage } from "./pages/SystemArchitectureMapPage.js";
+import { SystemBrainPage } from "./pages/SystemBrainPage.js";
+import { AgentsPage } from "./pages/AgentsPage.js";
+import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1.js";
+import { systemBrainMock } from "./system-brain-mock.js";
 import {
   ActivityEvent,
+  Agent,
   AppMockData,
   ApprovalDecision,
   ApprovalItem,
@@ -12,61 +30,8 @@ import {
   NavPage,
   RunRecord,
   StrategicAnalysis,
-  SuggestedReply,
-  Agent
+  SuggestedReply
 } from "./types.js";
-import { DashboardPage } from "./pages/DashboardPage.js";
-import { ControlCenterPage } from "./pages/ControlCenterPage.js";
-import { AgentsPage } from "./pages/AgentsPage.js";
-import { RunsPage } from "./pages/RunsPage.js";
-import { LeadsPage } from "./pages/LeadsPage.js";
-import { LeadWorkspacePage } from "./pages/LeadWorkspacePage.js";
-import { ApprovalsPage } from "./pages/ApprovalsPage.js";
-import { LearningPage } from "./pages/LearningPage.js";
-import { SystemArchitectureMapPage } from "./pages/SystemArchitectureMapPage.js";
-import { SystemBrainPage } from "./pages/SystemBrainPage.js";
-import { generateStrategicAdvisorAnalysis } from "./strategicAdvisorAgentV1.js";
-import { cn, initials } from "./utils.js";
-import { systemBrainMock } from "./system-brain-mock.js";
-import { AppErrorBoundary } from "./components/AppErrorBoundary.js";
-
-interface SidebarItem {
-  id: Exclude<NavPage, "lead-workspace">;
-  label: string;
-}
-
-const sidebarItems: SidebarItem[] = [
-  { id: "index", label: "Index" },
-  { id: "dashboard", label: "Dashboard" },
-  { id: "agents", label: "Agents" },
-  { id: "runs", label: "Runs" },
-  { id: "leads", label: "Leads" },
-  { id: "approvals", label: "Approvals" },
-  { id: "learning", label: "Learning" },
-  { id: "system-architecture-map", label: "System Map" },
-  { id: "system-brain", label: "System Brain" }
-];
-
-function isNavPage(value: string): value is NavPage {
-  return [
-    "index",
-    "dashboard",
-    "agents",
-    "runs",
-    "leads",
-    "lead-workspace",
-    "approvals",
-    "learning",
-    "system-architecture-map",
-    "system-brain"
-  ].includes(value);
-}
-
-function readPageFromHash(): NavPage | null {
-  if (typeof window === "undefined") return null;
-  const hashValue = window.location.hash.replace(/^#/, "").replace(/^\//, "");
-  return isNavPage(hashValue) ? hashValue : null;
-}
 
 interface AgentControlCenterLivePayload {
   agents?: Agent[];
@@ -82,8 +47,108 @@ interface AgentControlCenterLivePayload {
 
 type DataSourceMode = "live" | "mixed" | "mock_fallback";
 
+const navAliases: Record<string, NavPage> = {
+  "": "control-center",
+  index: "control-center",
+  dashboard: "agent-control-center",
+  "agent-control-center": "agent-control-center",
+  "control-center": "control-center",
+  "mobile-app": "mobile-app",
+  insights: "insights",
+  forecast: "forecast",
+  "whatsapp-intelligence": "whatsapp-intelligence",
+  blueprint: "blueprint",
+  "create-invoice": "create-invoice",
+  "orders-payments": "orders-payments",
+  appointments: "appointments",
+  agents: "agents",
+  runs: "runs",
+  leads: "leads",
+  "lead-workspace": "lead-workspace",
+  approvals: "approvals",
+  learning: "learning",
+  "system-architecture-map": "system-architecture-map",
+  "system-brain": "system-brain"
+};
+
+const externalModules: Partial<
+  Record<
+    NavPage,
+    {
+      title: string;
+      subtitle: string;
+      src: string;
+    }
+  >
+> = {
+  "mobile-app": {
+    title: "Mobile App",
+    subtitle: "Operational workspace for fast execution and operator workflows.",
+    src: "/whatsapp-intelligence/mobile-lab"
+  },
+  insights: {
+    title: "Insights",
+    subtitle: "Business intelligence and analytics for strategic signals.",
+    src: "/admin/insights"
+  },
+  forecast: {
+    title: "Forecast",
+    subtitle: "Revenue, demand and operational projections.",
+    src: "/admin/forecast-v4"
+  },
+  "whatsapp-intelligence": {
+    title: "WhatsApp Intelligence",
+    subtitle: "Conversation analysis and operator guidance.",
+    src: "/whatsapp-intelligence"
+  },
+  blueprint: {
+    title: "Blueprint",
+    subtitle: "System architecture view and application flow mapping.",
+    src: "/blueprint"
+  },
+  "create-invoice": {
+    title: "Create Invoice",
+    subtitle: "Direct access to invoice generator and PDF preview.",
+    src: "/admin/invoices"
+  },
+  "orders-payments": {
+    title: "Orders & Payments",
+    subtitle: "Visibility on orders, deposits, balances and payment status.",
+    src: "/admin/invoices"
+  },
+  appointments: {
+    title: "Appointments",
+    subtitle: "Showroom scheduling, confirmations and reminders.",
+    src: "/admin/appointments-v2"
+  }
+};
+
+function readPageFromHash(): NavPage {
+  if (typeof window === "undefined") return "control-center";
+  const raw = window.location.hash.replace(/^#\/?/, "").trim();
+  return navAliases[raw] ?? "control-center";
+}
+
+function internalPageMeta(page: NavPage): { title: string; subtitle: string } {
+  if (page === "agent-control-center") {
+    return {
+      title: "Agent Control Center V1",
+      subtitle: "AI operations cockpit for runs, validations, leads and system supervision."
+    };
+  }
+  if (page === "runs") return { title: "Runs", subtitle: "Execution traces and intervention visibility." };
+  if (page === "leads") return { title: "Leads", subtitle: "Lead intelligence and next actions." };
+  if (page === "lead-workspace") return { title: "Lead Workspace", subtitle: "Conversation context and suggested actions." };
+  if (page === "approvals") return { title: "Approvals", subtitle: "Human validation queue and pending decisions." };
+  if (page === "learning") return { title: "Learning", subtitle: "Operator feedback and learning outcomes." };
+  if (page === "system-architecture-map") return { title: "System Map", subtitle: "Architecture and orchestration topology." };
+  if (page === "system-brain") return { title: "Mobile-Lab System Brain", subtitle: "Prompt, pipeline and execution oversight." };
+  if (page === "agents") return { title: "Agents", subtitle: "Agent statuses, issues, and recent activity." };
+  return { title: "Module", subtitle: "" };
+}
+
 export function App() {
-  const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash() ?? "index");
+  const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash());
   const [liveData, setLiveData] = useState<AgentControlCenterLivePayload | null>(null);
   const [liveDataError, setLiveDataError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -141,8 +206,7 @@ export function App() {
       "activityFeed"
     ];
     const presentCount = requiredKeys.filter((key) => Array.isArray(liveData[key])).length;
-    if (presentCount === requiredKeys.length) return "live";
-    return "mixed";
+    return presentCount === requiredKeys.length ? "live" : "mixed";
   }, [liveData]);
 
   const selectedLead = useMemo(
@@ -151,7 +215,7 @@ export function App() {
   );
   const selectedLeadAnalysis = useMemo(() => {
     if (!selectedLead) return null;
-    const mapped = strategicAnalyses.find((analysis) => analysis.leadId === selectedLead?.id);
+    const mapped = strategicAnalyses.find((analysis) => analysis.leadId === selectedLead.id);
     if (mapped) return mapped;
     return generateStrategicAdvisorAnalysis({
       lead: selectedLead,
@@ -159,9 +223,7 @@ export function App() {
         id: `wa-${selectedLead.id}`,
         label: `Conversation ${selectedLead.id}`
       },
-      recentMessages: conversations
-        .filter((message) => message.leadId === selectedLead.id)
-        .slice(-6),
+      recentMessages: conversations.filter((message) => message.leadId === selectedLead.id).slice(-6),
       currentStage: selectedLead.currentStage,
       signals: selectedLead.detectedSignals,
       priorityScore: selectedLead.priorityScore,
@@ -192,9 +254,7 @@ export function App() {
         if (cancelled) return;
         setLiveData(payload);
         setLastSyncAt(new Date().toISOString());
-        if (Array.isArray(payload.approvals)) {
-          setApprovals(payload.approvals);
-        }
+        if (Array.isArray(payload.approvals)) setApprovals(payload.approvals);
       } catch (error) {
         if (cancelled) return;
         setLiveDataError(error instanceof Error ? error.message : "live_data_unavailable");
@@ -202,9 +262,7 @@ export function App() {
     }
 
     void loadLiveData();
-    const interval = window.setInterval(() => {
-      void loadLiveData();
-    }, 15000);
+    const interval = window.setInterval(() => void loadLiveData(), 15000);
     const onVisible = (): void => {
       if (document.visibilityState === "visible") void loadLiveData();
     };
@@ -230,14 +288,9 @@ export function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    function handleHashChange(): void {
-      const pageFromHash = readPageFromHash();
-      if (pageFromHash) setActivePage(pageFromHash);
-    }
-
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    const onHash = (): void => setActivePage(readPageFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   function openLeadWorkspace(leadId: string): void {
@@ -249,109 +302,52 @@ export function App() {
     setApprovals((prev) => prev.map((item) => (item.id === id ? { ...item, decision } : item)));
   }
 
+  const externalModule = externalModules[activePage];
+  const internalMeta = internalPageMeta(activePage);
+  const showControlCenter = activePage === "control-center";
+
   return (
-    <div className="min-h-screen bg-[#06080d] text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(56,189,248,0.06),transparent_36%),radial-gradient(circle_at_88%_0%,rgba(16,185,129,0.06),transparent_30%)]" />
-      <div className="relative flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-slate-700/40 bg-slate-950/85 px-5 py-6 backdrop-blur-sm lg:flex">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300">Mobile-Lab</p>
-            <h1 className="mt-2 text-[1.1rem] font-semibold tracking-tight text-slate-100">Agent Control Center V1</h1>
-            <p className="mt-1 text-xs leading-relaxed text-slate-400">Mission Control for AI-powered WhatsApp sales operations.</p>
+    <AppShell>
+      <PageContainer>
+        <AppErrorBoundary onReset={() => navigateToPage("control-center")}>
+          {liveDataError ? (
+            <div className="mb-3 rounded-xl border border-amber-300/35 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+              Live Mobile-Lab feed unavailable ({liveDataError}). Showing fallback data.
+            </div>
+          ) : null}
+          <div className="mb-3 flex items-center gap-2 text-[11px] text-slate-400">
+            <span>
+              Data source:
+              <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 text-slate-200">
+                {dataSourceMode === "live" ? "live" : dataSourceMode === "mixed" ? "mixed" : "mock_fallback"}
+              </span>
+            </span>
+            {lastSyncAt ? (
+              <span>
+                Synced at <span className="text-slate-300">{new Date(lastSyncAt).toLocaleTimeString()}</span>
+              </span>
+            ) : null}
           </div>
 
-          <nav className="mt-8 space-y-1.5">
-            {sidebarItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => navigateToPage(item.id)}
-                className={cn(
-                  "ml-interactive flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm",
-                  activePage === item.id
-                    ? "border border-sky-300/35 bg-sky-500/12 text-sky-100"
-                    : "border border-transparent text-slate-300 hover:border-slate-600/30 hover:bg-slate-900/65"
-                )}
+          <AnimatePresence mode="wait">
+            {showControlCenter ? (
+              <ControlCenterPage key="page-control-center" onOpenPage={navigateToPage} />
+            ) : (
+              <motion.div
+                key={`page-${activePage}`}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <span className="flex items-center gap-2">
-                  <span className={cn("h-1.5 w-1.5 rounded-full", activePage === item.id ? "bg-sky-300" : "bg-slate-600")} />
-                  {item.label}
-                </span>
-                {item.id === "approvals" ? (
-                  <span className="ml-chip rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">
-                    {approvals.filter((item) => item.decision === "pending").length}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </nav>
+                <ModulePageHeader
+                  title={externalModule?.title ?? internalMeta.title}
+                  subtitle={externalModule?.subtitle ?? internalMeta.subtitle}
+                  onBack={() => navigateToPage("control-center")}
+                />
 
-          <div className="ml-panel mt-auto space-y-3 rounded-2xl p-3.5 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">System status</span>
-              <span className="inline-flex items-center gap-1 text-emerald-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
-                Stable
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Environment</span>
-              <span className="text-slate-300">Production Sim</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Operator</span>
-              <span className="inline-flex items-center gap-2 text-slate-300">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-[10px]">
-                  {initials("Meryem Lahlou")}
-                </span>
-                Meryem Lahlou
-              </span>
-            </div>
-          </div>
-        </aside>
-
-        <main className="w-full px-4 pb-8 pt-4 sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-[1880px]">
-            <div className="ml-panel mb-4 flex items-center justify-between rounded-2xl px-4 py-3 lg:hidden">
-            <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-sky-300">Mobile-Lab</p>
-                <p className="text-sm font-semibold text-slate-100">Agent Control Center V1</p>
-            </div>
-            <select
-              value={activePage === "lead-workspace" ? "leads" : activePage}
-              onChange={(event) => navigateToPage(event.target.value as NavPage)}
-              className="ml-panel-soft rounded-lg px-2 py-1 text-xs text-slate-200"
-            >
-              {sidebarItems.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            </div>
-
-            <AppErrorBoundary onReset={() => navigateToPage("dashboard")}>
-              {liveDataError ? (
-                <div className="ml-panel mb-3 rounded-xl border border-amber-300/35 px-3 py-2 text-xs text-amber-100">
-                  Live Mobile-Lab feed unavailable ({liveDataError}). Showing fallback data.
-                </div>
-              ) : null}
-              <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500">
-                <span>
-                  Data source:
-                  <span className="ml-code ml-1 text-slate-300">
-                    {dataSourceMode === "live" ? "live" : dataSourceMode === "mixed" ? "mixed" : "mock_fallback"}
-                  </span>
-                </span>
-                {lastSyncAt ? (
-                  <span>
-                    Synced at <span className="ml-code text-slate-400">{new Date(lastSyncAt).toLocaleTimeString()}</span>
-                  </span>
-                ) : null}
-              </div>
-              <AnimatePresence mode="wait">
-                {activePage === "index" ? <ControlCenterPage key="page-index" onOpenPage={navigateToPage} /> : null}
-                {activePage === "dashboard" ? (
+                {externalModule ? <ExternalModulePage src={externalModule.src} /> : null}
+                {activePage === "agent-control-center" ? (
                   <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} lastSyncAt={lastSyncAt} />
                 ) : null}
                 {activePage === "agents" ? <AgentsPage key="page-agents" agents={agents} /> : null}
@@ -377,11 +373,11 @@ export function App() {
                 {activePage === "learning" ? <LearningPage key="page-learning" learningEvents={learningEvents} leads={leads} /> : null}
                 {activePage === "system-architecture-map" ? <SystemArchitectureMapPage key="page-system-architecture-map" /> : null}
                 {activePage === "system-brain" ? <SystemBrainPage key="page-system-brain" data={systemBrainMock} dataMode="mock" /> : null}
-              </AnimatePresence>
-            </AppErrorBoundary>
-          </div>
-        </main>
-      </div>
-    </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </AppErrorBoundary>
+      </PageContainer>
+    </AppShell>
   );
 }
