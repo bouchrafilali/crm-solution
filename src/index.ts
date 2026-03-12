@@ -153,6 +153,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .apps-rail{
       display:none;
     }
+    .mobile-home{
+      display:none;
+    }
     .apps-track{
       display:flex;
       gap:8px;
@@ -211,6 +214,62 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       border-radius:999px;
       background:rgba(125,211,252,.65);
       box-shadow:0 0 10px rgba(125,211,252,.45);
+    }
+    .home-section{
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:20px;
+      background:rgba(26,37,58,.45);
+      backdrop-filter:blur(14px) saturate(140%);
+      padding:12px 10px;
+      margin-top:10px;
+    }
+    .home-section-title{
+      margin:0 2px 10px;
+      font-size:10px;
+      letter-spacing:.14em;
+      color:#b7c6e2;
+      font-weight:700;
+      text-transform:uppercase;
+    }
+    .home-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px 8px;
+    }
+    .home-app{
+      text-decoration:none;
+      color:#e8f1ff;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:6px;
+      min-width:0;
+      -webkit-tap-highlight-color:rgba(125,211,252,.2);
+    }
+    .home-app-icon{
+      width:64px;
+      height:64px;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.24);
+      background:linear-gradient(180deg, rgba(125,211,252,.34) 0%, rgba(56,189,248,.20) 100%);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.26), 0 10px 18px -14px rgba(0,0,0,.78);
+      display:grid;
+      place-items:center;
+      color:#f4fbff;
+      font-size:22px;
+      font-weight:700;
+    }
+    .home-app-label{
+      display:block;
+      max-width:72px;
+      font-size:11px;
+      line-height:1.15;
+      text-align:center;
+      color:#d7e5ff;
+      letter-spacing:.01em;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
     }
     .section{
       border:1px solid var(--line);
@@ -369,8 +428,12 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       .modules-head p{
         font-size:13px;
       }
+      .modules-head{
+        display:none;
+      }
       .sections-grid{
         gap:10px;
+        display:none;
       }
       .apps-rail{
         position:sticky;
@@ -388,8 +451,31 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       .apps-track{
         gap:10px;
       }
+      .app-chip{
+        width:66px;
+        min-width:66px;
+        min-height:78px;
+        border-radius:14px;
+        padding:5px 4px;
+        font-size:9px;
+      }
+      .app-icon{
+        width:38px;
+        height:38px;
+        border-radius:12px;
+        font-size:16px;
+      }
+      .app-chip-label{
+        font-size:9px;
+      }
+      .apps-track{
+        gap:10px;
+      }
       .app-dot{
         display:none;
+      }
+      .mobile-home{
+        display:block;
       }
       .section{
         border-radius:18px;
@@ -429,6 +515,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         letter-spacing:.10em;
         padding:6px 8px;
       }
+      .orientation{
+        margin-bottom:8px;
+      }
     }
     @media (max-width:420px){
       h1{font-size:28px}
@@ -439,6 +528,16 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       }
       .status{
         padding:5px 7px;
+      }
+      .home-grid{
+        gap:11px 6px;
+      }
+      .home-app-icon{
+        width:60px;
+        height:60px;
+      }
+      .home-app-label{
+        max-width:66px;
       }
     }
   </style>
@@ -484,6 +583,53 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         <a class="app-chip" href="/admin/invoices${navSuffix}"><span class="app-icon">◔</span><span class="app-chip-label">Facture</span></a>
         <a class="app-chip" href="/admin/appointments-v2${navSuffix}"><span class="app-icon">◒</span><span class="app-chip-label">Rendez-vous</span></a>
       </div>
+    </div>
+
+    <div class="mobile-home">
+      <section class="home-section section-block" data-section="operations">
+        <p class="home-section-title">Operations</p>
+        <div class="home-grid">
+          <a class="home-app module-item" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
+            <span class="home-app-icon">◎</span><span class="home-app-label">Agent Control</span>
+          </a>
+          <a class="home-app module-item" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
+            <span class="home-app-icon">◉</span><span class="home-app-label">Mobile App</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="home-section section-block" data-section="intelligence">
+        <p class="home-section-title">Intelligence</p>
+        <div class="home-grid">
+          <a class="home-app module-item" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
+            <span class="home-app-icon">◌</span><span class="home-app-label">Insights</span>
+          </a>
+          <a class="home-app module-item" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
+            <span class="home-app-icon">◍</span><span class="home-app-label">Forecast</span>
+          </a>
+          <a class="home-app module-item" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
+            <span class="home-app-icon">◈</span><span class="home-app-label">WhatsApp</span>
+          </a>
+          <a class="home-app module-item" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
+            <span class="home-app-icon">◇</span><span class="home-app-label">Blueprint</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="home-section section-block" data-section="business">
+        <p class="home-section-title">Business</p>
+        <div class="home-grid">
+          <a class="home-app module-item" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
+            <span class="home-app-icon">◔</span><span class="home-app-label">Facture</span>
+          </a>
+          <a class="home-app module-item" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
+            <span class="home-app-icon">◐</span><span class="home-app-label">Orders</span>
+          </a>
+          <a class="home-app module-item" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
+            <span class="home-app-icon">◒</span><span class="home-app-label">Appointments</span>
+          </a>
+        </div>
+      </section>
     </div>
 
     <div class="sections-grid">
@@ -589,12 +735,12 @@ function renderAdminControlCenterPage(navSuffix: string): string {
   </main>
   <script>
     const input = document.getElementById("moduleSearch");
-    const rows = Array.from(document.querySelectorAll(".module-row"));
+    const moduleItems = Array.from(document.querySelectorAll(".module-row, .home-app.module-item"));
     const sections = Array.from(document.querySelectorAll(".section-block"));
     function applyVisibility() {
       const q = String((input && input.value) || "").toLowerCase().trim();
       sections.forEach((section) => {
-        const allRows = Array.from(section.querySelectorAll(".module-row"));
+        const allRows = Array.from(section.querySelectorAll(".module-row, .home-app.module-item"));
         const visibleRows = allRows.filter((row) => row.style.display !== "none");
         const hasVisibleRows = visibleRows.length > 0;
         section.style.display = hasVisibleRows ? "block" : "none";
@@ -604,9 +750,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     if (input) {
       input.addEventListener("input", (event) => {
         const q = String(event.target.value || "").toLowerCase().trim();
-        rows.forEach((row) => {
+        moduleItems.forEach((row) => {
           const hay = String(row.getAttribute("data-search") || "").toLowerCase();
-          row.style.display = q && !hay.includes(q) ? "none" : "flex";
+          row.style.display = q && !hay.includes(q) ? "none" : "";
         });
         applyVisibility();
       });
