@@ -7,6 +7,16 @@ export type MobileSuggestionCard = {
   messages: string[];
 };
 
+export type MobileLeadSummary = {
+  leadId: string;
+  name: string;
+  stage: string;
+  urgency: "High" | "Medium" | "Low";
+  unread: number;
+  lastAt: string;
+  preview: string;
+};
+
 export type MobileChatMessage = {
   id: string;
   from: "client" | "brand";
@@ -26,6 +36,7 @@ export type MobileLeadThread = {
   preview: string;
   messages: MobileChatMessage[];
   suggestions: MobileSuggestionCard[];
+  relatedThreads?: MobileLeadSummary[];
 };
 
 const MAX_MESSAGE_CHARS = 120;
@@ -63,13 +74,14 @@ function toSuggestion(
 
 export function getMockMobileLeadThread(leadId?: string): MobileLeadThread {
   const id = String(leadId || "lead_mobile_lab_001").trim() || "lead_mobile_lab_001";
+  const now = nowIso();
   return {
     leadId: id,
     name: "Sara El Idrissi",
     stage: "QUALIFIED",
     urgency: "High",
     unread: 2,
-    lastAt: nowIso(),
+    lastAt: now,
     preview: "Parfait, mariage le 28. Quel est le prix et le délai ?",
     messages: [
       {
@@ -92,6 +104,44 @@ export function getMockMobileLeadThread(leadId?: string): MobileLeadThread {
         text: "Parfait, mariage le 28. Quel est le prix et le délai ?",
         time: nowIso(),
         status: "read"
+      }
+    ],
+    relatedThreads: [
+      {
+        leadId: id,
+        name: "Sara El Idrissi",
+        stage: "QUALIFIED",
+        urgency: "High",
+        unread: 2,
+        lastAt: now,
+        preview: "Parfait, mariage le 28. Quel est le prix et le délai ?"
+      },
+      {
+        leadId: "lead_mobile_lab_002",
+        name: "Noura Benali",
+        stage: "PRICE_SENT",
+        urgency: "Medium",
+        unread: 0,
+        lastAt: now,
+        preview: "Merci, je confirme après vérification de la taille."
+      },
+      {
+        leadId: "lead_mobile_lab_003",
+        name: "Amal Rhazi",
+        stage: "QUALIFICATION_PENDING",
+        urgency: "High",
+        unread: 1,
+        lastAt: now,
+        preview: "Pouvez-vous partager la destination et la date d'événement ?"
+      },
+      {
+        leadId: "lead_mobile_lab_004",
+        name: "Leila Haddad",
+        stage: "DEPOSIT_PENDING",
+        urgency: "Low",
+        unread: 0,
+        lastAt: now,
+        preview: "Je fais le virement aujourd'hui inshallah."
       }
     ],
     suggestions: [
@@ -212,6 +262,23 @@ export function createLiveMobileLabDataSource(): MobileLabDataSource {
             ]
           : [];
 
+      const relatedThreads: MobileLeadSummary[] = items
+        .filter((item) => String(item?.leadId || "").trim().length > 0)
+        .slice(0, 40)
+        .map((item) => ({
+          leadId: String(item.leadId),
+          name: String(item.clientName || "Client"),
+          stage: String(item.stage || "NEW"),
+          urgency: String(item.urgency || "").toLowerCase() === "high"
+            ? "High"
+            : String(item.urgency || "").toLowerCase() === "low"
+              ? "Low"
+              : "Medium",
+          unread: 0,
+          lastAt: String(item.lastMessageAt || new Date().toISOString()),
+          preview: String(item.lastMessagePreview || "Conversation WhatsApp")
+        }));
+
       return {
         leadId: String(target.leadId),
         name: String(target.clientName || "Client"),
@@ -225,7 +292,8 @@ export function createLiveMobileLabDataSource(): MobileLabDataSource {
         lastAt: String(target.lastMessageAt || new Date().toISOString()),
         preview: String(target.lastMessagePreview || "Conversation WhatsApp"),
         messages: mappedMessages,
-        suggestions
+        suggestions,
+        relatedThreads
       };
     }
   };

@@ -3,13 +3,15 @@ import { useMemo, useState } from "react";
 import { HeaderSection } from "../components/control-center/HeaderSection.js";
 import { ModuleSection, ModuleSectionData } from "../components/control-center/ModuleSection.js";
 import { SearchBar } from "../components/control-center/SearchBar.js";
-import { NavPage } from "../types.js";
+import { DevelopmentSuggestionsPanel } from "../components/DevelopmentSuggestionsPanel.js";
+import { AppMockData, NavPage } from "../types.js";
 
 interface ControlCenterPageProps {
   onOpenPage: (page: NavPage) => void;
+  data: AppMockData;
 }
 
-export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
+export function ControlCenterPage({ onOpenPage, data }: ControlCenterPageProps) {
   const [query, setQuery] = useState("");
   const [mobileSection, setMobileSection] = useState<"operations" | "intelligence" | "business">("operations");
 
@@ -173,6 +175,16 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
           <ModuleSection key={section.id} section={section} />
         ))}
       </div>
+
+      <DevelopmentSuggestionsPanel
+        input={{
+          runs: data.runs,
+          agents: data.agents,
+          approvals: data.approvals,
+          learningEvents: data.learningEvents,
+          strategicAnalyses: data.strategicAnalyses
+        }}
+      />
     </motion.div>
   );
 }

@@ -46,10 +46,10 @@ export default function WhatsAppIntelligenceMobileLabPage() {
       <div
         style={{
           minHeight: "100dvh",
-          background: "linear-gradient(180deg, #050912 0%, #0a1220 100%)",
-          color: "#dbeafe",
+          background: "#f6f6f7",
+          color: "#202223",
           padding: "24px",
-          fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
         }}
       >
         Mobile Lab error: {error}
@@ -62,10 +62,10 @@ export default function WhatsAppIntelligenceMobileLabPage() {
       <div
         style={{
           minHeight: "100dvh",
-          background: "linear-gradient(180deg, #050912 0%, #0a1220 100%)",
-          color: "#dbeafe",
+          background: "#f6f6f7",
+          color: "#202223",
           padding: "24px",
-          fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
         }}
       >
         Loading mobile lab...

@@ -346,7 +346,7 @@ export function App() {
 
           <AnimatePresence mode="wait">
             {showControlCenter ? (
-              <ControlCenterPage key="page-control-center" onOpenPage={navigateToPage} />
+              <ControlCenterPage key="page-control-center" onOpenPage={navigateToPage} data={appData} />
             ) : (
               <motion.div
                 key={`page-${activePage}`}

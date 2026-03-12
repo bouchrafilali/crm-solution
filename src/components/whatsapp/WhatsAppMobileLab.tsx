@@ -1,8 +1,8 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import type {
   MobileChatMessage,
+  MobileLeadSummary,
   MobileLeadThread,
   MobileSuggestionCard
 } from "../../modules/whatsapp/mobileLabAdapter.js";
@@ -12,82 +12,164 @@ type Props = {
   mode: "mock" | "live";
 };
 
-type DevicePreset = "mobile" | "tablet" | "desktop";
-type PreviewMode = "all" | DevicePreset;
-
-const DEVICE_ORDER: DevicePreset[] = ["mobile", "tablet", "desktop"];
+type StageFilter = "all" | "new" | "active" | "pending" | "converted";
+type UrgencyFilter = "all" | "high" | "medium" | "low";
 
 function toTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "--:--";
-  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
-function deviceTitle(device: DevicePreset): string {
-  if (device === "mobile") return "Mobile";
-  if (device === "tablet") return "Tablet / iPad";
-  return "Desktop";
+function toDateLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Unknown";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function stageBucket(stage: string): Exclude<StageFilter, "all"> {
+  const value = String(stage || "").toUpperCase();
+  if (["NEW", "PRODUCT_INTEREST"].includes(value)) return "new";
+  if (["QUALIFICATION_PENDING", "PRICE_SENT", "VIDEO_PROPOSED", "DEPOSIT_PENDING"].includes(value)) return "pending";
+  if (["QUALIFIED", "CONFIRMED"].includes(value)) return "active";
+  if (["CONVERTED"].includes(value)) return "converted";
+  return "active";
+}
+
+function urgencyTone(urgency: MobileLeadSummary["urgency"]): CSSProperties {
+  if (urgency === "High") return { color: "#8a2c0d", background: "#fff3e8", borderColor: "#f7d4b5" };
+  if (urgency === "Low") return { color: "#2b5b4b", background: "#ecf9f1", borderColor: "#c4ebd4" };
+  return { color: "#5c4d1f", background: "#fff8e6", borderColor: "#f1e1a8" };
+}
+
+function statusTone(status?: MobileChatMessage["status"]): CSSProperties {
+  if (status === "read") return { color: "#2f6f4f" };
+  if (status === "delivered") return { color: "#6f7f8e" };
+  return { color: "#8c9196" };
+}
+
+function buildSummary(thread: MobileLeadThread): MobileLeadSummary {
+  return {
+    leadId: thread.leadId,
+    name: thread.name,
+    stage: thread.stage,
+    urgency: thread.urgency,
+    unread: thread.unread,
+    lastAt: thread.lastAt,
+    preview: thread.preview
+  };
+}
+
+function buildFallbackMessages(summary: MobileLeadSummary): MobileChatMessage[] {
+  return [
+    {
+      id: `${summary.leadId}-inbound-fallback`,
+      from: "client",
+      text: summary.preview || "Client asked for details.",
+      time: summary.lastAt || new Date().toISOString(),
+      status: "read"
+    }
+  ];
+}
+
+function buildFallbackSuggestions(summary: MobileLeadSummary): MobileSuggestionCard[] {
+  return [
+    {
+      id: `${summary.leadId}-suggestion-1`,
+      title: "Reply with qualification + next step",
+      tag: "recommended",
+      priority: 90,
+      rationale: "Lead context is incomplete; asking for missing details improves conversion quality.",
+      messages: [
+        `Thank you ${summary.name.split(" ")[0] || "for your message"}.`,
+        "Could you confirm the event date and delivery city so I can provide an exact recommendation?"
+      ]
+    },
+    {
+      id: `${summary.leadId}-suggestion-2`,
+      title: "Share concise pricing orientation",
+      tag: "pricing",
+      priority: 70,
+      rationale: "A short pricing anchor keeps momentum while preserving premium tone.",
+      messages: [
+        "I can guide you with the best option based on your date and style preferences.",
+        "Once you confirm those two details, I will send the most accurate range and timeline."
+      ]
+    }
+  ];
+}
+
+function matchesThreadFilter(item: MobileLeadSummary, stage: StageFilter, urgency: UrgencyFilter, query: string): boolean {
+  if (stage !== "all" && stageBucket(item.stage) !== stage) return false;
+  if (urgency !== "all" && item.urgency.toLowerCase() !== urgency) return false;
+  if (!query.trim()) return true;
+  const source = `${item.name} ${item.stage} ${item.preview}`.toLowerCase();
+  return source.includes(query.toLowerCase().trim());
 }
 
 export function WhatsAppMobileLab({ thread, mode }: Props) {
-  const [chat, setChat] = useState<MobileChatMessage[]>(thread.messages);
+  const allThreads = useMemo(() => {
+    const fromPayload = Array.isArray(thread.relatedThreads) ? thread.relatedThreads : [];
+    const merged = [buildSummary(thread), ...fromPayload.filter((item) => item.leadId !== thread.leadId)];
+    const deduped = new Map<string, MobileLeadSummary>();
+    for (const item of merged) deduped.set(item.leadId, item);
+    return Array.from(deduped.values()).sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
+  }, [thread]);
+
+  const [selectedLeadId, setSelectedLeadId] = useState<string>(thread.leadId);
+  const [query, setQuery] = useState("");
+  const [stageFilter, setStageFilter] = useState<StageFilter>("all");
+  const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
   const [draftSequence, setDraftSequence] = useState<string[]>([]);
-  const [activeSuggestionId, setActiveSuggestionId] = useState<string>("");
+  const [activeSuggestionId, setActiveSuggestionId] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("all");
-  const [isSmallViewport, setIsSmallViewport] = useState<boolean>(() =>
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : true
+  const [isNarrow, setIsNarrow] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 1100px)").matches : false
   );
 
-  const mobileChatRef = useRef<HTMLDivElement | null>(null);
-  const tabletChatRef = useRef<HTMLDivElement | null>(null);
-  const desktopChatRef = useRef<HTMLDivElement | null>(null);
-
-  const suggestions = useMemo(() => thread.suggestions || [], [thread.suggestions]);
-
   useEffect(() => {
-    const refs = [mobileChatRef.current, tabletChatRef.current, desktopChatRef.current];
-    refs.forEach((el) => {
-      if (!el) return;
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    });
-  }, [chat.length]);
-
-  function chatRefFor(device: DevicePreset) {
-    if (device === "mobile") return mobileChatRef;
-    if (device === "tablet") return tabletChatRef;
-    return desktopChatRef;
-  }
-
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 768px)");
-    const onChange = () => setIsSmallViewport(media.matches);
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 1100px)");
+    const onChange = () => setIsNarrow(media.matches);
     onChange();
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, []);
 
-  async function sendSequence(messages: string[]) {
-    if (!messages.length || isSending) return;
+  const filteredThreads = useMemo(
+    () => allThreads.filter((item) => matchesThreadFilter(item, stageFilter, urgencyFilter, query)),
+    [allThreads, stageFilter, urgencyFilter, query]
+  );
+
+  const selectedSummary = useMemo(() => {
+    const fromFiltered = filteredThreads.find((item) => item.leadId === selectedLeadId);
+    if (fromFiltered) return fromFiltered;
+    return allThreads.find((item) => item.leadId === selectedLeadId) || allThreads[0] || buildSummary(thread);
+  }, [filteredThreads, allThreads, selectedLeadId, thread]);
+
+  const selectedMessages = useMemo(() => {
+    if (selectedSummary.leadId === thread.leadId) return thread.messages;
+    return buildFallbackMessages(selectedSummary);
+  }, [selectedSummary, thread]);
+
+  const selectedSuggestions = useMemo(() => {
+    if (selectedSummary.leadId === thread.leadId && thread.suggestions.length) return thread.suggestions;
+    return buildFallbackSuggestions(selectedSummary);
+  }, [selectedSummary, thread]);
+
+  const kpis = useMemo(() => {
+    const conversations = filteredThreads.length;
+    const pendingReplies = filteredThreads.filter((item) => item.unread > 0).length;
+    const aiSuggestions = selectedSuggestions.length;
+    const conversionSignals = filteredThreads.filter((item) => ["active", "converted", "pending"].includes(stageBucket(item.stage))).length;
+    return { conversations, pendingReplies, aiSuggestions, conversionSignals };
+  }, [filteredThreads, selectedSuggestions.length]);
+
+  async function sendSequence(lines: string[]) {
+    if (!lines.length || isSending) return;
     setIsSending(true);
     try {
-      for (let i = 0; i < messages.length; i += 1) {
-        const text = String(messages[i] || "").trim();
-        if (!text) continue;
-        await new Promise<void>((resolve) => {
-          setTimeout(() => resolve(), 380 + i * 120);
-        });
-        setChat((prev) => [
-          ...prev,
-          {
-            id: "lab_out_" + Date.now() + "_" + i,
-            from: "brand",
-            text,
-            time: new Date().toISOString(),
-            status: "sent"
-          }
-        ]);
-      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
     } finally {
       setIsSending(false);
       setDraftSequence([]);
@@ -95,762 +177,631 @@ export function WhatsAppMobileLab({ thread, mode }: Props) {
     }
   }
 
-  function onInsertSuggestion(suggestion: MobileSuggestionCard) {
-    setDraftSequence(suggestion.messages.slice(0, 4));
-    setActiveSuggestionId(suggestion.id);
-  }
-
-  function onSendSuggestion(suggestion: MobileSuggestionCard) {
-    setActiveSuggestionId(suggestion.id);
-    void sendSequence(suggestion.messages.slice(0, 4));
-  }
-
-  function renderHeader(device: DevicePreset) {
-    const titleFont = device === "desktop" ? "16px" : "15px";
-    const subtitleFont = device === "desktop" ? "12px" : "11px";
-    return (
-      <header style={styles.header}>
-        <div style={styles.avatarWrap}>
-          <div style={styles.avatar} />
-        </div>
-        <div style={styles.headerMeta}>
-          <div style={{ ...styles.title, fontSize: titleFont }}>{thread.name}</div>
-          <div style={{ ...styles.subtitle, fontSize: subtitleFont }}>
-            {thread.stage} · {thread.urgency} priority · {mode.toUpperCase()} · {deviceTitle(device).toUpperCase()}
-          </div>
-        </div>
-        <div style={styles.leadIdPill}>ID {thread.leadId.slice(0, 8)}</div>
-      </header>
-    );
-  }
-
-  function renderChat(device: DevicePreset) {
-    const bubbleFont = device === "desktop" ? "13px" : "12px";
-    return (
-      <section ref={chatRefFor(device)} style={styles.chatArea}>
-        <AnimatePresence initial={false}>
-          {chat.map((msg) => {
-            const isOut = msg.from === "brand";
-            return (
-              <motion.div
-                key={msg.id + "_" + device}
-                initial={{ opacity: 0, y: 12, scale: 0.985 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2, ease: [0.2, 0.72, 0.2, 1] }}
-                style={{
-                  ...styles.row,
-                  justifyContent: isOut ? "flex-end" : "flex-start"
-                }}
-              >
-                <div
-                  style={{
-                    ...styles.bubble,
-                    maxWidth: device === "desktop" ? "78%" : "84%",
-                    ...(isOut ? styles.bubbleOut : styles.bubbleIn)
-                  }}
-                >
-                  <div style={{ ...styles.bubbleText, fontSize: bubbleFont }}>{msg.text}</div>
-                  <div style={styles.bubbleTimeRow}>
-                    <span style={styles.bubbleTime}>{toTime(msg.time)}</span>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-      </section>
-    );
-  }
-
-  function renderSuggestions(device: DevicePreset) {
-    const isHorizontal = device === "mobile";
-    return (
-      <section style={styles.suggestionsWrap}>
-        <div style={styles.sectionTitle}>AI Suggestions · 2-4 messages</div>
-        <div
-          style={
-            isHorizontal
-              ? styles.suggestionScroller
-              : { ...styles.suggestionStack, maxHeight: device === "desktop" ? "100%" : "340px" }
-          }
-          aria-label="AI suggestions list"
-        >
-          {suggestions.length === 0 ? (
-            <div style={styles.emptyState}>
-              No suggestion yet. Switch to mock mode or connect live suggestion source.
-            </div>
-          ) : null}
-          {suggestions.map((s, idx) => {
-            const active = s.id === activeSuggestionId;
-            return (
-              <motion.article
-                key={s.id + "_" + device}
-                initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.18, delay: idx * 0.05 }}
-                whileTap={{ scale: 0.985 }}
-                style={{
-                  ...styles.suggestionCard,
-                  ...(isHorizontal ? styles.suggestionCardHorizontal : styles.suggestionCardVertical),
-                  ...(active ? styles.suggestionCardActive : null)
-                }}
-              >
-                <div style={styles.suggestionTitle}>{s.title}</div>
-                <div style={styles.suggestionRationale}>{s.rationale}</div>
-                <div style={styles.previewList}>
-                  {s.messages.map((line, lineIdx) => (
-                    <div key={s.id + "_line_" + lineIdx + "_" + device} style={styles.previewLineWrap}>
-                      <span style={styles.previewLineDot} />
-                      <div style={styles.previewLine}>{line}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={styles.suggestionActions}>
-                  <motion.button
-                    type="button"
-                    style={styles.btnGhost}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => onInsertSuggestion(s)}
-                    disabled={isSending}
-                  >
-                    Insert
-                  </motion.button>
-                  <motion.button
-                    type="button"
-                    style={styles.btnPrimary}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => onSendSuggestion(s)}
-                    disabled={isSending}
-                  >
-                    {isSending && active ? "Sending..." : "Send"}
-                  </motion.button>
-                </div>
-              </motion.article>
-            );
-          })}
-        </div>
-      </section>
-    );
-  }
-
-  function renderComposer(compact = false) {
-    return (
-      <footer style={styles.composer}>
-        <div style={styles.composerLabel}>Insert + Send Sequence</div>
-        <div style={{ ...styles.draftWrap, ...(compact ? styles.draftWrapCompact : null) }}>
-          {draftSequence.length === 0 ? (
-            <div style={styles.draftEmpty}>Select an AI card to preview your outgoing sequence.</div>
-          ) : (
-            draftSequence.map((line, idx) => (
-              <motion.div
-                key={"draft_" + idx}
-                initial={{ opacity: 0, x: 10, scale: 0.98 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                transition={{ duration: 0.16, delay: idx * 0.03 }}
-                style={styles.draftBubble}
-              >
-                <span style={styles.draftBubbleIndex}>{idx + 1}</span>
-                <span style={styles.draftLine}>{line}</span>
-              </motion.div>
-            ))
-          )}
-        </div>
-        <motion.button
-          type="button"
-          style={styles.btnPrimaryWide}
-          whileTap={{ scale: 0.985 }}
-          disabled={isSending || draftSequence.length < 2}
-          onClick={() => void sendSequence(draftSequence)}
-        >
-          {isSending ? "Sending sequence..." : "Send Inserted Sequence"}
-        </motion.button>
-      </footer>
-    );
-  }
-
-  function renderDevice(device: DevicePreset) {
-    const standaloneMobile = previewMode === "mobile";
-    if (device === "mobile") {
-      return (
-        <div
-          style={{
-            ...styles.phoneShell,
-            ...(standaloneMobile && isSmallViewport ? styles.phoneShellMobile : styles.phoneShellDesktop)
-          }}
-        >
-          {renderHeader("mobile")}
-          {renderChat("mobile")}
-          {renderSuggestions("mobile")}
-          {renderComposer()}
-        </div>
-      );
-    }
-
-    if (device === "tablet") {
-      return (
-        <div style={styles.tabletShell}>
-          {renderHeader("tablet")}
-          <div style={styles.tabletBody}>
-            <div style={styles.tabletChatPane}>{renderChat("tablet")}</div>
-            <div style={styles.tabletSidePane}>
-              {renderSuggestions("tablet")}
-              {renderComposer(true)}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div style={styles.desktopShell}>
-        {renderHeader("desktop")}
-        <div style={styles.desktopBody}>
-          <section style={styles.desktopCol}>{renderChat("desktop")}</section>
-          <section style={styles.desktopCol}>{renderSuggestions("desktop")}</section>
-          <section style={styles.desktopCol}>{renderComposer(true)}</section>
-        </div>
-      </div>
-    );
-  }
-
-  const visibleDevices = previewMode === "all" ? DEVICE_ORDER : [previewMode];
-
   return (
-    <div style={styles.page}>
-      <div style={styles.bgGlowTop} />
-      <div style={styles.bgBlobCyan} />
-      <div style={styles.bgBlobViolet} />
-
-      <div style={styles.previewContainer}>
-        <div style={styles.topControls}>
-          <a href="/admin/whatsapp-intelligence" style={styles.backLink}>
-            Back to WhatsApp Intelligence
-          </a>
-          <div style={styles.toggleWrap}>
-            {(["all", "mobile", "tablet", "desktop"] as PreviewMode[]).map((opt) => {
-              const active = previewMode === opt;
-              const label = opt === "all" ? "All" : deviceTitle(opt as DevicePreset);
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  style={{ ...styles.toggleBtn, ...(active ? styles.toggleBtnActive : null) }}
-                  onClick={() => setPreviewMode(opt)}
-                >
-                  {label}
-                </button>
-              );
-            })}
+    <div style={styles.pageContainer}>
+      <div style={styles.innerContainer}>
+        <header style={styles.pageHeader}>
+          <div>
+            <h1 style={styles.pageTitle}>Mobile Lab</h1>
+            <p style={styles.pageSubtitle}>Operational conversation workspace for AI-assisted WhatsApp execution.</p>
           </div>
-        </div>
+          <div style={styles.quickPills}>
+            <span style={{ ...styles.statusPill, ...styles.statusPillNeutral }}>Mode: {mode.toUpperCase()}</span>
+            <span style={{ ...styles.statusPill, ...styles.statusPillGood }}>System healthy</span>
+            <span style={{ ...styles.statusPill, ...styles.statusPillNeutral }}>SLA window active</span>
+          </div>
+        </header>
 
-        <div style={previewMode === "all" ? styles.allGrid : styles.singleGrid}>
-          {visibleDevices.map((device) => (
-            <div key={device} style={styles.previewItem}>
-              {previewMode === "all" ? <div style={styles.previewLabel}>{deviceTitle(device)}</div> : null}
-              {renderDevice(device)}
+        <section style={styles.adminCard}>
+          <div style={{ ...styles.toolbarRow, ...(isNarrow ? styles.toolbarRowNarrow : null) }}>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search conversations"
+              style={styles.searchInput}
+            />
+            <select value={stageFilter} onChange={(event) => setStageFilter(event.target.value as StageFilter)} style={styles.selectInput}>
+              <option value="all">All stages</option>
+              <option value="new">New</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="converted">Converted</option>
+            </select>
+            <div style={styles.segmentedControl}>
+              {(["all", "high", "medium", "low"] as UrgencyFilter[]).map((value) => {
+                const active = urgencyFilter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setUrgencyFilter(value)}
+                    style={{ ...styles.filterChip, ...(active ? styles.filterChipActive : null) }}
+                  >
+                    {value === "all" ? "All priority" : `${value[0].toUpperCase()}${value.slice(1)}`}
+                  </button>
+                );
+              })}
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
+
+        <section style={{ ...styles.kpiGrid, ...(isNarrow ? styles.kpiGridNarrow : null) }}>
+          <KpiStatCard label="Conversations" value={kpis.conversations} helper="Visible in current filter" />
+          <KpiStatCard label="Pending replies" value={kpis.pendingReplies} helper="Unread or waiting operator" />
+          <KpiStatCard label="AI suggestions" value={kpis.aiSuggestions} helper="Available for selected conversation" />
+          <KpiStatCard label="Conversion signals" value={kpis.conversionSignals} helper="Active commercial momentum" />
+        </section>
+
+        <section style={{ ...styles.mainGrid, ...(isNarrow ? styles.mainGridNarrow : null) }}>
+          <article style={styles.adminCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Conversations</h2>
+              <p style={styles.sectionHelper}>{filteredThreads.length} items</p>
+            </div>
+            <div style={styles.conversationList}>
+              {filteredThreads.map((item) => {
+                const selected = item.leadId === selectedSummary.leadId;
+                return (
+                  <button
+                    key={item.leadId}
+                    type="button"
+                    onClick={() => setSelectedLeadId(item.leadId)}
+                    style={{ ...styles.conversationRow, ...(selected ? styles.conversationRowActive : null) }}
+                  >
+                    <div style={styles.rowHead}>
+                      <span style={styles.rowName}>{item.name}</span>
+                      <span style={styles.rowMeta}>{toDateLabel(item.lastAt)}</span>
+                    </div>
+                    <div style={styles.rowHead}>
+                      <span style={styles.rowStage}>{item.stage}</span>
+                      <span style={{ ...styles.rowUrgency, ...urgencyTone(item.urgency) }}>{item.urgency}</span>
+                    </div>
+                    <p style={styles.rowPreview}>{item.preview}</p>
+                    {item.unread > 0 ? <span style={styles.unreadBadge}>{item.unread}</span> : null}
+                  </button>
+                );
+              })}
+              {filteredThreads.length === 0 ? <EmptyState title="No conversations" subtitle="Adjust filters or search to find a lead." /> : null}
+            </div>
+          </article>
+
+          <div style={styles.rightColumn}>
+            <article style={styles.adminCard}>
+              <div style={styles.sectionHeader}>
+                <div>
+                  <h2 style={styles.sectionTitle}>{selectedSummary.name}</h2>
+                  <p style={styles.sectionHelper}>Lead #{selectedSummary.leadId.slice(0, 8)} • {selectedSummary.stage}</p>
+                </div>
+                <span style={{ ...styles.statusPill, ...styles.statusPillNeutral }}>{selectedSummary.urgency} priority</span>
+              </div>
+
+              <div style={styles.messagesPane}>
+                {selectedMessages.map((msg) => {
+                  const outgoing = msg.from === "brand";
+                  return (
+                    <div key={msg.id} style={{ ...styles.messageRow, justifyContent: outgoing ? "flex-end" : "flex-start" }}>
+                      <div style={{ ...styles.messageBubble, ...(outgoing ? styles.messageBubbleOutgoing : styles.messageBubbleIncoming) }}>
+                        <p style={styles.messageText}>{msg.text}</p>
+                        <div style={styles.messageMetaRow}>
+                          <span style={styles.messageMeta}>{toTime(msg.time)}</span>
+                          {msg.status ? <span style={{ ...styles.messageMeta, ...statusTone(msg.status) }}>{msg.status}</span> : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={styles.composerRow}>
+                <input
+                  style={styles.replyInput}
+                  placeholder="Write a reply or insert an AI suggestion"
+                  value={draftSequence[0] || ""}
+                  onChange={(event) => setDraftSequence(event.target.value ? [event.target.value] : [])}
+                />
+                <button
+                  type="button"
+                  style={styles.secondaryButton}
+                  onClick={() => setDraftSequence([])}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  style={styles.primaryButton}
+                  disabled={isSending || draftSequence.length === 0}
+                  onClick={() => void sendSequence(draftSequence)}
+                >
+                  {isSending ? "Sending..." : "Send"}
+                </button>
+              </div>
+            </article>
+
+            <article style={styles.adminCard}>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>AI Suggested Replies</h2>
+                <p style={styles.sectionHelper}>Operational recommendations</p>
+              </div>
+              <div style={{ ...styles.suggestionGrid, ...(isNarrow ? styles.suggestionGridNarrow : null) }}>
+                {selectedSuggestions.map((suggestion) => {
+                  const active = suggestion.id === activeSuggestionId;
+                  return (
+                    <div key={suggestion.id} style={{ ...styles.suggestionPanel, ...(active ? styles.suggestionPanelActive : null) }}>
+                      <div style={styles.rowHead}>
+                        <h3 style={styles.suggestionTitle}>{suggestion.title}</h3>
+                        <span style={styles.suggestionBadge}>AI suggestion</span>
+                      </div>
+                      <p style={styles.suggestionReply}>{suggestion.messages[0] || "No reply preview"}</p>
+                      <p style={styles.suggestionReason}>{suggestion.rationale}</p>
+                      <div style={styles.suggestionActions}>
+                        <button
+                          type="button"
+                          style={styles.primaryButton}
+                          onClick={() => {
+                            setActiveSuggestionId(suggestion.id);
+                            setDraftSequence(suggestion.messages.slice(0, 4));
+                          }}
+                        >
+                          Insert
+                        </button>
+                        <button
+                          type="button"
+                          style={styles.secondaryButton}
+                          onClick={() => {
+                            setActiveSuggestionId(suggestion.id);
+                            void sendSequence(suggestion.messages.slice(0, 4));
+                          }}
+                        >
+                          Send now
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section style={{ ...styles.actionCardGrid, ...(isNarrow ? styles.actionCardGridNarrow : null) }}>
+          <article style={styles.adminCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Approvals</h2>
+              <span style={{ ...styles.statusPill, ...styles.statusPillNeutral }}>Queue</span>
+            </div>
+            <p style={styles.sectionHelper}>Keep human approval items visible before sensitive sends.</p>
+          </article>
+          <article style={styles.adminCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Operator Focus</h2>
+              <span style={{ ...styles.statusPill, ...styles.statusPillGood }}>On track</span>
+            </div>
+            <p style={styles.sectionHelper}>Use concise replies, preserve tone, and close missing qualification quickly.</p>
+          </article>
+          <article style={styles.adminCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Learning Loop</h2>
+              <span style={{ ...styles.statusPill, ...styles.statusPillNeutral }}>Active</span>
+            </div>
+            <p style={styles.sectionHelper}>Capture edited AI replies to improve future recommendation quality.</p>
+          </article>
+        </section>
       </div>
     </div>
   );
 }
 
+function KpiStatCard({ label, value, helper }: { label: string; value: number; helper: string }) {
+  return (
+    <article style={styles.kpiCard}>
+      <p style={styles.kpiLabel}>{label}</p>
+      <p style={styles.kpiValue}>{value.toLocaleString()}</p>
+      <p style={styles.kpiHelper}>{helper}</p>
+    </article>
+  );
+}
+
+function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div style={styles.emptyState}>
+      <p style={styles.emptyTitle}>{title}</p>
+      <p style={styles.emptySubtitle}>{subtitle}</p>
+    </div>
+  );
+}
+
 const styles: Record<string, CSSProperties> = {
-  page: {
+  pageContainer: {
     minHeight: "100dvh",
-    background:
-      "radial-gradient(120% 70% at 50% -10%, rgba(61,147,255,.28) 0%, rgba(10,16,31,0) 58%), linear-gradient(180deg, #050912 0%, #080f1d 45%, #070b14 100%)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "flex-start",
-    padding: "14px",
-    position: "relative",
-    overflowX: "hidden",
-    overflowY: "auto"
+    background: "#f6f6f7",
+    color: "#202223",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    padding: "24px"
   },
-  bgGlowTop: {
-    position: "absolute",
-    top: "-220px",
-    left: "50%",
-    transform: "translateX(-50%)",
-    width: "700px",
-    height: "700px",
-    borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(60,153,255,.22) 0%, rgba(30,56,103,.12) 28%, rgba(4,8,16,0) 72%)",
-    pointerEvents: "none",
-    filter: "blur(8px)"
-  },
-  bgBlobCyan: {
-    position: "absolute",
-    top: "12%",
-    right: "-80px",
-    width: "280px",
-    height: "280px",
-    borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(39,240,255,.2) 0%, rgba(0,0,0,0) 70%)",
-    filter: "blur(34px)",
-    pointerEvents: "none"
-  },
-  bgBlobViolet: {
-    position: "absolute",
-    bottom: "14%",
-    left: "-100px",
-    width: "300px",
-    height: "300px",
-    borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(120,109,255,.16) 0%, rgba(0,0,0,0) 70%)",
-    filter: "blur(42px)",
-    pointerEvents: "none"
-  },
-  previewContainer: {
-    width: "min(1500px, 100%)",
+  innerContainer: {
+    maxWidth: "1440px",
+    margin: "0 auto",
     display: "grid",
-    gap: "14px",
-    position: "relative",
-    zIndex: 2,
-    alignContent: "start"
+    gap: "16px"
   },
-  topControls: {
+  pageHeader: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: "12px",
     flexWrap: "wrap"
   },
-  backLink: {
-    display: "inline-block",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-    fontSize: "12px",
-    color: "#e8f5ff",
-    background: "linear-gradient(180deg, rgba(20,36,60,.82) 0%, rgba(14,26,44,.75) 100%)",
-    textDecoration: "none",
-    border: "1px solid rgba(173, 209, 246, 0.35)",
-    borderRadius: "999px",
-    padding: "7px 11px",
-    backdropFilter: "blur(10px)",
-    WebkitBackdropFilter: "blur(10px)"
+  pageTitle: {
+    margin: 0,
+    fontSize: "28px",
+    lineHeight: "32px",
+    fontWeight: 650,
+    color: "#202223"
   },
-  toggleWrap: {
-    display: "inline-flex",
+  pageSubtitle: {
+    margin: "6px 0 0",
+    fontSize: "13px",
+    lineHeight: "18px",
+    color: "#6d7175"
+  },
+  quickPills: {
+    display: "flex",
     flexWrap: "wrap",
-    gap: "8px",
-    border: "1px solid rgba(173, 209, 246, 0.3)",
-    borderRadius: "999px",
-    padding: "6px",
-    background: "linear-gradient(180deg, rgba(15,28,48,.78) 0%, rgba(12,21,38,.74) 100%)",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)"
+    gap: "8px"
   },
-  toggleBtn: {
+  statusPill: {
+    border: "1px solid #d2d5d8",
     borderRadius: "999px",
-    border: "1px solid rgba(185,216,252,.2)",
-    background: "rgba(18,33,56,.58)",
-    color: "#d9ebff",
+    padding: "4px 10px",
     fontSize: "12px",
-    padding: "8px 12px",
+    fontWeight: 500
+  },
+  statusPillNeutral: {
+    color: "#4a4f55",
+    background: "#ffffff"
+  },
+  statusPillGood: {
+    color: "#116149",
+    background: "#e9f7ef",
+    borderColor: "#c3e9d2"
+  },
+  adminCard: {
+    background: "#ffffff",
+    border: "1px solid #e3e5e7",
+    borderRadius: "12px",
+    padding: "16px"
+  },
+  toolbarRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(220px, 1fr) 180px auto",
+    gap: "8px",
+    alignItems: "center"
+  },
+  toolbarRowNarrow: {
+    gridTemplateColumns: "1fr",
+    alignItems: "stretch"
+  },
+  searchInput: {
+    height: "36px",
+    border: "1px solid #c9cccf",
+    borderRadius: "10px",
+    padding: "0 12px",
+    fontSize: "13px",
+    color: "#202223",
+    background: "#fff"
+  },
+  selectInput: {
+    height: "36px",
+    border: "1px solid #c9cccf",
+    borderRadius: "10px",
+    padding: "0 10px",
+    fontSize: "13px",
+    color: "#202223",
+    background: "#fff"
+  },
+  segmentedControl: {
+    display: "flex",
+    gap: "8px",
+    justifyContent: "flex-end",
+    flexWrap: "wrap"
+  },
+  filterChip: {
+    height: "32px",
+    border: "1px solid #d2d5d8",
+    borderRadius: "10px",
+    background: "#fff",
+    color: "#4a4f55",
+    fontSize: "12px",
+    padding: "0 10px",
     cursor: "pointer"
   },
-  toggleBtnActive: {
-    border: "1px solid rgba(201,234,255,.35)",
-    background:
-      "linear-gradient(135deg, rgba(79,201,255,.98) 0%, rgba(36,140,255,.95) 62%, rgba(91,109,255,.95) 100%)",
-    color: "#ffffff",
-    boxShadow: "0 10px 20px rgba(40,125,255,.32)"
+  filterChipActive: {
+    borderColor: "#babfc3",
+    background: "#f1f2f3",
+    color: "#202223"
   },
-  allGrid: {
+  kpiGrid: {
     display: "grid",
-    gap: "16px",
-    gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: "12px"
+  },
+  kpiGridNarrow: {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+  },
+  kpiCard: {
+    background: "#ffffff",
+    border: "1px solid #e3e5e7",
+    borderRadius: "12px",
+    padding: "16px"
+  },
+  kpiLabel: {
+    margin: 0,
+    fontSize: "12px",
+    color: "#6d7175"
+  },
+  kpiValue: {
+    margin: "8px 0 0",
+    fontSize: "24px",
+    lineHeight: "28px",
+    fontWeight: 650,
+    color: "#202223"
+  },
+  kpiHelper: {
+    margin: "6px 0 0",
+    fontSize: "12px",
+    color: "#8c9196"
+  },
+  mainGrid: {
+    display: "grid",
+    gridTemplateColumns: "340px minmax(0, 1fr)",
+    gap: "12px",
     alignItems: "start"
   },
-  singleGrid: {
+  mainGridNarrow: {
+    gridTemplateColumns: "1fr"
+  },
+  rightColumn: {
     display: "grid",
-    justifyItems: "center"
+    gap: "12px"
   },
-  previewItem: {
-    display: "grid",
-    gap: "8px",
-    justifyItems: "center"
-  },
-  previewLabel: {
-    fontSize: "12px",
-    letterSpacing: ".08em",
-    textTransform: "uppercase",
-    color: "rgba(200,225,250,.9)"
-  },
-
-  phoneShell: {
-    width: "100%",
-    maxWidth: "430px",
-    height: "min(860px, calc(100dvh - 190px))",
-    minHeight: "620px",
-    borderRadius: "32px",
-    overflow: "hidden",
-    background: "linear-gradient(180deg, rgba(13,22,39,.88) 0%, rgba(10,18,33,.94) 100%)",
-    border: "1px solid rgba(223, 240, 255, 0.16)",
-    backdropFilter: "blur(18px)",
-    WebkitBackdropFilter: "blur(18px)",
-    display: "grid",
-    gridTemplateRows: "76px 1fr auto auto",
-    position: "relative"
-  },
-  phoneShellDesktop: {
-    boxShadow: "0 30px 90px rgba(0,0,0,.55), 0 0 0 1px rgba(169, 212, 255, 0.05) inset"
-  },
-  phoneShellMobile: {
-    borderRadius: "0",
-    maxWidth: "100%",
-    width: "100vw",
-    height: "100dvh",
-    minHeight: "100dvh",
-    border: "none",
-    boxShadow: "none"
-  },
-
-  tabletShell: {
-    width: "min(900px, 100%)",
-    height: "min(860px, calc(100dvh - 190px))",
-    minHeight: "640px",
-    borderRadius: "34px",
-    overflow: "hidden",
-    background: "linear-gradient(180deg, rgba(13,22,39,.9) 0%, rgba(10,18,33,.95) 100%)",
-    border: "1px solid rgba(223, 240, 255, 0.16)",
-    boxShadow: "0 34px 94px rgba(0,0,0,.55), 0 0 0 1px rgba(169,212,255,.06) inset",
-    display: "grid",
-    gridTemplateRows: "76px 1fr"
-  },
-  tabletBody: {
-    display: "grid",
-    gridTemplateColumns: "1.2fr .9fr",
-    gap: "0",
-    minHeight: 0
-  },
-  tabletChatPane: {
-    minHeight: 0,
-    borderRight: "1px solid rgba(164,205,255,.14)",
-    display: "grid"
-  },
-  tabletSidePane: {
-    minHeight: 0,
-    display: "grid",
-    gridTemplateRows: "1fr auto"
-  },
-
-  desktopShell: {
-    width: "min(1260px, 100%)",
-    height: "min(860px, calc(100dvh - 190px))",
-    minHeight: "660px",
-    borderRadius: "34px",
-    overflow: "hidden",
-    background: "linear-gradient(180deg, rgba(13,22,39,.92) 0%, rgba(10,18,33,.95) 100%)",
-    border: "1px solid rgba(223, 240, 255, 0.16)",
-    boxShadow: "0 38px 100px rgba(0,0,0,.58), 0 0 0 1px rgba(169,212,255,.06) inset",
-    display: "grid",
-    gridTemplateRows: "76px 1fr"
-  },
-  desktopBody: {
-    display: "grid",
-    gridTemplateColumns: "1.15fr .95fr .85fr",
-    minHeight: 0
-  },
-  desktopCol: {
-    minHeight: 0,
-    borderRight: "1px solid rgba(164,205,255,.14)",
-    display: "grid"
-  },
-
-  header: {
-    background: "linear-gradient(180deg, rgba(21,35,57,.84) 0%, rgba(17,29,47,.62) 100%)",
-    borderBottom: "1px solid rgba(170, 208, 255, 0.17)",
+  sectionHeader: {
     display: "flex",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: "12px",
-    padding: "14px 14px 12px",
-    position: "relative"
-  },
-  avatarWrap: {
-    width: "42px",
-    height: "42px",
-    borderRadius: "50%",
-    background: "linear-gradient(160deg, rgba(103,211,255,.75), rgba(114,128,255,.65))",
-    padding: "1.5px",
-    boxShadow: "0 8px 24px rgba(41,144,255,.35)"
-  },
-  avatar: {
-    width: "100%",
-    height: "100%",
-    borderRadius: "50%",
-    background: "radial-gradient(120% 100% at 50% 0%, #7ad9ff 0%, #3f7aff 65%, #2a3870 100%)"
-  },
-  headerMeta: {
-    minWidth: 0,
-    flex: 1
-  },
-  title: {
-    color: "#f4f8ff",
-    fontWeight: 700,
-    letterSpacing: ".01em"
-  },
-  subtitle: {
-    color: "rgba(205,224,246,.78)",
-    marginTop: "2px"
-  },
-  leadIdPill: {
-    border: "1px solid rgba(190, 225, 255, 0.22)",
-    background: "linear-gradient(180deg, rgba(29,46,74,.9) 0%, rgba(19,31,51,.78) 100%)",
-    borderRadius: "999px",
-    padding: "6px 10px",
-    color: "#d7eafd",
-    fontSize: "11px",
-    whiteSpace: "nowrap",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,.08)"
-  },
-
-  chatArea: {
-    overflowY: "auto",
-    padding: "12px 12px 14px",
-    background:
-      "radial-gradient(140% 120% at 50% -20%, rgba(52,129,255,.12) 0%, rgba(8,14,24,0) 55%), linear-gradient(180deg, #0a1222 0%, #0a1324 100%)"
-  },
-  row: {
-    display: "flex",
-    marginBottom: "10px"
-  },
-  bubble: {
-    borderRadius: "22px",
-    padding: "10px 12px 8px",
-    boxShadow: "0 14px 28px rgba(0,0,0,.28)"
-  },
-  bubbleIn: {
-    background: "linear-gradient(180deg, rgba(33,47,74,.72) 0%, rgba(20,32,53,.82) 100%)",
-    color: "#edf4ff",
-    border: "1px solid rgba(201,223,255,.15)",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)"
-  },
-  bubbleOut: {
-    background:
-      "linear-gradient(135deg, rgba(69,188,255,.96) 0%, rgba(42,126,255,.95) 55%, rgba(94,112,255,.92) 100%)",
-    color: "#fff",
-    border: "1px solid rgba(208,239,255,.28)",
-    boxShadow: "0 16px 30px rgba(45,130,255,.32)"
-  },
-  bubbleText: {
-    lineHeight: 1.42,
-    wordBreak: "break-word"
-  },
-  bubbleTimeRow: {
-    marginTop: "4px",
-    display: "flex",
-    justifyContent: "flex-end"
-  },
-  bubbleTime: {
-    fontSize: "10px",
-    opacity: 0.78
-  },
-
-  suggestionsWrap: {
-    borderTop: "1px solid rgba(164, 205, 255, 0.16)",
-    background: "linear-gradient(180deg, rgba(16,28,46,.82) 0%, rgba(13,24,40,.76) 100%)",
-    padding: "11px 10px 10px",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
-    display: "grid",
-    alignContent: "start",
-    minHeight: 0
+    gap: "10px",
+    marginBottom: "12px"
   },
   sectionTitle: {
-    color: "#d6e8ff",
-    fontSize: "11px",
-    letterSpacing: ".05em",
-    textTransform: "uppercase",
-    marginBottom: "9px",
-    paddingLeft: "2px"
+    margin: 0,
+    fontSize: "15px",
+    lineHeight: "20px",
+    fontWeight: 600,
+    color: "#202223"
   },
-  suggestionScroller: {
-    display: "flex",
-    overflowX: "auto",
-    gap: "12px",
-    scrollSnapType: "x mandatory",
-    paddingBottom: "2px"
+  sectionHelper: {
+    margin: "2px 0 0",
+    fontSize: "12px",
+    color: "#8c9196"
   },
-  suggestionStack: {
+  conversationList: {
     display: "grid",
-    gap: "10px",
-    overflowY: "auto",
-    alignContent: "start"
+    gap: "8px",
+    maxHeight: "740px",
+    overflowY: "auto"
   },
-  emptyState: {
-    minWidth: "84%",
-    border: "1px dashed rgba(170,205,255,.26)",
-    borderRadius: "20px",
-    color: "#aac3df",
-    background: "linear-gradient(180deg, rgba(20,36,60,.9) 0%, rgba(15,27,46,.86) 100%)",
-    padding: "14px",
-    fontSize: "12px"
+  conversationRow: {
+    position: "relative",
+    textAlign: "left",
+    border: "1px solid #e3e5e7",
+    borderRadius: "10px",
+    padding: "10px",
+    background: "#fff",
+    cursor: "pointer"
   },
-  suggestionCard: {
-    background: "linear-gradient(180deg, rgba(19,35,58,.86) 0%, rgba(16,29,49,.9) 100%)",
-    border: "1px solid rgba(174, 214, 255, 0.18)",
-    borderRadius: "24px",
+  conversationRowActive: {
+    borderColor: "#b7bcc1",
+    background: "#f6f6f7"
+  },
+  rowHead: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "8px"
+  },
+  rowName: {
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "#202223"
+  },
+  rowMeta: {
+    fontSize: "11px",
+    color: "#8c9196"
+  },
+  rowStage: {
+    fontSize: "11px",
+    color: "#6d7175",
+    textTransform: "uppercase",
+    letterSpacing: ".02em"
+  },
+  rowUrgency: {
+    border: "1px solid #e3e5e7",
+    borderRadius: "999px",
+    padding: "2px 8px",
+    fontSize: "10px",
+    fontWeight: 600
+  },
+  rowPreview: {
+    margin: "8px 0 0",
+    fontSize: "12px",
+    color: "#6d7175",
+    lineHeight: "17px"
+  },
+  unreadBadge: {
+    position: "absolute",
+    top: "10px",
+    right: "10px",
+    minWidth: "20px",
+    height: "20px",
+    borderRadius: "10px",
+    background: "#008060",
+    color: "#fff",
+    fontSize: "11px",
+    fontWeight: 600,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 6px"
+  },
+  messagesPane: {
+    border: "1px solid #e3e5e7",
+    borderRadius: "10px",
+    background: "#fbfbfb",
     padding: "12px",
-    color: "#ecf5ff",
-    boxShadow: "0 16px 40px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.06)",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)"
+    maxHeight: "420px",
+    overflowY: "auto",
+    display: "grid",
+    gap: "8px"
   },
-  suggestionCardHorizontal: {
-    minWidth: "84%",
-    scrollSnapAlign: "start"
+  messageRow: {
+    display: "flex"
   },
-  suggestionCardVertical: {
-    minWidth: "100%"
+  messageBubble: {
+    maxWidth: "76%",
+    borderRadius: "10px",
+    border: "1px solid #e3e5e7",
+    padding: "8px 10px"
   },
-  suggestionCardActive: {
-    borderColor: "rgba(101,199,255,.72)",
-    boxShadow: "0 18px 44px rgba(20, 114, 255,.25), 0 0 0 1px rgba(96,198,255,.45) inset"
+  messageBubbleIncoming: {
+    background: "#ffffff"
+  },
+  messageBubbleOutgoing: {
+    background: "#f1f2f3"
+  },
+  messageText: {
+    margin: 0,
+    fontSize: "13px",
+    lineHeight: "18px",
+    color: "#202223"
+  },
+  messageMetaRow: {
+    marginTop: "6px",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "8px"
+  },
+  messageMeta: {
+    fontSize: "11px",
+    color: "#8c9196"
+  },
+  composerRow: {
+    marginTop: "12px",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto auto",
+    gap: "8px"
+  },
+  replyInput: {
+    height: "36px",
+    border: "1px solid #c9cccf",
+    borderRadius: "10px",
+    padding: "0 12px",
+    fontSize: "13px",
+    color: "#202223"
+  },
+  primaryButton: {
+    height: "36px",
+    border: "1px solid #008060",
+    borderRadius: "10px",
+    padding: "0 12px",
+    background: "#008060",
+    color: "#fff",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer"
+  },
+  secondaryButton: {
+    height: "36px",
+    border: "1px solid #c9cccf",
+    borderRadius: "10px",
+    padding: "0 12px",
+    background: "#fff",
+    color: "#202223",
+    fontSize: "13px",
+    fontWeight: 500,
+    cursor: "pointer"
+  },
+  suggestionGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "8px"
+  },
+  suggestionGridNarrow: {
+    gridTemplateColumns: "1fr"
+  },
+  suggestionPanel: {
+    border: "1px solid #e3e5e7",
+    borderRadius: "10px",
+    background: "#fff",
+    padding: "12px",
+    display: "grid",
+    gap: "8px"
+  },
+  suggestionPanelActive: {
+    borderColor: "#b7bcc1",
+    background: "#f6f6f7"
   },
   suggestionTitle: {
-    fontSize: "14px",
-    fontWeight: 700,
-    marginBottom: "4px",
-    letterSpacing: ".01em"
+    margin: 0,
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "#202223"
   },
-  suggestionRationale: {
-    fontSize: "11px",
-    color: "#a9c4e4",
-    marginBottom: "9px",
-    lineHeight: 1.35
+  suggestionBadge: {
+    border: "1px solid #cdd1d5",
+    borderRadius: "999px",
+    padding: "2px 8px",
+    fontSize: "10px",
+    color: "#5c6065",
+    background: "#f6f6f7"
   },
-  previewList: {
-    display: "grid",
-    gap: "6px",
-    marginBottom: "11px"
+  suggestionReply: {
+    margin: 0,
+    fontSize: "12px",
+    lineHeight: "17px",
+    color: "#202223"
   },
-  previewLineWrap: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "7px"
-  },
-  previewLineDot: {
-    width: "7px",
-    height: "7px",
-    borderRadius: "50%",
-    marginTop: "7px",
-    background: "linear-gradient(180deg, #6ed4ff, #5d82ff)",
-    boxShadow: "0 0 10px rgba(103,202,255,.65)"
-  },
-  previewLine: {
-    fontSize: "11px",
-    color: "#deecfb",
-    background: "linear-gradient(180deg, rgba(28,49,79,.92) 0%, rgba(22,40,65,.9) 100%)",
-    borderRadius: "14px",
-    padding: "8px 10px",
-    border: "1px solid rgba(175,213,255,.12)",
-    flex: 1
+  suggestionReason: {
+    margin: 0,
+    fontSize: "12px",
+    lineHeight: "17px",
+    color: "#6d7175"
   },
   suggestionActions: {
     display: "flex",
     gap: "8px"
   },
-  btnGhost: {
-    flex: 1,
-    borderRadius: "14px",
-    border: "1px solid rgba(176,209,243,.24)",
-    background: "linear-gradient(180deg, rgba(30,46,72,.6) 0%, rgba(20,33,54,.72) 100%)",
-    color: "#d8e8fb",
-    padding: "10px 12px",
-    fontSize: "12px",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,.06)"
+  actionCardGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "12px"
   },
-  btnPrimary: {
-    flex: 1,
-    borderRadius: "14px",
-    border: "1px solid rgba(208,240,255,.28)",
-    background:
-      "linear-gradient(135deg, rgba(79,201,255,.98) 0%, rgba(36,140,255,.95) 62%, rgba(91,109,255,.95) 100%)",
-    color: "#fff",
-    padding: "10px 12px",
-    fontSize: "12px",
-    fontWeight: 700,
-    boxShadow: "0 12px 24px rgba(43,134,255,.35)"
+  actionCardGridNarrow: {
+    gridTemplateColumns: "1fr"
   },
-
-  composer: {
-    borderTop: "1px solid rgba(172,205,242,.17)",
-    padding: "10px 12px 12px",
-    background: "linear-gradient(180deg, rgba(19,32,53,.86) 0%, rgba(16,28,47,.92) 100%)",
-    backdropFilter: "blur(14px)",
-    WebkitBackdropFilter: "blur(14px)",
-    position: "sticky",
-    bottom: 0,
-    alignContent: "start"
+  emptyState: {
+    border: "1px dashed #d2d5d8",
+    borderRadius: "10px",
+    background: "#fafbfb",
+    padding: "16px"
   },
-  composerLabel: {
-    fontSize: "11px",
-    color: "#b2cae6",
-    marginBottom: "7px",
-    letterSpacing: ".03em"
-  },
-  draftWrap: {
-    minHeight: "58px",
-    maxHeight: "136px",
-    overflowY: "auto",
-    border: "1px solid rgba(173,209,248,.18)",
-    borderRadius: "18px",
-    background: "linear-gradient(180deg, rgba(16,28,47,.9) 0%, rgba(13,24,41,.95) 100%)",
-    padding: "8px",
-    marginBottom: "10px"
-  },
-  draftWrapCompact: {
-    maxHeight: "220px"
-  },
-  draftEmpty: {
-    color: "#89a5c7",
-    fontSize: "12px",
-    lineHeight: 1.35
-  },
-  draftBubble: {
-    marginBottom: "7px",
-    borderRadius: "16px",
-    padding: "8px 10px",
-    background: "linear-gradient(135deg, rgba(66,190,255,.88) 0%, rgba(39,132,255,.88) 65%, rgba(86,110,255,.86) 100%)",
-    color: "#fff",
-    border: "1px solid rgba(208,239,255,.32)",
-    boxShadow: "0 10px 20px rgba(42,123,247,.28)",
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "8px"
-  },
-  draftBubbleIndex: {
-    minWidth: "18px",
-    height: "18px",
-    borderRadius: "50%",
-    background: "rgba(10,26,48,.35)",
-    border: "1px solid rgba(224,245,255,.35)",
-    fontSize: "11px",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  draftLine: {
-    color: "#f4fbff",
-    fontSize: "12px",
-    lineHeight: 1.36
-  },
-  btnPrimaryWide: {
-    width: "100%",
-    borderRadius: "16px",
-    border: "1px solid rgba(208,241,255,.28)",
-    background:
-      "linear-gradient(135deg, rgba(82,201,255,.98) 0%, rgba(37,143,255,.95) 62%, rgba(93,111,255,.95) 100%)",
-    color: "#fff",
-    padding: "13px 14px",
+  emptyTitle: {
+    margin: 0,
     fontSize: "13px",
-    fontWeight: 700,
-    boxShadow: "0 18px 30px rgba(46,137,255,.32)"
+    fontWeight: 600,
+    color: "#202223"
+  },
+  emptySubtitle: {
+    margin: "4px 0 0",
+    fontSize: "12px",
+    color: "#6d7175"
   }
 };
