@@ -16,7 +16,7 @@ import {
   Agent
 } from "./types.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
-import { ProjectIndexPage } from "./pages/ProjectIndexPage.js";
+import { ControlCenterPage } from "./pages/ControlCenterPage.js";
 import { AgentsPage } from "./pages/AgentsPage.js";
 import { RunsPage } from "./pages/RunsPage.js";
 import { LeadsPage } from "./pages/LeadsPage.js";
@@ -350,7 +350,7 @@ export function App() {
                 ) : null}
               </div>
               <AnimatePresence mode="wait">
-                {activePage === "index" ? <ProjectIndexPage key="page-index" onOpenPage={navigateToPage} /> : null}
+                {activePage === "index" ? <ControlCenterPage key="page-index" onOpenPage={navigateToPage} /> : null}
                 {activePage === "dashboard" ? (
                   <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} lastSyncAt={lastSyncAt} />
                 ) : null}
