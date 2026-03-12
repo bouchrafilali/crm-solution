@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { SectionHeader } from "../components/SectionHeader.js";
-import { OrientationCard } from "../components/control-center/OrientationCard.js";
+import { HeroSection } from "../components/control-center/HeroSection.js";
 import { ModuleCard } from "../components/control-center/ModuleCard.js";
+import { OrientationCard } from "../components/control-center/OrientationCard.js";
+import { SearchBar } from "../components/control-center/SearchBar.js";
 
 interface ProjectIndexPageProps {
   onOpenPage: (page: "dashboard" | "leads" | "runs") => void;
@@ -32,7 +33,10 @@ export function ProjectIndexPage({ onOpenPage }: ProjectIndexPageProps) {
           "Access forecasting models, scenario views, and forward-looking signals to guide business decisions with clarity.",
         features: ["Revenue Forecast", "Order Projection", "Demand Signals", "Scenario View"],
         status: "active",
-        ctaLabel: "Open Forecast"
+        ctaLabel: "Open Forecast",
+        onOpen: () => {
+          if (typeof window !== "undefined") window.location.href = "/admin/forecast-v4";
+        }
       },
       {
         id: "insights",
@@ -43,7 +47,9 @@ export function ProjectIndexPage({ onOpenPage }: ProjectIndexPageProps) {
         features: ["Executive Overview", "Conversion Insights", "Lead Intelligence", "Performance Signals"],
         status: "active",
         ctaLabel: "Open Insights",
-        onOpen: () => onOpenPage("dashboard")
+        onOpen: () => {
+          if (typeof window !== "undefined") window.location.href = "/admin/insights";
+        }
       },
       {
         id: "mobile-app",
@@ -78,7 +84,9 @@ export function ProjectIndexPage({ onOpenPage }: ProjectIndexPageProps) {
         features: ["Orders", "Deposits", "Balances", "Payment Status"],
         status: "active",
         ctaLabel: "Open Orders & Payments",
-        onOpen: () => onOpenPage("runs")
+        onOpen: () => {
+          if (typeof window !== "undefined") window.location.href = "/admin";
+        }
       },
       {
         id: "appointments",
@@ -88,7 +96,10 @@ export function ProjectIndexPage({ onOpenPage }: ProjectIndexPageProps) {
           "Manage showroom visits, fitting flow, confirmations, and related operational coordination.",
         features: ["Rendez-vous", "Showroom Flow", "Reminders", "Availability"],
         status: "active",
-        ctaLabel: "Open Appointments"
+        ctaLabel: "Open Appointments",
+        onOpen: () => {
+          if (typeof window !== "undefined") window.location.href = "/admin/appointments-v2";
+        }
       }
     ],
     [onOpenPage]
@@ -104,71 +115,53 @@ export function ProjectIndexPage({ onOpenPage }: ProjectIndexPageProps) {
   }, [modules, query]);
 
   return (
-    <motion.div key="project-index" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <div className="grid gap-4 xl:grid-cols-[1.45fr_0.8fr]">
-        <section className="ml-panel rounded-2xl p-5">
-          <SectionHeader
-            title="Central index for all project areas"
-            subtitle="Structured entry point for every major module, designed to reduce confusion and make navigation immediate."
-          />
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">Project Control Center</p>
-        </section>
+    <motion.div
+      key="project-index"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.26, ease: "easeOut" }}
+      className="space-y-6 pb-4"
+    >
+      <HeroSection moduleCount={modules.length} />
 
-        <aside className="ml-panel rounded-2xl p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Overview</p>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-            <div className="ml-panel-soft rounded-xl px-2 py-3">
-              <p className="text-xl font-semibold text-slate-100">6</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-slate-500">Modules</p>
-            </div>
-            <div className="ml-panel-soft rounded-xl px-2 py-3">
-              <p className="text-xl font-semibold text-emerald-200">Structured</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-slate-500">State</p>
-            </div>
-            <div className="ml-panel-soft rounded-xl px-2 py-3">
-              <p className="text-xl font-semibold text-slate-100">Center</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-slate-500">Mode</p>
-            </div>
-          </div>
-        </aside>
-      </div>
-
-      <section className="mt-5">
-        <SectionHeader
-          title="Quick Orientation"
-          subtitle="Use this pathing layer to choose the most useful starting point before entering the full module grid."
-        />
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-400">Quick Orientation</h2>
+        </div>
         <div className="grid gap-3 md:grid-cols-3">
           <OrientationCard
             label="Recommended Start"
             value="Insights"
             description="Best place to understand the business situation and what needs attention first."
+            onClick={() => {
+              if (typeof window !== "undefined") window.location.href = "/admin/insights";
+            }}
           />
           <OrientationCard
             label="Decision Area"
             value="Forecast"
             description="Use for projections, planning, expected revenue, and scenario thinking."
+            onClick={() => {
+              if (typeof window !== "undefined") window.location.href = "/admin/forecast-v4";
+            }}
           />
           <OrientationCard
             label="Execution Area"
             value="Mobile App"
             description="Use for action, operator activity, approvals, and daily execution."
+            onClick={() => onOpenPage("leads")}
           />
         </div>
       </section>
 
-      <section className="mt-5">
-        <div className="ml-panel mb-4 flex flex-wrap items-center gap-3 rounded-2xl p-3.5">
-          <SectionHeader
-            title="Main Modules"
-            subtitle="All major project areas in one coherent, executive-grade index."
-          />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search modules"
-            className="ml-panel-soft ml-auto min-w-56 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 outline-none"
-          />
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <p className="text-sm font-semibold tracking-tight text-slate-100">Modules Overview</p>
+            <p className="mt-1 text-xs text-slate-400">Select a module to continue. Designed for fast, low-friction entry.</p>
+          </div>
+          <SearchBar value={query} onChange={setQuery} placeholder="Search modules, features, or purpose" />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
