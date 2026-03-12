@@ -7,6 +7,7 @@ import { ActivityFeed } from "../components/ActivityFeed.js";
 import { QueueTable } from "../components/QueueTable.js";
 import { ApprovalMiniCard } from "../components/ApprovalMiniCard.js";
 import { LearningEventCard } from "../components/LearningEventCard.js";
+import { DevelopmentSuggestionsPanel } from "../components/DevelopmentSuggestionsPanel.js";
 
 interface DashboardPageProps {
   data: AppMockData;
@@ -66,6 +67,16 @@ export function DashboardPage({ data, onOpenLead, lastSyncAt = null }: Dashboard
         <MetricCard label="Blocked Flows" value={blockedFlows} delta={blockedFlows > 0 ? "Needs intervention" : "No blockers"} tone="attention" />
         <MetricCard label="Learning Events Today" value={learningEventsToday} delta="Feedback active" tone="good" />
       </div>
+
+      <DevelopmentSuggestionsPanel
+        input={{
+          runs: data.runs,
+          agents: data.agents,
+          approvals: data.approvals,
+          learningEvents: data.learningEvents,
+          strategicAnalyses: data.strategicAnalyses
+        }}
+      />
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[1.6fr_1fr]">
         <motion.section {...cardAnimation} className="ml-panel rounded-2xl p-4">

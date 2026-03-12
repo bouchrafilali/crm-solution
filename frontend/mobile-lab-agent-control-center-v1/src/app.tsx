@@ -123,6 +123,14 @@ const externalModules: Partial<
   }
 };
 
+function withCurrentQuery(src: string): string {
+  if (typeof window === "undefined") return src;
+  const search = window.location.search;
+  if (!search) return src;
+  if (src.includes("?")) return `${src}&${search.slice(1)}`;
+  return `${src}${search}`;
+}
+
 function readPageFromHash(): NavPage {
   if (typeof window === "undefined") return "control-center";
   const raw = window.location.hash.replace(/^#\/?/, "").trim();
@@ -303,6 +311,13 @@ export function App() {
   }
 
   const externalModule = externalModules[activePage];
+  const resolvedExternalModule = useMemo(() => {
+    if (!externalModule) return null;
+    return {
+      ...externalModule,
+      src: withCurrentQuery(externalModule.src)
+    };
+  }, [externalModule]);
   const internalMeta = internalPageMeta(activePage);
   const showControlCenter = activePage === "control-center";
 
@@ -341,12 +356,12 @@ export function App() {
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
                 <ModulePageHeader
-                  title={externalModule?.title ?? internalMeta.title}
-                  subtitle={externalModule?.subtitle ?? internalMeta.subtitle}
+                  title={resolvedExternalModule?.title ?? internalMeta.title}
+                  subtitle={resolvedExternalModule?.subtitle ?? internalMeta.subtitle}
                   onBack={() => navigateToPage("control-center")}
                 />
 
-                {externalModule ? <ExternalModulePage src={externalModule.src} /> : null}
+                {resolvedExternalModule ? <ExternalModulePage src={resolvedExternalModule.src} /> : null}
                 {activePage === "agent-control-center" ? (
                   <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} lastSyncAt={lastSyncAt} />
                 ) : null}

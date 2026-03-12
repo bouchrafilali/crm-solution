@@ -23,7 +23,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   const shopParam = typeof req.query.shop === "string" ? req.query.shop : "";
   const isValidShop = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shopParam);
-  const frameAncestors = ["https://admin.shopify.com", isValidShop ? `https://${shopParam}` : "https://*.myshopify.com"];
+  const frameAncestors = ["'self'", "https://admin.shopify.com", isValidShop ? `https://${shopParam}` : "https://*.myshopify.com"];
 
   res.setHeader("Content-Security-Policy", `frame-ancestors ${frameAncestors.join(" ")};`);
   next();
@@ -523,7 +523,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <section class="home-section section-block" data-section="operations">
         <p class="home-section-title">Operations</p>
         <div class="home-grid">
-          <a class="home-app module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
+          <a class="home-app module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/${navSuffix}#/index">
             <span class="home-app-icon">◎</span><span class="home-app-label">Agent Control</span>
           </a>
           <a class="home-app module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
@@ -570,7 +570,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <section class="section section-block" data-section="operations">
         <p class="section-title">Opérations</p>
         <div class="rows">
-          <a class="row module-row module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
+          <a class="row module-row module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/${navSuffix}#/index">
             <div class="icon">◎</div>
             <div class="content">
               <p class="title">Agent Control Center V1</p>
@@ -673,7 +673,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     const recentAppsTrack = document.getElementById("recentAppsTrack");
     const sections = Array.from(document.querySelectorAll(".section-block"));
     const appCatalog = {
-      agent: { label: "Agent", icon: "◎", href: "/agent-control-center-v1/#/index${navSuffix}" },
+      agent: { label: "Agent", icon: "◎", href: "/agent-control-center-v1/${navSuffix}#/index" },
       mobile: { label: "Mobile", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
       insights: { label: "Insights", icon: "◌", href: "/admin/insights${navSuffix}" },
       forecast: { label: "Forecast", icon: "◍", href: "/admin/forecast-v4${navSuffix}" },
