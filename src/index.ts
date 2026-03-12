@@ -470,25 +470,25 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         padding:16px 14px calc(116px + env(safe-area-inset-bottom));
       }
       .orientation{
-        display:flex;
-        gap:10px;
-        overflow-x:auto;
-        scroll-snap-type:x mandatory;
-        -webkit-overflow-scrolling:touch;
-        padding-bottom:2px;
+        display:grid;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:8px;
+        overflow:visible;
+        padding-bottom:0;
       }
       .modules-head{align-items:flex-start;flex-direction:column}
       .search{width:100%}
       .tile{
         border-radius:14px;
         padding:12px 12px 11px;
-        min-width:85%;
-        flex:0 0 85%;
-        scroll-snap-align:start;
+        min-width:0;
+        flex:0 0 auto;
       }
       .tile .v{
-        font-size:22px;
+        font-size:16px;
       }
+      .tile .k{font-size:9px;letter-spacing:.1em}
+      .tile .d{font-size:11px;line-height:1.3}
       .modules-head{
         margin:18px 0 10px;
         gap:8px;
