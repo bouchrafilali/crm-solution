@@ -1,5 +1,5 @@
 import express, { Router } from "express";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getDbPool } from "../db/client.js";
 import { listWhatsAppLeads, listRecentMessagesByLeadIds } from "../db/whatsappLeadsRepo.js";
@@ -629,8 +629,13 @@ agentControlCenterV1Router.use("/agent-control-center-v1", (req, res, next) => {
 
   const staticOptions = {
     index: false,
-    maxAge: "1h",
-    etag: true
+    maxAge: 0,
+    etag: true,
+    setHeaders: (res: express.Response, filePath: string) => {
+      if (/\.(js|css|html)$/i.test(filePath)) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
+    }
   };
 
   let currentIndex = 0;
@@ -658,6 +663,11 @@ function renderAgentControlCenterShell(): string {
   const assetsDir = resolveAssetsDir();
   const assetsLoaded = Boolean(assetsDir);
   const assetsHasBundle = Boolean(assetsDir && existsSync(join(assetsDir, "bundle.js")));
+  const entryFileName = assetsHasBundle ? "bundle.js" : "main.js";
+  const entryFilePath = assetsDir ? join(assetsDir, entryFileName) : "";
+  const entryVersion = assetsLoaded && existsSync(entryFilePath)
+    ? String(Math.floor(statSync(entryFilePath).mtimeMs))
+    : String(Date.now());
 
   return `<!doctype html>
 <html lang="en">
@@ -918,7 +928,7 @@ function renderAgentControlCenterShell(): string {
 
     ${
       assetsLoaded
-        ? `<script type="module" src="/agent-control-center-v1/${assetsHasBundle ? "bundle.js" : "main.js"}"></script>`
+        ? `<script type="module" src="/agent-control-center-v1/${entryFileName}?v=${entryVersion}"></script>`
         : ""
     }
   </body>
@@ -937,5 +947,6 @@ agentControlCenterV1Router.get(["/agent-control-center-v1", "/agent-control-cent
 
   const html = renderAgentControlCenterShell();
 
+  res.setHeader("Cache-Control", "no-store, max-age=0");
   res.status(200).type("html").send(html);
 });
