@@ -57,14 +57,14 @@ function renderAdminControlCenterPage(navSuffix: string): string {
   <title>Centre de Contrôle — Mobile-Lab</title>
   <style>
     :root{
-      --bg:#060a12;
-      --bg-soft:#0a101b;
-      --panel:rgba(19,26,40,.56);
-      --panel-soft:rgba(16,22,34,.46);
-      --text:#e8edf7;
-      --muted:#9aa8c2;
-      --line:rgba(255,255,255,.10);
-      --line-strong:rgba(255,255,255,.16);
+      --bg:#0a1020;
+      --bg-soft:#121a2c;
+      --panel:rgba(31,41,62,.50);
+      --panel-soft:rgba(27,36,56,.42);
+      --text:#ecf2ff;
+      --muted:#afbdd7;
+      --line:rgba(255,255,255,.15);
+      --line-strong:rgba(255,255,255,.24);
       --cyan:#7dd3fc;
       --green:#86efac;
       --amber:#fcd34d;
@@ -79,9 +79,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Inter,Arial,sans-serif;
       color:var(--text);
       background:
-        radial-gradient(900px 380px at 8% -5%, rgba(125,211,252,.11), transparent 55%),
-        radial-gradient(720px 340px at 95% 0%, rgba(52,211,153,.09), transparent 48%),
-        linear-gradient(180deg, #060a12 0%, #070b13 48%, #070c14 100%);
+        radial-gradient(980px 420px at 8% -5%, rgba(125,211,252,.22), transparent 58%),
+        radial-gradient(760px 380px at 95% 0%, rgba(52,211,153,.14), transparent 50%),
+        linear-gradient(180deg, #0a1120 0%, #0c1424 48%, #0d1628 100%);
       min-height:100vh;
       min-height:100dvh;
       padding-left:max(0px, env(safe-area-inset-left));
@@ -92,7 +92,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .hero{
       border:1px solid var(--line);
       border-radius:30px;
-      background:linear-gradient(180deg,var(--panel) 0%, rgba(14,21,34,.62) 100%);
+      background:linear-gradient(180deg,var(--panel) 0%, rgba(20,29,45,.60) 100%);
       backdrop-filter:blur(16px);
       padding:24px 24px 22px;
       display:grid;
@@ -105,7 +105,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .summary{
       border:1px solid var(--line);
       border-radius:22px;
-      background:rgba(14,20,32,.46);
+      background:rgba(22,30,48,.50);
       padding:14px 14px 10px;
     }
     .summary h3{margin:0 0 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
@@ -115,7 +115,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .tile{
       border:1px solid var(--line);
       border-radius:18px;
-      background:rgba(19,26,40,.48);
+      background:rgba(25,35,54,.50);
       backdrop-filter:blur(14px);
       padding:14px 14px 13px;
     }
@@ -136,7 +136,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       max-width:100%;
       border:1px solid var(--line);
       border-radius:999px;
-      background:rgba(255,255,255,.03);
+      background:rgba(255,255,255,.08);
       color:var(--text);
       padding:12px 14px;
       font-size:14px;
@@ -169,7 +169,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       min-height:36px;
       border:1px solid rgba(255,255,255,.10);
       border-radius:999px;
-      background:rgba(255,255,255,.03);
+      background:rgba(255,255,255,.08);
       color:#d5def0;
       text-decoration:none;
       font-size:12px;
@@ -178,8 +178,8 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       white-space:nowrap;
     }
     .app-chip:hover{
-      border-color:rgba(125,211,252,.35);
-      background:rgba(125,211,252,.10);
+      border-color:rgba(125,211,252,.45);
+      background:rgba(125,211,252,.18);
       color:#e8f7ff;
     }
     .app-dot{
@@ -192,7 +192,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .section{
       border:1px solid var(--line);
       border-radius:24px;
-      background:linear-gradient(180deg,var(--panel-soft) 0%, rgba(13,18,29,.40) 100%);
+      background:linear-gradient(180deg,var(--panel-soft) 0%, rgba(21,30,47,.46) 100%);
       backdrop-filter:blur(18px);
       padding:14px;
     }
@@ -215,7 +215,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       gap:12px;
       border:1px solid rgba(255,255,255,.08);
       border-radius:16px;
-      background:rgba(255,255,255,.02);
+      background:rgba(255,255,255,.06);
       padding:12px 13px;
       text-decoration:none;
       color:inherit;
@@ -224,8 +224,8 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       -webkit-tap-highlight-color:rgba(125,211,252,.2);
     }
     .row:hover{
-      border-color:rgba(255,255,255,.18);
-      background:rgba(255,255,255,.05);
+      border-color:rgba(255,255,255,.26);
+      background:rgba(255,255,255,.10);
       transform:translateY(-1px);
     }
     .icon{
@@ -233,7 +233,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       height:36px;
       border-radius:10px;
       border:1px solid rgba(255,255,255,.14);
-      background:rgba(125,211,252,.08);
+      background:rgba(125,211,252,.14);
       display:grid;
       place-items:center;
       color:#d8f2ff;
@@ -351,19 +351,22 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       }
       .apps-rail{
         position:sticky;
-        top:10px;
+        top:calc(8px + env(safe-area-inset-top));
         z-index:5;
         display:block;
         margin:0 0 10px;
-        border:1px solid var(--line);
-        border-radius:14px;
-        background:rgba(10,16,28,.78);
-        backdrop-filter:blur(10px);
-        padding:6px;
+        border:1px solid rgba(255,255,255,.24);
+        border-radius:16px;
+        background:rgba(26,37,58,.58);
+        backdrop-filter:blur(16px) saturate(150%);
+        box-shadow:0 12px 26px -20px rgba(0,0,0,.85);
+        padding:7px;
       }
       .section{
-        border-radius:16px;
+        border-radius:18px;
         padding:10px;
+        background:rgba(29,40,61,.62);
+        backdrop-filter:blur(14px) saturate(145%);
       }
       .section-title{
         margin:1px 4px 8px;
@@ -373,19 +376,24 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         gap:8px;
       }
       .row{
-        border-radius:14px;
-        padding:10px 11px;
-        min-height:54px;
+        border-radius:16px;
+        padding:11px 12px;
+        min-height:60px;
+        background:rgba(255,255,255,.10);
+        border-color:rgba(255,255,255,.18);
       }
       .title{
         font-size:16px;
+        font-weight:700;
       }
       .subtitle{
         font-size:12px;
         -webkit-line-clamp:2;
+        color:#c1cee5;
       }
       .arrow{
         font-size:18px;
+        color:#d0dcf4;
       }
       .status{
         font-size:9px;
