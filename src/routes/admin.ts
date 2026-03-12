@@ -894,7 +894,7 @@ async function sendZokoTemplate(
   }
 }
 
-adminRouter.get("/", (req, res) => {
+adminRouter.get(["/", "/orders"], (req, res) => {
   const host = typeof req.query.host === "string" ? req.query.host : "";
   const shop = typeof req.query.shop === "string" ? req.query.shop : "";
   const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
