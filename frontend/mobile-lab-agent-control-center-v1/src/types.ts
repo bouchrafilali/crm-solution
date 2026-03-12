@@ -1,4 +1,5 @@
 export type NavPage =
+  | "index"
   | "dashboard"
   | "agents"
   | "runs"

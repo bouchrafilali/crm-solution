@@ -16,6 +16,7 @@ import {
   Agent
 } from "./types.js";
 import { DashboardPage } from "./pages/DashboardPage.js";
+import { ProjectIndexPage } from "./pages/ProjectIndexPage.js";
 import { AgentsPage } from "./pages/AgentsPage.js";
 import { RunsPage } from "./pages/RunsPage.js";
 import { LeadsPage } from "./pages/LeadsPage.js";
@@ -35,6 +36,7 @@ interface SidebarItem {
 }
 
 const sidebarItems: SidebarItem[] = [
+  { id: "index", label: "Index" },
   { id: "dashboard", label: "Dashboard" },
   { id: "agents", label: "Agents" },
   { id: "runs", label: "Runs" },
@@ -47,6 +49,7 @@ const sidebarItems: SidebarItem[] = [
 
 function isNavPage(value: string): value is NavPage {
   return [
+    "index",
     "dashboard",
     "agents",
     "runs",
@@ -80,7 +83,7 @@ interface AgentControlCenterLivePayload {
 type DataSourceMode = "live" | "mixed" | "mock_fallback";
 
 export function App() {
-  const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash() ?? "dashboard");
+  const [activePage, setActivePage] = useState<NavPage>(() => readPageFromHash() ?? "index");
   const [liveData, setLiveData] = useState<AgentControlCenterLivePayload | null>(null);
   const [liveDataError, setLiveDataError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -347,6 +350,7 @@ export function App() {
                 ) : null}
               </div>
               <AnimatePresence mode="wait">
+                {activePage === "index" ? <ProjectIndexPage key="page-index" onOpenPage={navigateToPage} /> : null}
                 {activePage === "dashboard" ? (
                   <DashboardPage key="page-dashboard" data={appData} onOpenLead={openLeadWorkspace} lastSyncAt={lastSyncAt} />
                 ) : null}
