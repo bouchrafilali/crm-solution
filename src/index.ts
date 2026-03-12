@@ -54,7 +54,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Control Center — Mobile-Lab</title>
+  <title>Centre de Contrôle — Mobile-Lab</title>
   <style>
     :root{
       --bg:#060a12;
@@ -247,52 +247,52 @@ function renderAdminControlCenterPage(navSuffix: string): string {
   <main class="wrap">
     <section class="hero">
       <div>
-        <p class="eyebrow">Project Control Center</p>
-        <h1>Central index for all project areas</h1>
-        <p class="subtitle">A simple, structured entry point to the platform.</p>
+        <p class="eyebrow">Centre de Contrôle Projet</p>
+        <h1>Index central de toutes les zones du projet</h1>
+        <p class="subtitle">Un point d'entrée simple et structuré vers la plateforme.</p>
       </div>
       <aside class="summary">
-        <h3>System Summary</h3>
+        <h3>Résumé Système</h3>
         <div class="stat"><span>Modules</span><strong>7</strong></div>
-        <div class="stat"><span>Structure</span><strong style="color:var(--green)">Structured</strong></div>
-        <div class="stat"><span>Navigation</span><strong>Clear</strong></div>
+        <div class="stat"><span>Structure</span><strong style="color:var(--green)">Structurée</strong></div>
+        <div class="stat"><span>Navigation</span><strong>Claire</strong></div>
       </aside>
     </section>
 
     <section class="orientation">
-      <article class="tile"><div class="k">Recommended Start</div><div class="v">Insights</div><div class="d">Best place to understand the business situation and what needs attention first.</div></article>
-      <article class="tile"><div class="k">Decision Area</div><div class="v">Forecast</div><div class="d">Use for projections, planning, expected revenue, and scenario thinking.</div></article>
-      <article class="tile"><div class="k">Execution Area</div><div class="v">Mobile App</div><div class="d">Use for action, operator activity, approvals, and daily execution.</div></article>
+      <article class="tile"><div class="k">Point de départ recommandé</div><div class="v">Insights</div><div class="d">Le meilleur point d'entrée pour comprendre la situation business et les priorités.</div></article>
+      <article class="tile"><div class="k">Zone de décision</div><div class="v">Forecast</div><div class="d">À utiliser pour les projections, la planification, le revenu attendu et les scénarios.</div></article>
+      <article class="tile"><div class="k">Zone d'exécution</div><div class="v">Mobile App</div><div class="d">Pour l'action, l'activité opérateur, les validations et l'exécution quotidienne.</div></article>
     </section>
 
     <header class="modules-head">
       <div>
-        <h2>System Navigation</h2>
-        <p>Grouped by function for faster scanning and cleaner module selection.</p>
+        <h2>Navigation Système</h2>
+        <p>Groupée par fonction pour un scan plus rapide et un choix de module plus clair.</p>
       </div>
-      <input id="moduleSearch" class="search" type="search" placeholder="Search modules..." />
+      <input id="moduleSearch" class="search" type="search" placeholder="Rechercher un module..." />
     </header>
 
     <div class="sections-grid">
       <section class="section section-block">
-        <p class="section-title">Operations</p>
+        <p class="section-title">Opérations</p>
         <div class="rows">
           <a class="row module-row" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
             <div class="icon">◎</div>
             <div class="content">
               <p class="title">Agent Control Center V1</p>
-              <p class="subtitle">AI operations cockpit for runs, approvals, leads, and system monitoring</p>
+              <p class="subtitle">Cockpit d'opérations IA pour les runs, validations, leads et supervision système</p>
             </div>
-            <span class="status active">Active</span>
+            <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
           <a class="row module-row" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
             <div class="icon">◉</div>
             <div class="content">
               <p class="title">Mobile App</p>
-              <p class="subtitle">Operational workspace for fast daily execution with operator workflows</p>
+              <p class="subtitle">Espace opérationnel pour une exécution rapide avec workflows opérateur</p>
             </div>
-            <span class="status progress">In Progress</span>
+            <span class="status progress">En cours</span>
             <span class="arrow">›</span>
           </a>
         </div>
@@ -305,27 +305,27 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <div class="icon">◌</div>
             <div class="content">
               <p class="title">Insights</p>
-              <p class="subtitle">Business intelligence and actionable analysis across performance signals</p>
+              <p class="subtitle">Business intelligence et analyses actionnables sur les signaux de performance</p>
             </div>
-            <span class="status active">Active</span>
+            <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
           <a class="row module-row" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
             <div class="icon">◍</div>
             <div class="content">
               <p class="title">Forecast</p>
-              <p class="subtitle">Revenue, demand, and operational projection control</p>
+              <p class="subtitle">Pilotage des projections de revenu, de demande et d'opérations</p>
             </div>
-            <span class="status active">Active</span>
+            <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
           <a class="row module-row" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
             <div class="icon">◈</div>
             <div class="content">
               <p class="title">WhatsApp Intelligence</p>
-              <p class="subtitle">Conversation analysis, priorities, and strategic operator guidance</p>
+              <p class="subtitle">Analyse conversationnelle, priorités et guidance stratégique opérateur</p>
             </div>
-            <span class="status active">Active</span>
+            <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
         </div>
@@ -338,18 +338,18 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <div class="icon">◐</div>
             <div class="content">
               <p class="title">Orders & Payments</p>
-              <p class="subtitle">Commercial flow visibility for orders, deposits, balances, and payment state</p>
+              <p class="subtitle">Visibilité commerciale sur commandes, acomptes, soldes et état de paiement</p>
             </div>
-            <span class="status active">Active</span>
+            <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
           <a class="row module-row" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
             <div class="icon">◒</div>
             <div class="content">
               <p class="title">Appointments</p>
-              <p class="subtitle">Showroom scheduling, confirmations, reminders, and coordination</p>
+              <p class="subtitle">Planification showroom, confirmations, rappels et coordination</p>
             </div>
-            <span class="status active">Active</span>
+            <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
         </div>
