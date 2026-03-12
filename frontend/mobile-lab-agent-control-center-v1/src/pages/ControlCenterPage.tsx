@@ -8,12 +8,23 @@ import { AppMockData, NavPage } from "../types.js";
 
 interface ControlCenterPageProps {
   onOpenPage: (page: NavPage) => void;
-  data: AppMockData;
+  data?: AppMockData;
 }
 
 export function ControlCenterPage({ onOpenPage, data }: ControlCenterPageProps) {
   const [query, setQuery] = useState("");
   const [mobileSection, setMobileSection] = useState<"operations" | "intelligence" | "business">("operations");
+  const safeData: AppMockData = {
+    agents: data?.agents ?? [],
+    leads: data?.leads ?? [],
+    runs: data?.runs ?? [],
+    activityFeed: data?.activityFeed ?? [],
+    approvals: data?.approvals ?? [],
+    learningEvents: data?.learningEvents ?? [],
+    suggestedReplies: data?.suggestedReplies ?? [],
+    strategicAnalyses: data?.strategicAnalyses ?? [],
+    conversations: data?.conversations ?? []
+  };
 
   const sections = useMemo<ModuleSectionData[]>(
     () => [
@@ -178,11 +189,11 @@ export function ControlCenterPage({ onOpenPage, data }: ControlCenterPageProps) 
 
       <DevelopmentSuggestionsPanel
         input={{
-          runs: data.runs,
-          agents: data.agents,
-          approvals: data.approvals,
-          learningEvents: data.learningEvents,
-          strategicAnalyses: data.strategicAnalyses
+          runs: safeData.runs,
+          agents: safeData.agents,
+          approvals: safeData.approvals,
+          learningEvents: safeData.learningEvents,
+          strategicAnalyses: safeData.strategicAnalyses
         }}
       />
     </motion.div>
