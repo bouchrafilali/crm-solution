@@ -163,24 +163,47 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .apps-track::-webkit-scrollbar{display:none}
     .app-chip{
       flex:0 0 auto;
-      display:inline-flex;
+      display:flex;
+      flex-direction:column;
       align-items:center;
-      gap:7px;
-      min-height:36px;
+      justify-content:center;
+      gap:6px;
+      width:82px;
+      min-width:82px;
+      min-height:100px;
       border:1px solid rgba(255,255,255,.10);
-      border-radius:999px;
+      border-radius:18px;
       background:rgba(255,255,255,.08);
       color:#d5def0;
       text-decoration:none;
-      font-size:12px;
+      font-size:10px;
       font-weight:600;
-      padding:8px 11px;
-      white-space:nowrap;
+      padding:8px 6px;
+      text-align:center;
     }
     .app-chip:hover{
       border-color:rgba(125,211,252,.45);
       background:rgba(125,211,252,.18);
       color:#e8f7ff;
+    }
+    .app-icon{
+      width:50px;
+      height:50px;
+      border-radius:15px;
+      border:1px solid rgba(255,255,255,.20);
+      background:linear-gradient(180deg, rgba(125,211,252,.30) 0%, rgba(56,189,248,.20) 100%);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 8px 16px -10px rgba(0,0,0,.7);
+      display:grid;
+      place-items:center;
+      color:#f4fbff;
+      font-size:18px;
+    }
+    .app-chip-label{
+      display:block;
+      line-height:1.15;
+      letter-spacing:.01em;
+      color:#dbe7ff;
+      max-width:100%;
     }
     .app-dot{
       width:8px;
@@ -362,6 +385,12 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         box-shadow:0 12px 26px -20px rgba(0,0,0,.85);
         padding:7px;
       }
+      .apps-track{
+        gap:10px;
+      }
+      .app-dot{
+        display:none;
+      }
       .section{
         border-radius:18px;
         padding:10px;
@@ -446,14 +475,14 @@ function renderAdminControlCenterPage(navSuffix: string): string {
 
     <div class="apps-rail" id="appsRail">
       <div class="apps-track">
-        <a class="app-chip" href="/agent-control-center-v1/#/index${navSuffix}"><span class="app-dot"></span>Agent Control Center</a>
-        <a class="app-chip" href="/whatsapp-intelligence/mobile-lab${navSuffix}"><span class="app-dot"></span>Mobile App</a>
-        <a class="app-chip" href="/admin/insights${navSuffix}"><span class="app-dot"></span>Insights</a>
-        <a class="app-chip" href="/admin/forecast-v4${navSuffix}"><span class="app-dot"></span>Forecast</a>
-        <a class="app-chip" href="/whatsapp-intelligence${navSuffix}"><span class="app-dot"></span>WhatsApp Intelligence</a>
-        <a class="app-chip" href="/blueprint${navSuffix}"><span class="app-dot"></span>Blueprint</a>
-        <a class="app-chip" href="/admin/invoices${navSuffix}"><span class="app-dot"></span>Créer une facture</a>
-        <a class="app-chip" href="/admin/appointments-v2${navSuffix}"><span class="app-dot"></span>Appointments</a>
+        <a class="app-chip" href="/agent-control-center-v1/#/index${navSuffix}"><span class="app-icon">◎</span><span class="app-chip-label">Agent Control</span></a>
+        <a class="app-chip" href="/whatsapp-intelligence/mobile-lab${navSuffix}"><span class="app-icon">◉</span><span class="app-chip-label">Mobile App</span></a>
+        <a class="app-chip" href="/admin/insights${navSuffix}"><span class="app-icon">◌</span><span class="app-chip-label">Insights</span></a>
+        <a class="app-chip" href="/admin/forecast-v4${navSuffix}"><span class="app-icon">◍</span><span class="app-chip-label">Forecast</span></a>
+        <a class="app-chip" href="/whatsapp-intelligence${navSuffix}"><span class="app-icon">◈</span><span class="app-chip-label">WhatsApp</span></a>
+        <a class="app-chip" href="/blueprint${navSuffix}"><span class="app-icon">◇</span><span class="app-chip-label">Blueprint</span></a>
+        <a class="app-chip" href="/admin/invoices${navSuffix}"><span class="app-icon">◔</span><span class="app-chip-label">Facture</span></a>
+        <a class="app-chip" href="/admin/appointments-v2${navSuffix}"><span class="app-icon">◒</span><span class="app-chip-label">Rendez-vous</span></a>
       </div>
     </div>
 
