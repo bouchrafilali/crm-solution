@@ -10,6 +10,7 @@ interface ControlCenterPageProps {
 
 export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
   const [query, setQuery] = useState("");
+  const [mobileSection, setMobileSection] = useState<"operations" | "intelligence" | "business">("operations");
 
   const sections = useMemo<ModuleSectionData[]>(
     () => [
@@ -133,6 +134,10 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
       }))
       .filter((section) => section.items.length > 0);
   }, [query, sections]);
+  const mobileSections = useMemo(() => {
+    if (query.trim()) return filteredSections;
+    return filteredSections.filter((section) => section.id === mobileSection);
+  }, [query, filteredSections, mobileSection]);
 
   return (
     <motion.div
@@ -141,7 +146,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.24, ease: "easeOut" }}
-      className="mx-auto w-full max-w-4xl space-y-5"
+      className="mx-auto w-full max-w-4xl space-y-4 md:space-y-5"
     >
       <HeaderSection />
 
@@ -149,7 +154,36 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
         <SearchBar value={query} onChange={setQuery} placeholder="Search modules..." />
       </div>
 
-      <div className="space-y-3">
+      <div className="md:hidden">
+        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+          {[
+            { id: "operations", label: "Operations" },
+            { id: "intelligence", label: "Intelligence" },
+            { id: "business", label: "Business" }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMobileSection(tab.id as "operations" | "intelligence" | "business")}
+              className={`rounded-xl px-2 py-2 text-xs font-medium transition ${
+                mobileSection === tab.id
+                  ? "bg-cyan-400/15 text-cyan-100"
+                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3 md:hidden">
+        {mobileSections.map((section) => (
+          <ModuleSection key={section.id} section={section} />
+        ))}
+      </div>
+
+      <div className="hidden space-y-3 md:block">
         {filteredSections.map((section) => (
           <ModuleSection key={section.id} section={section} />
         ))}
