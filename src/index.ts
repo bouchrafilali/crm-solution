@@ -57,13 +57,14 @@ function renderAdminControlCenterPage(navSuffix: string): string {
   <title>Control Center — Mobile-Lab</title>
   <style>
     :root{
-      --bg:#070b13;
-      --bg-soft:#0c1220;
-      --panel:rgba(19,26,40,.72);
-      --panel-strong:rgba(24,33,50,.82);
+      --bg:#060a12;
+      --bg-soft:#0a101b;
+      --panel:rgba(19,26,40,.56);
+      --panel-soft:rgba(16,22,34,.46);
       --text:#e8edf7;
-      --muted:#95a3bd;
-      --line:rgba(255,255,255,.12);
+      --muted:#9aa8c2;
+      --line:rgba(255,255,255,.10);
+      --line-strong:rgba(255,255,255,.16);
       --cyan:#7dd3fc;
       --green:#86efac;
       --amber:#fcd34d;
@@ -74,94 +75,160 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Inter,Arial,sans-serif;
       color:var(--text);
       background:
-        radial-gradient(1000px 420px at 8% -5%, rgba(125,211,252,.13), transparent 55%),
-        radial-gradient(860px 360px at 98% 0%, rgba(52,211,153,.10), transparent 48%),
+        radial-gradient(900px 380px at 8% -5%, rgba(125,211,252,.11), transparent 55%),
+        radial-gradient(720px 340px at 95% 0%, rgba(52,211,153,.09), transparent 48%),
         linear-gradient(180deg, #060a12 0%, #070b13 48%, #070c14 100%);
       min-height:100vh;
     }
-    .wrap{max-width:1320px;margin:0 auto;padding:28px 18px 34px}
+    .wrap{max-width:1160px;margin:0 auto;padding:28px 18px 42px}
     .hero{
       border:1px solid var(--line);
-      border-radius:28px;
-      background:linear-gradient(180deg,var(--panel) 0%, rgba(14,21,34,.72) 100%);
+      border-radius:30px;
+      background:linear-gradient(180deg,var(--panel) 0%, rgba(14,21,34,.62) 100%);
       backdrop-filter:blur(16px);
-      padding:24px;
+      padding:24px 24px 22px;
       display:grid;
-      gap:14px;
-      grid-template-columns:1.4fr .78fr;
+      gap:16px;
+      grid-template-columns:1.24fr .76fr;
     }
-    .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);font-weight:700}
-    h1{margin:8px 0 0;font-size:40px;line-height:1.08;letter-spacing:-.03em}
-    .subtitle{margin:12px 0 0;color:var(--muted);font-size:16px}
+    .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);font-weight:700}
+    h1{margin:8px 0 0;font-size:44px;line-height:1.06;letter-spacing:-.03em}
+    .subtitle{margin:12px 0 0;color:var(--muted);font-size:17px}
     .summary{
       border:1px solid var(--line);
-      border-radius:24px;
-      background:rgba(14,20,32,.62);
-      padding:14px;
+      border-radius:22px;
+      background:rgba(14,20,32,.46);
+      padding:14px 14px 10px;
     }
     .summary h3{margin:0 0 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-    .stat{display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.03);padding:10px 12px;border-radius:14px;margin-top:8px;font-size:14px}
-    .orientation{margin-top:16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .stat{display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);padding:10px 12px;border-radius:12px;margin-top:8px;font-size:14px}
+    .orientation{margin-top:18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
     .tile{
       border:1px solid var(--line);
-      border-radius:22px;
-      background:rgba(19,26,40,.58);
+      border-radius:18px;
+      background:rgba(19,26,40,.48);
       backdrop-filter:blur(14px);
-      padding:14px;
+      padding:14px 14px 13px;
     }
     .tile .k{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700}
-    .tile .v{margin-top:8px;font-size:28px;letter-spacing:-.02em;font-weight:650}
-    .tile .d{margin-top:8px;color:var(--muted);font-size:14px;line-height:1.45}
-    .modules-head{margin:20px 0 10px;display:flex;justify-content:space-between;align-items:end;gap:10px}
-    .modules-head h2{margin:0;font-size:22px;letter-spacing:-.02em}
+    .tile .v{margin-top:8px;font-size:24px;letter-spacing:-.02em;font-weight:650}
+    .tile .d{margin-top:7px;color:var(--muted);font-size:14px;line-height:1.42}
+    .modules-head{
+      margin:26px 0 12px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+    }
+    .modules-head h2{margin:0;font-size:24px;letter-spacing:-.02em}
     .modules-head p{margin:6px 0 0;color:var(--muted);font-size:14px}
-    .grid{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
-    .card{
+    .search{
+      width:280px;
+      max-width:100%;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      padding:11px 14px;
+      font-size:14px;
+      outline:none;
+    }
+    .search:focus{border-color:var(--line-strong);box-shadow:0 0 0 3px rgba(125,211,252,.08)}
+    .section{
+      margin-top:18px;
       border:1px solid var(--line);
       border-radius:24px;
-      background:linear-gradient(180deg,var(--panel-strong) 0%, rgba(17,24,37,.78) 100%);
+      background:linear-gradient(180deg,var(--panel-soft) 0%, rgba(13,18,29,.40) 100%);
       backdrop-filter:blur(18px);
-      padding:16px;
+      padding:14px;
+    }
+    .section-title{
+      margin:2px 4px 10px;
+      font-size:12px;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+      color:var(--muted);
+      font-weight:700;
+    }
+    .rows{
       display:flex;
       flex-direction:column;
-      min-height:320px;
-      transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+      gap:9px;
     }
-    .card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.22);box-shadow:0 18px 46px -30px rgba(0,0,0,.85)}
-    .top{display:flex;justify-content:space-between;gap:10px}
-    .title{font-size:31px;letter-spacing:-.03em;font-weight:700}
-    .sub{margin-top:4px;color:var(--muted);font-size:12px}
-    .desc{margin-top:12px;font-size:14px;line-height:1.52;color:#d0d7e7}
-    .features{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
-    .chip{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);border-radius:12px;padding:8px 10px;font-size:12px;color:#d6deef}
-    .status{font-size:10px;letter-spacing:.12em;text-transform:uppercase;border-radius:999px;padding:7px 10px;border:1px solid}
-    .active{color:#d9ffe9;background:rgba(34,197,94,.13);border-color:rgba(74,222,128,.35)}
-    .progress{color:#ffefcf;background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35)}
-    .cta{
-      margin-top:auto;
-      display:inline-flex;
-      justify-content:center;
+    .row{
+      display:flex;
       align-items:center;
+      gap:12px;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;
+      background:rgba(255,255,255,.02);
+      padding:12px 13px;
       text-decoration:none;
-      border:1px solid rgba(255,255,255,.18);
+      color:inherit;
+      transition:border-color .2s ease, transform .2s ease, background .2s ease;
+    }
+    .row:hover{
+      border-color:rgba(255,255,255,.18);
       background:rgba(255,255,255,.05);
-      color:var(--text);
-      border-radius:12px;
-      padding:10px 12px;
-      font-size:13px;
+      transform:translateY(-1px);
+    }
+    .icon{
+      width:34px;
+      height:34px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(125,211,252,.08);
+      display:grid;
+      place-items:center;
+      color:#d8f2ff;
+      font-size:15px;
+      flex:0 0 34px;
+    }
+    .content{
+      min-width:0;
+      flex:1 1 auto;
+    }
+    .title{
+      margin:0;
+      font-size:17px;
+      line-height:1.2;
+      letter-spacing:-.01em;
       font-weight:650;
     }
-    .cta:hover{border-color:rgba(125,211,252,.5);color:#d6f4ff;background:rgba(125,211,252,.11)}
+    .subtitle{
+      margin:4px 0 0;
+      font-size:13px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .status{
+      font-size:10px;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      border-radius:999px;
+      padding:7px 10px;
+      border:1px solid;
+      flex:0 0 auto;
+      margin-left:6px;
+    }
+    .active{color:#d9ffe9;background:rgba(34,197,94,.13);border-color:rgba(74,222,128,.35)}
+    .progress{color:#ffefcf;background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35)}
+    .arrow{
+      color:#a8b8d2;
+      font-size:20px;
+      line-height:1;
+      flex:0 0 auto;
+    }
     @media (max-width:1150px){
       .hero{grid-template-columns:1fr}
-      .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .title{font-size:29px}
     }
     @media (max-width:760px){
       .orientation{grid-template-columns:1fr}
-      .grid{grid-template-columns:1fr}
-      h1{font-size:31px}
-      .title{font-size:27px}
+      .modules-head{align-items:flex-start;flex-direction:column}
+      .search{width:100%}
+      h1{font-size:34px}
     }
   </style>
 </head>
@@ -189,21 +256,106 @@ function renderAdminControlCenterPage(navSuffix: string): string {
 
     <header class="modules-head">
       <div>
-        <h2>Modules</h2>
-        <p>Separated control center with Agent Control Center V1 as an explicit module.</p>
+        <h2>System Navigation</h2>
+        <p>Grouped by function for faster scanning and cleaner module selection.</p>
       </div>
+      <input id="moduleSearch" class="search" type="search" placeholder="Search modules..." />
     </header>
 
-    <section class="grid">
-      <article class="card"><div class="top"><div><div class="title">Agent Control Center V1</div><div class="sub">AI operations cockpit</div></div><span class="status active">Active</span></div><p class="desc">Dedicated operational center for leads, runs, approvals, learning and system brain.</p><div class="features"><div class="chip">Index</div><div class="chip">Runs</div><div class="chip">Approvals</div><div class="chip">System Brain</div></div><a class="cta" href="/agent-control-center-v1/#/index${navSuffix}">Open Agent Control Center V1</a></article>
-      <article class="card"><div class="top"><div><div class="title">Forecast</div><div class="sub">Revenue, demand, and operational projections</div></div><span class="status active">Active</span></div><p class="desc">Access forecasting models, scenario views, and forward-looking signals to guide business decisions with clarity.</p><div class="features"><div class="chip">Revenue Forecast</div><div class="chip">Order Projection</div><div class="chip">Demand Signals</div><div class="chip">Scenario View</div></div><a class="cta" href="/admin/forecast-v4${navSuffix}">Open Forecast</a></article>
-      <article class="card"><div class="top"><div><div class="title">Insights</div><div class="sub">Business intelligence and actionable analysis</div></div><span class="status active">Active</span></div><p class="desc">Surface the most important patterns across performance, client behavior, and operational efficiency.</p><div class="features"><div class="chip">Executive Overview</div><div class="chip">Conversion Insights</div><div class="chip">Lead Intelligence</div><div class="chip">Performance Signals</div></div><a class="cta" href="/admin/insights${navSuffix}">Open Insights</a></article>
-      <article class="card"><div class="top"><div><div class="title">Mobile App</div><div class="sub">Operational experience for fast daily execution</div></div><span class="status progress">In Progress</span></div><p class="desc">A clear mobile-first workspace for conversations, approvals, and rapid action across ongoing activity.</p><div class="features"><div class="chip">Conversations</div><div class="chip">Approvals</div><div class="chip">Operator Actions</div><div class="chip">AI Suggestions</div></div><a class="cta" href="/whatsapp-intelligence/mobile-lab${navSuffix}">Open Mobile App</a></article>
-      <article class="card"><div class="top"><div><div class="title">WhatsApp Intelligence</div><div class="sub">Conversation analysis and operator guidance</div></div><span class="status active">Active</span></div><p class="desc">Review conversations, priorities, and reply suggestions in a structure designed for speed and control.</p><div class="features"><div class="chip">Priority Feed</div><div class="chip">Suggested Replies</div><div class="chip">Stage Detection</div><div class="chip">Learning Loop</div></div><a class="cta" href="/whatsapp-intelligence${navSuffix}">Open WhatsApp Intelligence</a></article>
-      <article class="card"><div class="top"><div><div class="title">Orders & Payments</div><div class="sub">Commercial flow and payment visibility</div></div><span class="status active">Active</span></div><p class="desc">Track orders, deposits, balances, and payment progression with a more executive operational view.</p><div class="features"><div class="chip">Orders</div><div class="chip">Deposits</div><div class="chip">Balances</div><div class="chip">Payment Status</div></div><a class="cta" href="/admin/invoices${navSuffix}">Open Orders & Payments</a></article>
-      <article class="card"><div class="top"><div><div class="title">Appointments</div><div class="sub">Showroom and client scheduling</div></div><span class="status active">Active</span></div><p class="desc">Manage showroom visits, fitting flow, confirmations, and related operational coordination.</p><div class="features"><div class="chip">Rendez-vous</div><div class="chip">Showroom Flow</div><div class="chip">Reminders</div><div class="chip">Availability</div></div><a class="cta" href="/admin/appointments-v2${navSuffix}">Open Appointments</a></article>
+    <section class="section">
+      <p class="section-title">Operations</p>
+      <div class="rows">
+        <a class="row module-row" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
+          <div class="icon">◎</div>
+          <div class="content">
+            <p class="title">Agent Control Center V1</p>
+            <p class="subtitle">AI operations cockpit for runs, approvals, leads, and system monitoring</p>
+          </div>
+          <span class="status active">Active</span>
+          <span class="arrow">›</span>
+        </a>
+        <a class="row module-row" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
+          <div class="icon">◉</div>
+          <div class="content">
+            <p class="title">Mobile App</p>
+            <p class="subtitle">Operational workspace for fast daily execution with operator workflows</p>
+          </div>
+          <span class="status progress">In Progress</span>
+          <span class="arrow">›</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-title">Intelligence</p>
+      <div class="rows">
+        <a class="row module-row" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
+          <div class="icon">◌</div>
+          <div class="content">
+            <p class="title">Insights</p>
+            <p class="subtitle">Business intelligence and actionable analysis across performance signals</p>
+          </div>
+          <span class="status active">Active</span>
+          <span class="arrow">›</span>
+        </a>
+        <a class="row module-row" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
+          <div class="icon">◍</div>
+          <div class="content">
+            <p class="title">Forecast</p>
+            <p class="subtitle">Revenue, demand, and operational projection control</p>
+          </div>
+          <span class="status active">Active</span>
+          <span class="arrow">›</span>
+        </a>
+        <a class="row module-row" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
+          <div class="icon">◈</div>
+          <div class="content">
+            <p class="title">WhatsApp Intelligence</p>
+            <p class="subtitle">Conversation analysis, priorities, and strategic operator guidance</p>
+          </div>
+          <span class="status active">Active</span>
+          <span class="arrow">›</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-title">Business</p>
+      <div class="rows">
+        <a class="row module-row" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
+          <div class="icon">◐</div>
+          <div class="content">
+            <p class="title">Orders & Payments</p>
+            <p class="subtitle">Commercial flow visibility for orders, deposits, balances, and payment state</p>
+          </div>
+          <span class="status active">Active</span>
+          <span class="arrow">›</span>
+        </a>
+        <a class="row module-row" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
+          <div class="icon">◒</div>
+          <div class="content">
+            <p class="title">Appointments</p>
+            <p class="subtitle">Showroom scheduling, confirmations, reminders, and coordination</p>
+          </div>
+          <span class="status active">Active</span>
+          <span class="arrow">›</span>
+        </a>
+      </div>
     </section>
   </main>
+  <script>
+    const input = document.getElementById("moduleSearch");
+    const rows = Array.from(document.querySelectorAll(".module-row"));
+    if (input) {
+      input.addEventListener("input", (event) => {
+        const q = String(event.target.value || "").toLowerCase().trim();
+        rows.forEach((row) => {
+          const hay = String(row.getAttribute("data-search") || "").toLowerCase();
+          row.style.display = q && !hay.includes(q) ? "none" : "flex";
+        });
+      });
+    }
+  </script>
 </body>
 </html>`;
 }
