@@ -694,7 +694,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           <a class="home-app module-item" data-app-id="invoice" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
             <span class="home-app-icon">◔</span><span class="home-app-label">Facture</span>
           </a>
-          <a class="home-app module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin${navSuffix}">
+          <a class="home-app module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin/orders${navSuffix}">
             <span class="home-app-icon">◐</span><span class="home-app-label">Orders</span>
           </a>
           <a class="home-app module-item" data-app-id="appointments" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
@@ -783,7 +783,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin${navSuffix}">
+          <a class="row module-row module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin/orders${navSuffix}">
             <div class="icon">◐</div>
             <div class="content">
               <p class="title">Orders & Payments</p>
@@ -857,7 +857,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       whatsapp: { label: "WhatsApp", icon: "◈", href: "/whatsapp-intelligence${navSuffix}" },
       blueprint: { label: "Blueprint", icon: "◇", href: "/blueprint${navSuffix}" },
       invoice: { label: "Facture", icon: "◔", href: "/admin/invoices${navSuffix}" },
-      orders: { label: "Orders", icon: "◐", href: "/admin${navSuffix}" },
+      orders: { label: "Orders", icon: "◐", href: "/admin/orders${navSuffix}" },
       appointments: { label: "RDV", icon: "◒", href: "/admin/appointments-v2${navSuffix}" }
     };
     const defaultRecentApps = ["agent", "mobile", "insights", "whatsapp"];
@@ -935,7 +935,12 @@ app.get("/", (req, res) => {
     res.redirect(`/admin/control-center${query}`);
     return;
   }
-  res.redirect(`/admin${query}`);
+  res.redirect(`/admin/control-center${query}`);
+});
+
+app.get("/admin", (req, res) => {
+  const navSuffix = buildAdminNavSuffix(req);
+  res.redirect(`/admin/control-center${navSuffix}`);
 });
 
 app.get("/admin/control-center", (req, res) => {
@@ -1157,6 +1162,7 @@ app.get(["/spline", "/admin/spline"], (_req, res) => {
   res.status(200).type("html").send(html);
 });
 
+app.use("/admin/orders", adminRouter);
 app.use("/admin", adminRouter);
 app.use(whatsappRouter);
 app.use(whatsappLabRouter);
