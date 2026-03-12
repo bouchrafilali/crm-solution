@@ -89,28 +89,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       padding-bottom:max(0px, env(safe-area-inset-bottom));
     }
     .wrap{max-width:1320px;margin:0 auto;padding:28px 20px 42px}
-    .hero{
-      border:1px solid var(--line);
-      border-radius:30px;
-      background:linear-gradient(180deg,var(--panel) 0%, rgba(20,29,45,.60) 100%);
-      backdrop-filter:blur(16px);
-      padding:24px 24px 22px;
-      display:grid;
-      gap:16px;
-      grid-template-columns:1.24fr .76fr;
-    }
-    .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);font-weight:700}
-    h1{margin:8px 0 0;font-size:44px;line-height:1.06;letter-spacing:-.03em}
-    .subtitle{margin:12px 0 0;color:var(--muted);font-size:17px}
-    .summary{
-      border:1px solid var(--line);
-      border-radius:22px;
-      background:rgba(22,30,48,.50);
-      padding:14px 14px 10px;
-    }
-    .summary h3{margin:0 0 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-    .stat{display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);padding:10px 12px;border-radius:12px;margin-top:8px;font-size:14px}
-    .orientation{margin-top:18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .orientation{margin-top:8px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
     .orientation::-webkit-scrollbar{display:none}
     .tile{
       border:1px solid var(--line);
@@ -364,9 +343,6 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       line-height:1;
       flex:0 0 auto;
     }
-    @media (max-width:1150px){
-      .hero{grid-template-columns:1fr}
-    }
     @media (min-width:1080px){
       .sections-grid{
         grid-template-columns:repeat(3,minmax(0,1fr));
@@ -375,12 +351,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     }
     @media (max-width:760px){
       .wrap{
-        padding:16px 14px calc(24px + env(safe-area-inset-bottom));
-      }
-      .hero{
-        border-radius:22px;
-        padding:16px 14px;
-        gap:12px;
+        padding:16px 14px calc(116px + env(safe-area-inset-bottom));
       }
       .orientation{
         display:flex;
@@ -392,22 +363,6 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       }
       .modules-head{align-items:flex-start;flex-direction:column}
       .search{width:100%}
-      h1{
-        font-size:30px;
-        line-height:1.08;
-      }
-      .subtitle{
-        font-size:15px;
-        line-height:1.45;
-      }
-      .summary{
-        border-radius:16px;
-        padding:10px 10px 8px;
-      }
-      .stat{
-        padding:9px 10px;
-        font-size:13px;
-      }
       .tile{
         border-radius:14px;
         padding:12px 12px 11px;
@@ -436,8 +391,10 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         display:none;
       }
       .apps-rail{
-        position:sticky;
-        top:calc(8px + env(safe-area-inset-top));
+        position:fixed;
+        left:12px;
+        right:12px;
+        bottom:calc(10px + env(safe-area-inset-bottom));
         z-index:5;
         display:block;
         margin:0 0 10px;
@@ -450,11 +407,12 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       }
       .apps-track{
         gap:10px;
+        justify-content:space-between;
       }
       .app-chip{
-        width:66px;
-        min-width:66px;
-        min-height:78px;
+        width:calc((100% - 30px) / 4);
+        min-width:0;
+        min-height:74px;
         border-radius:14px;
         padding:5px 4px;
         font-size:9px;
@@ -520,7 +478,6 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       }
     }
     @media (max-width:420px){
-      h1{font-size:28px}
       .icon{
         width:34px;
         height:34px;
@@ -544,20 +501,6 @@ function renderAdminControlCenterPage(navSuffix: string): string {
 </head>
 <body>
   <main class="wrap">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Centre de Contrôle Projet</p>
-        <h1>Index central de toutes les zones du projet</h1>
-        <p class="subtitle">Un point d'entrée simple et structuré vers la plateforme.</p>
-      </div>
-      <aside class="summary">
-        <h3>Résumé Système</h3>
-        <div class="stat"><span>Modules</span><strong>9</strong></div>
-        <div class="stat"><span>Structure</span><strong style="color:var(--green)">Structurée</strong></div>
-        <div class="stat"><span>Navigation</span><strong>Claire</strong></div>
-      </aside>
-    </section>
-
     <section class="orientation">
       <article class="tile"><div class="k">Point de départ recommandé</div><div class="v">Insights</div><div class="d">Le meilleur point d'entrée pour comprendre la situation business et les priorités.</div></article>
       <article class="tile"><div class="k">Zone de décision</div><div class="v">Forecast</div><div class="d">À utiliser pour les projections, la planification, le revenu attendu et les scénarios.</div></article>
@@ -573,26 +516,17 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     </header>
 
     <div class="apps-rail" id="appsRail">
-      <div class="apps-track">
-        <a class="app-chip" href="/agent-control-center-v1/#/index${navSuffix}"><span class="app-icon">◎</span><span class="app-chip-label">Agent Control</span></a>
-        <a class="app-chip" href="/whatsapp-intelligence/mobile-lab${navSuffix}"><span class="app-icon">◉</span><span class="app-chip-label">Mobile App</span></a>
-        <a class="app-chip" href="/admin/insights${navSuffix}"><span class="app-icon">◌</span><span class="app-chip-label">Insights</span></a>
-        <a class="app-chip" href="/admin/forecast-v4${navSuffix}"><span class="app-icon">◍</span><span class="app-chip-label">Forecast</span></a>
-        <a class="app-chip" href="/whatsapp-intelligence${navSuffix}"><span class="app-icon">◈</span><span class="app-chip-label">WhatsApp</span></a>
-        <a class="app-chip" href="/blueprint${navSuffix}"><span class="app-icon">◇</span><span class="app-chip-label">Blueprint</span></a>
-        <a class="app-chip" href="/admin/invoices${navSuffix}"><span class="app-icon">◔</span><span class="app-chip-label">Facture</span></a>
-        <a class="app-chip" href="/admin/appointments-v2${navSuffix}"><span class="app-icon">◒</span><span class="app-chip-label">Rendez-vous</span></a>
-      </div>
+      <div class="apps-track" id="recentAppsTrack"></div>
     </div>
 
     <div class="mobile-home">
       <section class="home-section section-block" data-section="operations">
         <p class="home-section-title">Operations</p>
         <div class="home-grid">
-          <a class="home-app module-item" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
+          <a class="home-app module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
             <span class="home-app-icon">◎</span><span class="home-app-label">Agent Control</span>
           </a>
-          <a class="home-app module-item" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
+          <a class="home-app module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
             <span class="home-app-icon">◉</span><span class="home-app-label">Mobile App</span>
           </a>
         </div>
@@ -601,16 +535,16 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <section class="home-section section-block" data-section="intelligence">
         <p class="home-section-title">Intelligence</p>
         <div class="home-grid">
-          <a class="home-app module-item" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
+          <a class="home-app module-item" data-app-id="insights" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
             <span class="home-app-icon">◌</span><span class="home-app-label">Insights</span>
           </a>
-          <a class="home-app module-item" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
+          <a class="home-app module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
             <span class="home-app-icon">◍</span><span class="home-app-label">Forecast</span>
           </a>
-          <a class="home-app module-item" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
+          <a class="home-app module-item" data-app-id="whatsapp" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
             <span class="home-app-icon">◈</span><span class="home-app-label">WhatsApp</span>
           </a>
-          <a class="home-app module-item" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
+          <a class="home-app module-item" data-app-id="blueprint" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
             <span class="home-app-icon">◇</span><span class="home-app-label">Blueprint</span>
           </a>
         </div>
@@ -619,13 +553,13 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <section class="home-section section-block" data-section="business">
         <p class="home-section-title">Business</p>
         <div class="home-grid">
-          <a class="home-app module-item" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
+          <a class="home-app module-item" data-app-id="invoice" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
             <span class="home-app-icon">◔</span><span class="home-app-label">Facture</span>
           </a>
-          <a class="home-app module-item" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
+          <a class="home-app module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
             <span class="home-app-icon">◐</span><span class="home-app-label">Orders</span>
           </a>
-          <a class="home-app module-item" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
+          <a class="home-app module-item" data-app-id="appointments" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
             <span class="home-app-icon">◒</span><span class="home-app-label">Appointments</span>
           </a>
         </div>
@@ -636,7 +570,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <section class="section section-block" data-section="operations">
         <p class="section-title">Opérations</p>
         <div class="rows">
-          <a class="row module-row" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
+          <a class="row module-row module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/#/index${navSuffix}">
             <div class="icon">◎</div>
             <div class="content">
               <p class="title">Agent Control Center V1</p>
@@ -645,7 +579,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
+          <a class="row module-row module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
             <div class="icon">◉</div>
             <div class="content">
               <p class="title">Mobile App</p>
@@ -660,7 +594,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <section class="section section-block" data-section="intelligence">
         <p class="section-title">Intelligence</p>
         <div class="rows">
-          <a class="row module-row" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
+          <a class="row module-row module-item" data-app-id="insights" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
             <div class="icon">◌</div>
             <div class="content">
               <p class="title">Insights</p>
@@ -669,7 +603,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
+          <a class="row module-row module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
             <div class="icon">◍</div>
             <div class="content">
               <p class="title">Forecast</p>
@@ -678,7 +612,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
+          <a class="row module-row module-item" data-app-id="whatsapp" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
             <div class="icon">◈</div>
             <div class="content">
               <p class="title">WhatsApp Intelligence</p>
@@ -687,7 +621,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
+          <a class="row module-row module-item" data-app-id="blueprint" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
             <div class="icon">◇</div>
             <div class="content">
               <p class="title">Blueprint</p>
@@ -702,7 +636,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <section class="section section-block" data-section="business">
         <p class="section-title">Business</p>
         <div class="rows">
-          <a class="row module-row" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
+          <a class="row module-row module-item" data-app-id="invoice" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
             <div class="icon">◔</div>
             <div class="content">
               <p class="title">Créer une nouvelle facture</p>
@@ -711,7 +645,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
+          <a class="row module-row module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin/invoices${navSuffix}">
             <div class="icon">◐</div>
             <div class="content">
               <p class="title">Orders & Payments</p>
@@ -720,7 +654,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
+          <a class="row module-row module-item" data-app-id="appointments" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
             <div class="icon">◒</div>
             <div class="content">
               <p class="title">Appointments</p>
@@ -736,7 +670,60 @@ function renderAdminControlCenterPage(navSuffix: string): string {
   <script>
     const input = document.getElementById("moduleSearch");
     const moduleItems = Array.from(document.querySelectorAll(".module-row, .home-app.module-item"));
+    const recentAppsTrack = document.getElementById("recentAppsTrack");
     const sections = Array.from(document.querySelectorAll(".section-block"));
+    const appCatalog = {
+      agent: { label: "Agent", icon: "◎", href: "/agent-control-center-v1/#/index${navSuffix}" },
+      mobile: { label: "Mobile", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
+      insights: { label: "Insights", icon: "◌", href: "/admin/insights${navSuffix}" },
+      forecast: { label: "Forecast", icon: "◍", href: "/admin/forecast-v4${navSuffix}" },
+      whatsapp: { label: "WhatsApp", icon: "◈", href: "/whatsapp-intelligence${navSuffix}" },
+      blueprint: { label: "Blueprint", icon: "◇", href: "/blueprint${navSuffix}" },
+      invoice: { label: "Facture", icon: "◔", href: "/admin/invoices${navSuffix}" },
+      orders: { label: "Orders", icon: "◐", href: "/admin/invoices${navSuffix}" },
+      appointments: { label: "RDV", icon: "◒", href: "/admin/appointments-v2${navSuffix}" }
+    };
+    const defaultRecentApps = ["agent", "mobile", "insights", "whatsapp"];
+
+    function readRecentApps() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem("ml_recent_apps") || "[]");
+        if (!Array.isArray(parsed)) return defaultRecentApps.slice();
+        const sanitized = parsed.filter((id) => typeof id === "string" && appCatalog[id]).slice(0, 4);
+        return sanitized.length ? sanitized : defaultRecentApps.slice();
+      } catch {
+        return defaultRecentApps.slice();
+      }
+    }
+
+    function writeRecentApps(ids) {
+      try {
+        localStorage.setItem("ml_recent_apps", JSON.stringify(ids.slice(0, 4)));
+      } catch {}
+    }
+
+    function renderRecentApps() {
+      if (!recentAppsTrack) return;
+      const ids = readRecentApps();
+      recentAppsTrack.innerHTML = ids
+        .map((id) => {
+          const app = appCatalog[id];
+          if (!app) return "";
+          return "<a class='app-chip module-item' data-app-id='" + id + "' data-search='" + app.label.toLowerCase() + "' href='" + app.href + "'><span class='app-icon'>" + app.icon + "</span><span class='app-chip-label'>" + app.label + "</span></a>";
+        })
+        .join("");
+    }
+
+    document.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-app-id]") : null;
+      if (!target) return;
+      const appId = String(target.getAttribute("data-app-id") || "");
+      if (!appCatalog[appId]) return;
+      const current = readRecentApps().filter((id) => id !== appId);
+      const next = [appId].concat(current).slice(0, 4);
+      writeRecentApps(next);
+      renderRecentApps();
+    });
     function applyVisibility() {
       const q = String((input && input.value) || "").toLowerCase().trim();
       sections.forEach((section) => {
@@ -750,13 +737,15 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     if (input) {
       input.addEventListener("input", (event) => {
         const q = String(event.target.value || "").toLowerCase().trim();
-        moduleItems.forEach((row) => {
+        const liveItems = Array.from(document.querySelectorAll(".module-row, .home-app.module-item, .app-chip.module-item"));
+        liveItems.forEach((row) => {
           const hay = String(row.getAttribute("data-search") || "").toLowerCase();
           row.style.display = q && !hay.includes(q) ? "none" : "";
         });
         applyVisibility();
       });
     }
+    renderRecentApps();
     applyVisibility();
   </script>
 </body>
