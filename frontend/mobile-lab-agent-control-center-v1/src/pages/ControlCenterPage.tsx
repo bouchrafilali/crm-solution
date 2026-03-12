@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
+import { HeaderSection } from "../components/control-center/HeaderSection.js";
 import { ModuleSection, ModuleSectionData } from "../components/control-center/ModuleSection.js";
 import { SearchBar } from "../components/control-center/SearchBar.js";
 
@@ -14,13 +15,13 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
     () => [
       {
         id: "operations",
-        label: "Operations",
+        label: "OPERATIONS",
         items: [
           {
             id: "agent-control-center",
             icon: "agent",
-            title: "Agent Control Center",
-            subtitle: "Operational command surface for runs, approvals, and lead execution.",
+            title: "Agent Control Center V1",
+            subtitle: "AI operations cockpit for runs, validations, leads and system supervision.",
             status: "active",
             onOpen: () => onOpenPage("dashboard")
           },
@@ -28,7 +29,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             id: "mobile-app",
             icon: "mobile",
             title: "Mobile App",
-            subtitle: "Fast operator workflow for conversations and daily actions.",
+            subtitle: "Operational workspace for fast execution and operator workflows.",
             status: "in_progress",
             onOpen: () => {
               if (typeof window !== "undefined") window.location.href = "/whatsapp-intelligence/mobile-lab";
@@ -38,13 +39,13 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
       },
       {
         id: "intelligence",
-        label: "Intelligence",
+        label: "INTELLIGENCE",
         items: [
           {
             id: "insights",
             icon: "insights",
             title: "Insights",
-            subtitle: "Business intelligence and actionable analysis.",
+            subtitle: "Business intelligence and analytics for strategic signals.",
             status: "active",
             onOpen: () => {
               if (typeof window !== "undefined") window.location.href = "/admin/insights";
@@ -54,7 +55,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             id: "forecast",
             icon: "forecast",
             title: "Forecast",
-            subtitle: "Revenue, demand, and operational projections.",
+            subtitle: "Revenue, demand and operational projections.",
             status: "active",
             onOpen: () => {
               if (typeof window !== "undefined") window.location.href = "/admin/forecast-v4";
@@ -69,18 +70,38 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             onOpen: () => {
               if (typeof window !== "undefined") window.location.href = "/whatsapp-intelligence";
             }
+          },
+          {
+            id: "blueprint",
+            icon: "blueprint",
+            title: "Blueprint",
+            subtitle: "System architecture view and application flow mapping.",
+            status: "active",
+            onOpen: () => {
+              if (typeof window !== "undefined") window.location.href = "/blueprint";
+            }
           }
         ]
       },
       {
         id: "business",
-        label: "Business",
+        label: "BUSINESS",
         items: [
+          {
+            id: "create-invoice",
+            icon: "invoice",
+            title: "Create Invoice",
+            subtitle: "Direct access to invoice generator and PDF preview.",
+            status: "active",
+            onOpen: () => {
+              if (typeof window !== "undefined") window.location.href = "/admin/invoices";
+            }
+          },
           {
             id: "orders-payments",
             icon: "orders",
             title: "Orders & Payments",
-            subtitle: "Commercial flow tracking with payment visibility.",
+            subtitle: "Visibility on orders, deposits, balances and payment status.",
             status: "active",
             onOpen: () => {
               if (typeof window !== "undefined") window.location.href = "/admin/invoices";
@@ -90,7 +111,7 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
             id: "appointments",
             icon: "appointments",
             title: "Appointments",
-            subtitle: "Showroom scheduling and confirmation coordination.",
+            subtitle: "Showroom scheduling, confirmations and reminders.",
             status: "active",
             onOpen: () => {
               if (typeof window !== "undefined") window.location.href = "/admin/appointments-v2";
@@ -120,21 +141,15 @@ export function ControlCenterPage({ onOpenPage }: ControlCenterPageProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.24, ease: "easeOut" }}
-      className="space-y-5"
+      className="mx-auto w-full max-w-4xl space-y-5"
     >
-      <section className="rounded-[28px] border border-white/12 bg-white/[0.045] p-5 backdrop-blur-2xl md:p-6">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200">Project Control Center</p>
-        <h1 className="mt-2 text-[34px] font-semibold tracking-tight text-slate-100 md:text-[40px]">
-          Central index for all project areas
-        </h1>
-        <p className="mt-2 text-base text-slate-300">A simple, structured entry point to the platform.</p>
-      </section>
+      <HeaderSection />
 
       <div className="flex flex-wrap items-center gap-3">
-        <SearchBar value={query} onChange={setQuery} placeholder="Search modules" />
+        <SearchBar value={query} onChange={setQuery} placeholder="Search modules..." />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="space-y-3">
         {filteredSections.map((section) => (
           <ModuleSection key={section.id} section={section} />
         ))}
