@@ -129,6 +129,122 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       display:grid;
       gap:14px;
     }
+    .ai-widget{
+      margin-top:14px;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:20px;
+      background:rgba(26,37,58,.45);
+      backdrop-filter:blur(14px) saturate(140%);
+      padding:12px;
+    }
+    .ai-widget-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .ai-widget-title{
+      margin:0;
+      font-size:12px;
+      letter-spacing:.14em;
+      color:#b7c6e2;
+      font-weight:700;
+      text-transform:uppercase;
+    }
+    .ai-widget-sub{
+      margin:6px 0 0;
+      font-size:12px;
+      color:#c5d2e9;
+      line-height:1.4;
+    }
+    .ai-widget-badge{
+      border:1px solid rgba(125,211,252,.42);
+      border-radius:999px;
+      padding:5px 9px;
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:#d8f3ff;
+      background:rgba(125,211,252,.12);
+      white-space:nowrap;
+    }
+    .ai-task-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px;
+    }
+    .ai-task{
+      border:1px solid rgba(255,255,255,.11);
+      border-radius:14px;
+      background:rgba(255,255,255,.07);
+      padding:10px;
+      min-height:124px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .ai-task-top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+    }
+    .ai-task-priority{
+      border:1px solid rgba(255,255,255,.24);
+      border-radius:999px;
+      padding:3px 8px;
+      font-size:9px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      white-space:nowrap;
+    }
+    .ai-task-priority.high{
+      color:#ffe6be;
+      background:rgba(245,158,11,.14);
+      border-color:rgba(245,158,11,.35);
+    }
+    .ai-task-priority.medium{
+      color:#d6f1ff;
+      background:rgba(56,189,248,.14);
+      border-color:rgba(56,189,248,.32);
+    }
+    .ai-task-priority.low{
+      color:#d5f7e3;
+      background:rgba(34,197,94,.13);
+      border-color:rgba(74,222,128,.34);
+    }
+    .ai-task-source{
+      font-size:10px;
+      color:#98aac7;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      white-space:nowrap;
+    }
+    .ai-task-title{
+      margin:0;
+      font-size:13px;
+      line-height:1.3;
+      font-weight:650;
+      color:#edf5ff;
+    }
+    .ai-task-reason{
+      margin:0;
+      font-size:12px;
+      line-height:1.35;
+      color:#b8c7df;
+      flex:1;
+    }
+    .ai-task-link{
+      text-decoration:none;
+      font-size:11px;
+      color:#d7f2ff;
+      border:1px solid rgba(125,211,252,.32);
+      border-radius:999px;
+      padding:6px 9px;
+      align-self:flex-start;
+      background:rgba(125,211,252,.12);
+    }
     .apps-rail{
       display:none;
     }
@@ -476,6 +592,24 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       .orientation{
         margin-bottom:8px;
       }
+      .ai-widget{
+        margin-top:12px;
+        padding:10px;
+        border-radius:18px;
+      }
+      .ai-task-grid{
+        display:flex;
+        gap:8px;
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+        scrollbar-width:none;
+      }
+      .ai-task-grid::-webkit-scrollbar{display:none}
+      .ai-task{
+        min-width:84%;
+        flex:0 0 84%;
+        border-radius:16px;
+      }
     }
     @media (max-width:420px){
       .icon{
@@ -495,6 +629,10 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       }
       .home-app-label{
         max-width:66px;
+      }
+      .ai-task{
+        min-width:88%;
+        flex:0 0 88%;
       }
     }
   </style>
@@ -666,6 +804,45 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         </div>
       </section>
     </div>
+
+    <section class="ai-widget" aria-label="AI Suggested Development Tasks Widget">
+      <div class="ai-widget-head">
+        <div>
+          <p class="ai-widget-title">AI Suggested Development Tasks</p>
+          <p class="ai-widget-sub">Widget mobile-first pour suivre rapidement les améliorations produit/système recommandées.</p>
+        </div>
+        <span class="ai-widget-badge">Widget</span>
+      </div>
+      <div class="ai-task-grid">
+        <article class="ai-task">
+          <div class="ai-task-top">
+            <span class="ai-task-priority high">High</span>
+            <span class="ai-task-source">run_errors</span>
+          </div>
+          <h3 class="ai-task-title">Stabiliser les runs en erreur</h3>
+          <p class="ai-task-reason">Réduire les échecs pour éviter les blocages opérateurs sur les leads prioritaires.</p>
+          <a class="ai-task-link" href="/agent-control-center-v1/${navSuffix}#/index">Ouvrir cockpit IA</a>
+        </article>
+        <article class="ai-task">
+          <div class="ai-task-top">
+            <span class="ai-task-priority medium">Medium</span>
+            <span class="ai-task-source">approval_gaps</span>
+          </div>
+          <h3 class="ai-task-title">Durcir la persistance approvals</h3>
+          <p class="ai-task-reason">Tracer les transitions d’approbation et remonter les éléments en attente trop longtemps.</p>
+          <a class="ai-task-link" href="/agent-control-center-v1/${navSuffix}#/index">Voir tâches IA</a>
+        </article>
+        <article class="ai-task">
+          <div class="ai-task-top">
+            <span class="ai-task-priority low">Low</span>
+            <span class="ai-task-source">system_brain</span>
+          </div>
+          <h3 class="ai-task-title">Activer signaux live System Brain</h3>
+          <p class="ai-task-reason">Remplacer les placeholders restants par la télémétrie runtime dans les vues de supervision.</p>
+          <a class="ai-task-link" href="/agent-control-center-v1/${navSuffix}#/system-brain">Ouvrir System Brain</a>
+        </article>
+      </div>
+    </section>
   </main>
   <script>
     const input = document.getElementById("moduleSearch");
