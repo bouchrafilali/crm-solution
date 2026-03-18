@@ -31,8 +31,9 @@ async function parseMultipartForm(req: ExpressRequest): Promise<FormData> {
     method: req.method,
     headers: req.headers as HeadersInit,
     body: Readable.toWeb(req) as BodyInit,
-    duplex: "half"
-  });
+    // duplex is required for streaming bodies in Node's fetch implementation
+    ...({ duplex: "half" } as object)
+  } as RequestInit);
 
   return request.formData();
 }
