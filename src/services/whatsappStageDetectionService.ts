@@ -4,6 +4,14 @@ import { buildLeadTranscript, type LeadTranscriptResult } from "./whatsappTransc
 import { sanitizeForPrompt } from "./aiTextService.js";
 import { getAiProviderForStep, type AiProvider } from "./aiProviderRouting.js";
 import type { AiUsageMetrics } from "./aiPricing.js";
+import {
+  buildAiStepCacheKey,
+  getAiStepCache,
+  runAiStepSingleFlight,
+  resolveLatestMessageIdForLead,
+  setAiStepCache
+} from "./aiStepCache.js";
+import { enforceTokenBudget } from "./aiTokenBudget.js";
 
 const STAGE_VALUES = [
   "NEW",
@@ -50,6 +58,7 @@ const SIGNAL_TYPE_VALUES = [
 ] as const;
 
 const OBJECTION_TYPE_VALUES = ["price", "timing", "trust", "fit", "fabric", "uncertainty", "external_approval", "other"] as const;
+const STAGE_PROMPT_VERSION = "v2";
 
 export type StageDetectionStage = (typeof STAGE_VALUES)[number];
 export type StageDetectionNextAction = (typeof NEXT_ACTION_VALUES)[number];
@@ -63,6 +72,16 @@ export class StageDetectionError extends Error {
     this.code = code;
   }
 }
+
+type ProviderFailureClass =
+  | "timeout"
+  | "network"
+  | "http_5xx"
+  | "http_4xx"
+  | "validation"
+  | "schema"
+  | "config"
+  | "unknown";
 
 const StageDetectionAnalysisSchema = z
   .object({
@@ -181,46 +200,18 @@ export function validateStageDetectionAnalysis(parsed: unknown): StageDetectionA
 
 function buildStageDetectionSystemPrompt(): string {
   return [
-    "You are a senior sales intelligence analyst for luxury WhatsApp couture conversations.",
-    "Analyze the transcript only. Do not write reply messages.",
-    "Return JSON only (no markdown, no prose).",
-    "Follow exactly the required output schema and enum values.",
-    "Use these allowed stages only:",
-    STAGE_VALUES.join(", "),
-    "Use these allowed recommended_next_action values only:",
-    NEXT_ACTION_VALUES.join(", "),
-    "Keep evidence snippets short and factual.",
-    "If evidence is missing, keep arrays empty and nullable fields null."
+    "Analyze a luxury WhatsApp sales conversation.",
+    "Return JSON only. No markdown.",
+    "Do not generate reply text.",
+    `Allowed stages: ${STAGE_VALUES.join(", ")}`,
+    `Allowed recommended_next_action: ${NEXT_ACTION_VALUES.join(", ")}`
   ].join("\n");
 }
 
 function buildStageDetectionUserPrompt(transcript: string): string {
   return [
-    "Analyze this WhatsApp transcript and return only valid JSON with this exact shape:",
-    "{",
-    '  "stage": "NEW | PRODUCT_INTEREST | QUALIFICATION_PENDING | QUALIFIED | PRICE_SENT | VIDEO_PROPOSED | VIDEO_DONE | DEPOSIT_PENDING | CONFIRMED | CONVERTED | LOST | STALLED",',
-    '  "stage_confidence": 0.0,',
-    '  "priority_score": 0,',
-    '  "urgency": "low | medium | high",',
-    '  "payment_intent": false,',
-    '  "dropoff_risk": "low | medium | high",',
-    '  "signals": [{"type": "product_interest | price_request | customization_request | event_date | urgency | shipping_question | payment_intent | hesitation | objection | video_interest | deadline_risk", "evidence": "short quoted evidence"}],',
-    '  "facts": {',
-    '    "products_of_interest": [],',
-    '    "event_date": null,',
-    '    "delivery_deadline": null,',
-    '    "destination_country": null,',
-    '    "budget": null,',
-    '    "price_points_detected": [],',
-    '    "customization_requests": [],',
-    '    "preferred_colors": [],',
-    '    "preferred_fabrics": [],',
-    '    "payment_method_preference": null',
-    "  },",
-    '  "objections": [{"type": "price | timing | trust | fit | fabric | uncertainty | external_approval | other", "evidence": "short evidence"}],',
-    '  "recommended_next_action": "qualify | answer_precisely | propose_video | reassure | push_softly_to_deposit | reactivate_gently | wait | clarify_timing | close_out",',
-    '  "reasoning_summary": []',
-    "}",
+    "Return JSON keys exactly:",
+    "stage, stage_confidence, priority_score, urgency, payment_intent, dropoff_risk, signals, facts, objections, recommended_next_action, reasoning_summary",
     "Transcript:",
     transcript
   ].join("\n");
@@ -232,32 +223,8 @@ function buildStageDetectionStateDeltaUserPrompt(input: {
   recentMinimalContext: Array<Record<string, unknown>>;
 }): string {
   return [
-    "Analyze this WhatsApp lead using structured state + latest message delta.",
-    "Return only valid JSON with this exact shape:",
-    "{",
-    '  "stage": "NEW | PRODUCT_INTEREST | QUALIFICATION_PENDING | QUALIFIED | PRICE_SENT | VIDEO_PROPOSED | VIDEO_DONE | DEPOSIT_PENDING | CONFIRMED | CONVERTED | LOST | STALLED",',
-    '  "stage_confidence": 0.0,',
-    '  "priority_score": 0,',
-    '  "urgency": "low | medium | high",',
-    '  "payment_intent": false,',
-    '  "dropoff_risk": "low | medium | high",',
-    '  "signals": [{"type": "product_interest | price_request | customization_request | event_date | urgency | shipping_question | payment_intent | hesitation | objection | video_interest | deadline_risk", "evidence": "short quoted evidence"}],',
-    '  "facts": {',
-    '    "products_of_interest": [],',
-    '    "event_date": null,',
-    '    "delivery_deadline": null,',
-    '    "destination_country": null,',
-    '    "budget": null,',
-    '    "price_points_detected": [],',
-    '    "customization_requests": [],',
-    '    "preferred_colors": [],',
-    '    "preferred_fabrics": [],',
-    '    "payment_method_preference": null',
-    "  },",
-    '  "objections": [{"type": "price | timing | trust | fit | fabric | uncertainty | external_approval | other", "evidence": "short evidence"}],',
-    '  "recommended_next_action": "qualify | answer_precisely | propose_video | reassure | push_softly_to_deposit | reactivate_gently | wait | clarify_timing | close_out",',
-    '  "reasoning_summary": []',
-    "}",
+    "Return JSON keys exactly:",
+    "stage, stage_confidence, priority_score, urgency, payment_intent, dropoff_risk, signals, facts, objections, recommended_next_action, reasoning_summary",
     "Current structured state JSON:",
     JSON.stringify(input.currentState),
     "Latest message delta JSON:",
@@ -265,6 +232,47 @@ function buildStageDetectionStateDeltaUserPrompt(input: {
     "Recent minimal context JSON:",
     JSON.stringify(input.recentMinimalContext)
   ].join("\n");
+}
+
+function isCrossProviderFallbackEnabled(): boolean {
+  const raw = String(env.AI_CROSS_PROVIDER_FALLBACK_ENABLED || "").trim().toLowerCase();
+  if (!raw) return true;
+  return ["1", "true", "yes", "on"].includes(raw);
+}
+
+function classifyProviderFailure(error: unknown): { failureClass: ProviderFailureClass; fallbackAllowed: boolean } {
+  const message = error instanceof Error ? String(error.message || "") : String(error || "");
+  const lower = message.toLowerCase();
+  if (error instanceof StageDetectionError) {
+    const code = String(error.code || "").toLowerCase();
+    if (code.includes("provider_not_configured")) return { failureClass: "config", fallbackAllowed: false };
+    if (code.includes("invalid_json") || code.includes("invalid_schema") || code.includes("provider_non_json")) {
+      return { failureClass: "schema", fallbackAllowed: false };
+    }
+  }
+  if (error instanceof Error && String(error.name || "").toLowerCase() === "aborterror") {
+    return { failureClass: "timeout", fallbackAllowed: true };
+  }
+  if (/(timed?\s*out|timeout|etimedout)/i.test(lower)) {
+    return { failureClass: "timeout", fallbackAllowed: true };
+  }
+  if (/(econnreset|econnrefused|enotfound|eai_again|fetch failed|networkerror|network error)/i.test(lower)) {
+    return { failureClass: "network", fallbackAllowed: true };
+  }
+  const httpStatus = lower.match(/\((\d{3})\)/);
+  if (httpStatus && httpStatus[1]) {
+    const status = Number(httpStatus[1]);
+    if (Number.isFinite(status) && status >= 500 && status <= 599) {
+      return { failureClass: "http_5xx", fallbackAllowed: true };
+    }
+    if (Number.isFinite(status) && status >= 400 && status <= 499) {
+      return { failureClass: "http_4xx", fallbackAllowed: false };
+    }
+  }
+  if (/invalid|schema|validation|bad request|context|prompt too large|token/i.test(lower)) {
+    return { failureClass: "validation", fallbackAllowed: false };
+  }
+  return { failureClass: "unknown", fallbackAllowed: false };
 }
 
 export async function callStageDetectionModel(input: {
@@ -300,7 +308,7 @@ export async function callStageDetectionModel(input: {
       const rawResponseText = await response.text();
       if (!response.ok) {
         throw new StageDetectionError(
-          "stage_detection_provider_error",
+          `stage_detection_provider_http_${response.status}`,
           `Claude request failed (${response.status}): ${rawResponseText.slice(0, 500)}`
         );
       }
@@ -323,11 +331,18 @@ export async function callStageDetectionModel(input: {
 
       return { provider: "claude", model, rawOutput: text, usage: toUsageMetrics(root.usage) };
     } catch (error) {
-      if (String(env.OPENAI_API_KEY || "").trim()) {
-        console.warn("[stage-detection] claude_failed_fallback_openai", {
-          error: error instanceof Error ? error.message : String(error)
-        });
-      } else {
+      const openAiConfigured = Boolean(String(env.OPENAI_API_KEY || "").trim());
+      const fallbackEnabled = isCrossProviderFallbackEnabled();
+      const classified = classifyProviderFailure(error);
+      const fallbackAllowed = openAiConfigured && fallbackEnabled && classified.fallbackAllowed;
+      console.warn("[stage-detection] provider_failure", {
+        originalProvider: "claude",
+        failureClass: classified.failureClass,
+        fallbackAllowed,
+        fallbackProvider: fallbackAllowed ? "openai" : null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      if (!fallbackAllowed) {
         throw error;
       }
     }
@@ -421,29 +436,76 @@ export async function detectStageFromTranscript(input: {
     transcriptPreview: sanitizeForPrompt(transcriptText, 500)
   });
 
-  const systemPrompt = buildStageDetectionSystemPrompt();
-  const userPrompt = buildStageDetectionUserPrompt(transcriptText);
-  const modelCaller = input.callModel || callStageDetectionModel;
-  const modelResult = await modelCaller({ systemPrompt, userPrompt });
+  const providerForKey = getAiProviderForStep("stage");
+  const modelForKey = providerForKey === "claude"
+    ? (String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001")
+    : (String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini");
+  const latestMessageId = await resolveLatestMessageIdForLead(safeLeadId);
+  const cacheKey = latestMessageId
+    ? buildAiStepCacheKey({
+        leadId: safeLeadId,
+        latestMessageId,
+        step: "stage_detection",
+        provider: providerForKey,
+        model: modelForKey,
+        promptVersion: STAGE_PROMPT_VERSION
+      })
+    : "";
+  if (cacheKey) {
+    const cached = getAiStepCache<StageDetectionResult>(cacheKey);
+    if (cached) {
+      console.info("[stage-detection] cache_hit", { leadId: safeLeadId, latestMessageId, provider: providerForKey, model: modelForKey });
+      return {
+        ...cached,
+        usage: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
 
-  console.info("[stage-detection] raw-output", {
-    leadId: safeLeadId,
-    provider: modelResult.provider,
-    model: modelResult.model,
-    rawOutput: modelResult.rawOutput
+  const execution = await runAiStepSingleFlight(cacheKey, async () => {
+    const cachedInside = cacheKey ? getAiStepCache<StageDetectionResult>(cacheKey) : null;
+    if (cachedInside) return cachedInside;
+    const systemPrompt = buildStageDetectionSystemPrompt();
+    const budgeted = enforceTokenBudget({
+      step: "stage_detection",
+      transcript: transcriptText,
+      context: {}
+    });
+    const userPrompt = buildStageDetectionUserPrompt(budgeted.transcript);
+    const modelCaller = input.callModel || callStageDetectionModel;
+    const modelResult = await modelCaller({ systemPrompt, userPrompt });
+
+    console.info("[stage-detection] raw-output", {
+      leadId: safeLeadId,
+      provider: modelResult.provider,
+      model: modelResult.model,
+      rawOutput: modelResult.rawOutput
+    });
+
+    const parsed = parseStageDetectionJson(modelResult.rawOutput);
+    const analysis = validateStageDetectionAnalysis(parsed);
+    const output: StageDetectionResult = {
+      analysis,
+      transcriptLength,
+      messageCount,
+      source: "transcript_fallback",
+      provider: modelResult.provider,
+      model: modelResult.model,
+      usage: modelResult.usage,
+      timestamp: new Date().toISOString()
+    };
+    if (cacheKey) {
+      setAiStepCache(cacheKey, output);
+    }
+    return output;
   });
-
-  const parsed = parseStageDetectionJson(modelResult.rawOutput);
-  const analysis = validateStageDetectionAnalysis(parsed);
-
+  if (execution.joined && cacheKey) {
+    console.info("[stage-detection] singleflight_join", { leadId: safeLeadId, latestMessageId, cacheKey });
+  }
   return {
-    analysis,
-    transcriptLength,
-    messageCount,
-    source: "transcript_fallback",
-    provider: modelResult.provider,
-    model: modelResult.model,
-    usage: modelResult.usage,
+    ...execution.value,
+    usage: execution.joined ? null : execution.value.usage,
     timestamp: new Date().toISOString()
   };
 }
@@ -460,25 +522,92 @@ export async function detectStageFromStateDelta(input: {
     throw new StageDetectionError("invalid_lead_id", "Lead ID is required");
   }
 
-  const systemPrompt = buildStageDetectionSystemPrompt();
-  const userPrompt = buildStageDetectionStateDeltaUserPrompt({
-    currentState: input.currentState || {},
-    latestMessageDelta: input.latestMessageDelta || {},
-    recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
-  });
-  const modelCaller = input.callModel || callStageDetectionModel;
-  const modelResult = await modelCaller({ systemPrompt, userPrompt });
-  const parsed = parseStageDetectionJson(modelResult.rawOutput);
-  const analysis = validateStageDetectionAnalysis(parsed);
+  const providerForKey = getAiProviderForStep("stage");
+  const modelForKey = providerForKey === "claude"
+    ? (String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001")
+    : (String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini");
+  const latestMessageId = String((input.latestMessageDelta && input.latestMessageDelta.id) || "").trim() || await resolveLatestMessageIdForLead(safeLeadId);
+  const cacheKey = latestMessageId
+    ? buildAiStepCacheKey({
+        leadId: safeLeadId,
+        latestMessageId,
+        step: "stage_detection",
+        provider: providerForKey,
+        model: modelForKey,
+        promptVersion: STAGE_PROMPT_VERSION
+      })
+    : "";
+  if (cacheKey) {
+    const cached = getAiStepCache<StageDetectionResult>(cacheKey);
+    if (cached) {
+      console.info("[stage-detection] cache_hit_state_delta", { leadId: safeLeadId, latestMessageId, provider: providerForKey, model: modelForKey });
+      return {
+        ...cached,
+        usage: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
 
+  const execution = await runAiStepSingleFlight(cacheKey, async () => {
+    const cachedInside = cacheKey ? getAiStepCache<StageDetectionResult>(cacheKey) : null;
+    if (cachedInside) return cachedInside;
+    const systemPrompt = buildStageDetectionSystemPrompt();
+    const deltaTranscript = JSON.stringify({
+      currentState: input.currentState || {},
+      latestMessageDelta: input.latestMessageDelta || {},
+      recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
+    });
+    const budgeted = enforceTokenBudget({
+      step: "stage_detection",
+      transcript: deltaTranscript,
+      context: {}
+    });
+    const safeDelta = (() => {
+      try {
+        return JSON.parse(budgeted.transcript) as {
+          currentState: Record<string, unknown>;
+          latestMessageDelta: Record<string, unknown>;
+          recentMinimalContext: Array<Record<string, unknown>>;
+        };
+      } catch {
+        return {
+          currentState: input.currentState || {},
+          latestMessageDelta: input.latestMessageDelta || {},
+          recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
+        };
+      }
+    })();
+    const userPrompt = buildStageDetectionStateDeltaUserPrompt({
+      currentState: safeDelta.currentState || {},
+      latestMessageDelta: safeDelta.latestMessageDelta || {},
+      recentMinimalContext: Array.isArray(safeDelta.recentMinimalContext) ? safeDelta.recentMinimalContext : []
+    });
+    const modelCaller = input.callModel || callStageDetectionModel;
+    const modelResult = await modelCaller({ systemPrompt, userPrompt });
+    const parsed = parseStageDetectionJson(modelResult.rawOutput);
+    const analysis = validateStageDetectionAnalysis(parsed);
+    const output: StageDetectionResult = {
+      analysis,
+      transcriptLength: JSON.stringify(input.recentMinimalContext || []).length,
+      messageCount: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext.length : 0,
+      source: "state_delta",
+      provider: modelResult.provider,
+      model: modelResult.model,
+      usage: modelResult.usage,
+      timestamp: new Date().toISOString()
+    };
+    if (cacheKey) {
+      setAiStepCache(cacheKey, output);
+    }
+    return output;
+  });
+  if (execution.joined && cacheKey) {
+    console.info("[stage-detection] singleflight_join_state_delta", { leadId: safeLeadId, latestMessageId, cacheKey });
+  }
   return {
-    analysis,
-    transcriptLength: JSON.stringify(input.recentMinimalContext || []).length,
-    messageCount: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext.length : 0,
-    source: "state_delta",
-    provider: modelResult.provider,
-    model: modelResult.model,
-    usage: modelResult.usage,
+    ...execution.value,
+    usage: execution.joined ? null : execution.value.usage,
     timestamp: new Date().toISOString()
   };
 }

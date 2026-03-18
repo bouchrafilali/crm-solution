@@ -2,12 +2,17 @@ import { env } from "../config/env.js";
 import { runClaudeAdvisor } from "./claudeAdvisor.js";
 
 function isAiAutoAnalyzeEnabled(): boolean {
-  const raw = String(env.WHATSAPP_AI_AUTO_ANALYZE || "true").trim().toLowerCase();
+  const raw = String(env.WHATSAPP_LEGACY_ADVISOR_AUTO_ANALYZE || "false").trim().toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
 export function onMessagePersisted(leadId: string, messageId: string, triggerSource = "message_persisted"): void {
   if (!isAiAutoAnalyzeEnabled()) {
+    console.info("[on-message-persisted] legacy_claude_skipped_auto_disabled", {
+      leadId: String(leadId || "").trim(),
+      messageId: String(messageId || "").trim(),
+      triggerSource: String(triggerSource || "message_persisted")
+    });
     return;
   }
   if (!String(env.CLAUDE_API_KEY || "").trim()) {

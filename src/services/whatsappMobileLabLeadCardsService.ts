@@ -114,6 +114,23 @@ type MobileLabLeadCardsDeps = {
 
 const fallbackCardsMemoryCache = new Map<string, { payload: MobileLabLeadCardsResult; createdAtMs: number }>();
 const FALLBACK_CACHE_TTL_MS = 30 * 60 * 1000;
+const ORCHESTRATOR_PROMPT_VERSION = "mobile_lab_orchestrator_v1";
+const ORCHESTRATOR_CONTEXT_VERSION = "latest_message_anchor_v1";
+const ORCHESTRATOR_PROVIDER_MODEL_SET = "orchestrator_default";
+
+type OrchestratorRunResult = Awaited<ReturnType<MobileLabLeadCardsDeps["runAgentOrchestrator"]>>;
+type OrchestratorSettledOutcome =
+  | { ok: true; result: OrchestratorRunResult }
+  | { ok: false; error: unknown };
+
+type OrchestratorInFlightEntry = {
+  key: string;
+  ownerId: string;
+  startedAtMs: number;
+  promise: Promise<OrchestratorSettledOutcome>;
+};
+
+const orchestratorInFlightRuns = new Map<string, OrchestratorInFlightEntry>();
 
 function parsePositiveInt(value: unknown): number | null {
   const num = Number(value);
@@ -191,6 +208,148 @@ async function withTimeout<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
       timeout = setTimeout(() => reject(new Error("timeout")), timeoutMs);
     });
     return await Promise.race([work, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function buildOrchestratorRunKey(input: { leadId: string; messageId: string }): string {
+  return [
+    String(input.leadId || "").trim(),
+    String(input.messageId || "").trim(),
+    ORCHESTRATOR_PROVIDER_MODEL_SET,
+    ORCHESTRATOR_PROMPT_VERSION,
+    ORCHESTRATOR_CONTEXT_VERSION
+  ].join(":");
+}
+
+function runOrchestratorSingleFlight(input: {
+  deps: MobileLabLeadCardsDeps;
+  leadId: string;
+  messageId: string;
+  trigger: string;
+}): { entry: OrchestratorInFlightEntry; joinedExisting: boolean } {
+  const key = buildOrchestratorRunKey({ leadId: input.leadId, messageId: input.messageId });
+  const existing = orchestratorInFlightRuns.get(key);
+  if (existing) {
+    console.info("[mobile-lab-lead-cards] orchestrator_joined_inflight", {
+      leadId: input.leadId,
+      messageId: input.messageId,
+      key,
+      ownerId: existing.ownerId
+    });
+    return { entry: existing, joinedExisting: true };
+  }
+
+  const ownerId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const promise: Promise<OrchestratorSettledOutcome> = input.deps
+    .runAgentOrchestrator({
+      leadId: input.leadId,
+      messageId: input.messageId,
+      trigger: input.trigger
+    })
+    .then((result) => ({ ok: true as const, result }))
+    .catch((error) => ({ ok: false as const, error }));
+
+  const entry: OrchestratorInFlightEntry = {
+    key,
+    ownerId,
+    startedAtMs: Date.now(),
+    promise
+  };
+  orchestratorInFlightRuns.set(key, entry);
+  void promise.finally(() => {
+    const current = orchestratorInFlightRuns.get(key);
+    if (current && current.ownerId === ownerId) {
+      orchestratorInFlightRuns.delete(key);
+    }
+  });
+  console.info("[mobile-lab-lead-cards] orchestrator_started", {
+    leadId: input.leadId,
+    messageId: input.messageId,
+    key,
+    ownerId
+  });
+  return { entry, joinedExisting: false };
+}
+
+async function waitForOrchestratorSingleFlight(input: {
+  deps: MobileLabLeadCardsDeps;
+  leadId: string;
+  messageId: string;
+  trigger: string;
+  timeoutMs: number;
+}): Promise<
+  | { status: "completed"; result: OrchestratorRunResult; key: string; ownerId: string; joinedExisting: boolean }
+  | { status: "failed"; error: unknown; key: string; ownerId: string; joinedExisting: boolean }
+  | { status: "timed_out_inflight"; key: string; ownerId: string; joinedExisting: boolean }
+> {
+  const run = runOrchestratorSingleFlight({
+    deps: input.deps,
+    leadId: input.leadId,
+    messageId: input.messageId,
+    trigger: input.trigger
+  });
+  const timeoutToken = Symbol("orchestrator_timeout");
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    const raced = await Promise.race<OrchestratorSettledOutcome | typeof timeoutToken>([
+      run.entry.promise,
+      new Promise<typeof timeoutToken>((resolve) => {
+        timeout = setTimeout(() => resolve(timeoutToken), input.timeoutMs);
+      })
+    ]);
+    if (raced === timeoutToken) {
+      const stillInFlight = orchestratorInFlightRuns.has(run.entry.key);
+      if (stillInFlight) {
+        console.warn("[mobile-lab-lead-cards] orchestrator_caller_timed_out_inflight", {
+          leadId: input.leadId,
+          messageId: input.messageId,
+          key: run.entry.key,
+          ownerId: run.entry.ownerId,
+          joinedExisting: run.joinedExisting
+        });
+        return {
+          status: "timed_out_inflight",
+          key: run.entry.key,
+          ownerId: run.entry.ownerId,
+          joinedExisting: run.joinedExisting
+        };
+      }
+      const settled = await run.entry.promise;
+      if (settled.ok) {
+        return {
+          status: "completed",
+          result: settled.result,
+          key: run.entry.key,
+          ownerId: run.entry.ownerId,
+          joinedExisting: run.joinedExisting
+        };
+      }
+      return {
+        status: "failed",
+        error: settled.error,
+        key: run.entry.key,
+        ownerId: run.entry.ownerId,
+        joinedExisting: run.joinedExisting
+      };
+    }
+    if (raced.ok) {
+      return {
+        status: "completed",
+        result: raced.result,
+        key: run.entry.key,
+        ownerId: run.entry.ownerId,
+        joinedExisting: run.joinedExisting
+      };
+    }
+    return {
+      status: "failed",
+      error: raced.error,
+      key: run.entry.key,
+      ownerId: run.entry.ownerId,
+      joinedExisting: run.joinedExisting
+    };
   } finally {
     if (timeout) clearTimeout(timeout);
   }
@@ -393,14 +552,53 @@ export async function buildMobileLabLeadCards(
           timestamp: new Date().toISOString()
         };
       }
-      const regenResult = await withTimeout(
-        deps.runAgentOrchestrator({
-          leadId: safeLeadId,
-          messageId: String(latestMessage.id),
-          trigger: "mobile_lab_manual_regenerate"
-        }),
+      const orchestratorRun = await waitForOrchestratorSingleFlight({
+        deps,
+        leadId: safeLeadId,
+        messageId: String(latestMessage.id),
+        trigger: "mobile_lab_manual_regenerate",
         timeoutMs
-      );
+      });
+      if (orchestratorRun.status === "timed_out_inflight") {
+        const cachedBeforeTop = normalizeTopReplyCard(cachedBeforeForceRefresh?.topReplyCard);
+        return {
+          leadId: safeLeadId,
+          replyCards: [],
+          topReplyCard: cachedBeforeTop,
+          generationMode: "fresh",
+          source: "fresh_generation",
+          cacheStatus: "forced_refresh",
+          basedOnMessageId: latestMessage.id,
+          currentLatestMessageId: latestMessage.id,
+          basedOnTimestamp: latestMessage.createdAt || null,
+          agentRunMeta: {
+            runId: null,
+            generatedAt: latestMessage.createdAt || null,
+            source: "fresh_generation",
+            reasoningSource: null
+          },
+          stageAnalysis: null,
+          summary: null,
+          strategy: null,
+          enrichmentStatus: cachedBeforeTop ? "enriched" : "timeout",
+          enrichmentSource: "active_ai_cards",
+          enrichmentError: cachedBeforeTop
+            ? "Regeneration timed out. Kept previous suggestions."
+            : "orchestrator_inflight_timeout",
+          status: cachedBeforeTop ? "enriched" : "timeout",
+          pipelineSource: "active_ai_cards",
+          error: cachedBeforeTop
+            ? "Regeneration timed out. Kept previous suggestions."
+            : "orchestrator_inflight_timeout",
+          provider: null,
+          model: null,
+          timestamp: new Date().toISOString()
+        };
+      }
+      if (orchestratorRun.status === "failed") {
+        throw (orchestratorRun.error instanceof Error ? orchestratorRun.error : new Error(String(orchestratorRun.error || "orchestrator_failed")));
+      }
+      const regenResult = orchestratorRun.result;
       let refreshed: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
       try {
         refreshed = await deps.getCachedLeadState(safeLeadId);
@@ -571,7 +769,8 @@ export async function buildMobileLabLeadCards(
         basedOnMessageId: anchorMeta.basedOnMessageId,
         latestMessageId: latestMessage?.id || null
       });
-      if (cacheStatus === "hit" && cachedTop && cachedMessages.length > 0) {
+      const buildCachedSnapshotResult = (effectiveCacheStatus: "hit" | "stale"): MobileLabLeadCardsResult | null => {
+        if (!cachedTop || !cachedMessages.length) return null;
         const topReplyCard = {
           label: String(cachedTop.label || "").trim(),
           intent: String(cachedTop.intent || "").trim(),
@@ -614,7 +813,7 @@ export async function buildMobileLabLeadCards(
           generationFallbackReason: fallbackMetaFromCache ? "direct_generation_fallback" : null,
           source: "cache",
           fallbackGenerationMeta: fallbackMetaFromCache,
-          cacheStatus: "hit",
+          cacheStatus: effectiveCacheStatus,
           basedOnMessageId: anchorMeta.basedOnMessageId,
           currentLatestMessageId: latestMessage?.id || null,
           basedOnTimestamp: anchorMeta.cardsGeneratedAt || latestMessage?.createdAt || cached?.updatedAt || null,
@@ -670,6 +869,10 @@ export async function buildMobileLabLeadCards(
           model: null,
           timestamp: new Date().toISOString()
         };
+      };
+      if (cacheStatus === "hit" && cachedTop && cachedMessages.length > 0) {
+        const hit = buildCachedSnapshotResult("hit");
+        if (hit) return hit;
       }
 
       const fallbackCacheKey = buildFallbackCacheKey(safeLeadId, latestMessage);
@@ -692,14 +895,64 @@ export async function buildMobileLabLeadCards(
       // so AI Flow can immediately resolve run details, reasoning source, and costs.
       if (latestMessage?.id) {
         try {
-          const regenResult = await withTimeout(
-            deps.runAgentOrchestrator({
-              leadId: safeLeadId,
-              messageId: String(latestMessage.id),
-              trigger: "mobile_lab_selected_lead_generation"
-            }),
+          const orchestratorRun = await waitForOrchestratorSingleFlight({
+            deps,
+            leadId: safeLeadId,
+            messageId: String(latestMessage.id),
+            trigger: "mobile_lab_selected_lead_generation",
             timeoutMs
-          );
+          });
+          if (orchestratorRun.status === "timed_out_inflight") {
+            console.info("[mobile-lab-lead-cards] fallback_blocked_orchestrator_inflight", {
+              leadId: safeLeadId,
+              latestMessageId: latestMessage.id,
+              key: orchestratorRun.key,
+              ownerId: orchestratorRun.ownerId
+            });
+            const staleSnapshot = buildCachedSnapshotResult("stale");
+            if (staleSnapshot) {
+              return staleSnapshot;
+            }
+            return {
+              leadId: safeLeadId,
+              replyCards: [],
+              topReplyCard: null,
+              generationMode: null,
+              source: "fresh_generation",
+              cacheStatus: "stale",
+              basedOnMessageId: latestMessage.id,
+              currentLatestMessageId: latestMessage.id,
+              basedOnTimestamp: latestMessage.createdAt || null,
+              agentRunMeta: {
+                runId: null,
+                generatedAt: latestMessage.createdAt || null,
+                source: "fresh_generation",
+                reasoningSource: null
+              },
+              stageAnalysis: null,
+              summary: null,
+              strategy: null,
+              enrichmentStatus: "timeout",
+              enrichmentSource: "active_ai_cards",
+              enrichmentError: "orchestrator_inflight_timeout",
+              status: "timeout",
+              pipelineSource: "active_ai_cards",
+              error: "orchestrator_inflight_timeout",
+              provider: null,
+              model: null,
+              timestamp: new Date().toISOString()
+            };
+          }
+          if (orchestratorRun.status === "failed") {
+            console.info("[mobile-lab-lead-cards] fallback_allowed_orchestrator_failed", {
+              leadId: safeLeadId,
+              latestMessageId: latestMessage.id,
+              key: orchestratorRun.key,
+              ownerId: orchestratorRun.ownerId
+            });
+            throw (orchestratorRun.error instanceof Error ? orchestratorRun.error : new Error(String(orchestratorRun.error || "orchestrator_failed")));
+          }
+          const regenResult = orchestratorRun.result;
           let refreshed: Awaited<ReturnType<MobileLabLeadCardsDeps["getCachedLeadState"]>> | null = null;
           try {
             refreshed = await deps.getCachedLeadState(safeLeadId);
@@ -829,11 +1082,72 @@ export async function buildMobileLabLeadCards(
             leadId: safeLeadId,
             error: error instanceof Error ? error.message : String(error)
           });
+          const staleSnapshot = buildCachedSnapshotResult("stale");
+          if (staleSnapshot) {
+            console.info("[mobile-lab-lead-cards] snapshot_reused_after_orchestrator_failure", {
+              leadId: safeLeadId,
+              latestMessageId: latestMessage?.id || null
+            });
+            return staleSnapshot;
+          }
         }
       }
 
-      // Fallback path: direct generation when orchestrator path is unavailable.
-      const replyContext = await withTimeout(deps.getActiveReplyContext(safeLeadId), timeoutMs);
+      // Last-resort generation path: reuse partial cached state to recompute only missing steps.
+      const cachedStageForRecompute =
+        cached?.stageAnalysis && typeof cached.stageAnalysis === "object"
+          ? (cached.stageAnalysis as Record<string, unknown>)
+          : null;
+      const cachedStrategyForRecompute =
+        cached?.strategy && typeof cached.strategy === "object"
+          ? (cached.strategy as Record<string, unknown>)
+          : null;
+      let replyContext: ReplyGeneratorResult;
+      if (cachedStageForRecompute && cachedStrategyForRecompute) {
+        console.info("[mobile-lab-lead-cards] partial_recomputation_after_orchestrator_failure", {
+          leadId: safeLeadId,
+          recomputedSteps: "reply_generator"
+        });
+        const transcript = await withTimeout(buildLeadTranscript(safeLeadId, 30), timeoutMs);
+        replyContext = await withTimeout(
+          buildReplyGeneratorFromContext({
+            leadId: safeLeadId,
+            transcript,
+            stageAnalysis: cachedStageForRecompute as unknown as Parameters<typeof buildReplyGeneratorFromContext>[0]["stageAnalysis"],
+            strategy: cachedStrategyForRecompute as unknown as Parameters<typeof buildReplyGeneratorFromContext>[0]["strategy"]
+          }),
+          timeoutMs
+        );
+      } else if (cachedStageForRecompute) {
+        console.info("[mobile-lab-lead-cards] partial_recomputation_after_orchestrator_failure", {
+          leadId: safeLeadId,
+          recomputedSteps: "strategic_advisor,reply_generator"
+        });
+        const transcript = await withTimeout(buildLeadTranscript(safeLeadId, 30), timeoutMs);
+        const strategic = await withTimeout(
+          buildStrategicAdvisorFromContext({
+            leadId: safeLeadId,
+            transcript,
+            stageAnalysis: cachedStageForRecompute as unknown as Parameters<typeof buildStrategicAdvisorFromContext>[0]["stageAnalysis"]
+          }),
+          timeoutMs
+        );
+        replyContext = await withTimeout(
+          buildReplyGeneratorFromContext({
+            leadId: safeLeadId,
+            transcript,
+            stageAnalysis: cachedStageForRecompute as unknown as Parameters<typeof buildReplyGeneratorFromContext>[0]["stageAnalysis"],
+            strategy: strategic.strategy
+          }),
+          timeoutMs
+        );
+      } else {
+        console.info("[mobile-lab-lead-cards] full_recomputation_last_resort", {
+          leadId: safeLeadId,
+          reason: "missing_cached_stage_and_strategy"
+        });
+        replyContext = await withTimeout(deps.getActiveReplyContext(safeLeadId), timeoutMs);
+      }
       const replyCards = Array.isArray(replyContext.replyOptions?.reply_options) ? replyContext.replyOptions.reply_options : [];
       const topReplyCard = replyCards.length
         ? {

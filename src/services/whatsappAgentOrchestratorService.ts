@@ -1,4 +1,4 @@
-import { listWhatsAppLeadMessages, type WhatsAppDirection } from "../db/whatsappLeadsRepo.js";
+import { getWhatsAppLeadById, listWhatsAppLeadMessages, type WhatsAppDirection } from "../db/whatsappLeadsRepo.js";
 import {
   createWhatsAppAgentRun,
   getWhatsAppAgentLeadState,
@@ -18,6 +18,11 @@ import { buildLeadTranscript, type LeadTranscriptResult } from "./whatsappTransc
 import { estimateAiCostUsd, type AiUsageMetrics } from "./aiPricing.js";
 import { buildLeadDeltaContext, mergeStructuredState, type DeltaMessage } from "./whatsappLeadDeltaService.js";
 import { isStructuredStateComplete, normalizeStructuredLeadState } from "./whatsappLeadStateModel.js";
+import {
+  applyInboundHumanClarificationAnswer,
+  queueHumanClarificationQuestions,
+  type HumanClarificationQuestion
+} from "./whatsappHumanClarificationService.js";
 
 export type WhatsAppAgentStepName =
   | "stage_detection"
@@ -85,6 +90,9 @@ type OrchestratorDeps = {
   }) => ReturnType<typeof detectStageFromStateDelta>;
   getMessages: (leadId: string) => Promise<Array<{ direction: WhatsAppDirection; createdAt: string }>>;
   getRecentMessages: (leadId: string) => Promise<DeltaMessage[]>;
+  getLeadById: typeof getWhatsAppLeadById;
+  queueHumanClarificationQuestions: typeof queueHumanClarificationQuestions;
+  applyInboundHumanClarificationAnswer: typeof applyInboundHumanClarificationAnswer;
   getStrategicAdvisor: (input: {
     leadId: string;
     transcript: LeadTranscriptResult;
@@ -144,6 +152,9 @@ function defaultDeps(): OrchestratorDeps {
         metadata: m.metadata || null
       }));
     },
+    getLeadById: getWhatsAppLeadById,
+    queueHumanClarificationQuestions: (input) => queueHumanClarificationQuestions(input),
+    applyInboundHumanClarificationAnswer: (input) => applyInboundHumanClarificationAnswer(input),
     getStrategicAdvisor: (input) =>
       buildStrategicAdvisorFromContext({
         leadId: input.leadId,
@@ -362,6 +373,29 @@ function pickTopReplyCard(input: {
   return null;
 }
 
+function parseHumanClarificationQuestions(strategy: Record<string, unknown> | null): HumanClarificationQuestion[] {
+  if (!strategy || typeof strategy !== "object") return [];
+  const rows = Array.isArray(strategy.questions) ? strategy.questions : [];
+  const out: HumanClarificationQuestion[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const field = String((row as Record<string, unknown>).field || "").trim();
+    const question = String((row as Record<string, unknown>).question || "").trim();
+    if (!field || !question) continue;
+    const key = `${field}::${question}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ field, question });
+  }
+  return out;
+}
+
+function strategyNeedsHumanConfirmation(strategy: Record<string, unknown> | null): boolean {
+  if (!strategy || typeof strategy !== "object") return false;
+  return strategy.needsHumanConfirmation === true;
+}
+
 export async function runWhatsAppAgentOrchestrator(
   input: { leadId: string; messageId: string; trigger?: string | null },
   depsOverride?: Partial<OrchestratorDeps>
@@ -468,6 +502,9 @@ export async function runWhatsAppAgentOrchestrator(
     [...recentMessages].reverse().find((m) => m.direction === "IN")?.id || null;
   const latestOutboundMessageId =
     [...recentMessages].reverse().find((m) => m.direction === "OUT")?.id || null;
+  const resumeFromStrategic =
+    String(input.trigger || "").toLowerCase().includes("human_clarification_answered") &&
+    Boolean(persistedLeadState?.stageAnalysis && typeof persistedLeadState.stageAnalysis === "object");
 
   let transcript: LeadTranscriptResult | null = null;
   if (reasoningSource === "transcript_fallback") {
@@ -485,68 +522,86 @@ export async function runWhatsAppAgentOrchestrator(
     transcript = minimalTranscriptFromDelta(recentMessages);
   }
 
-  try {
-    await markStep(deps, run.id, "stage_detection", "running");
-    const stage =
-      reasoningSource === "state_delta"
-        ? await deps.detectStageFromDelta({
-            leadId,
-            currentState: delta.currentState as unknown as Record<string, unknown>,
-            latestMessageDelta: delta.latestMessageDelta as unknown as Record<string, unknown>,
-            recentMinimalContext: delta.recentMinimalContext as unknown as Array<Record<string, unknown>>
-          })
-        : await deps.detectStage({
-            leadId,
-            transcript: transcript as LeadTranscriptResult
-          });
-    stageAnalysis = stage.analysis as unknown as Record<string, unknown>;
-    providers.stage_detection = stage.provider;
-    const stageMetrics = buildStepCostMetrics({ provider: stage.provider, model: stage.model, usage: stage.usage });
-    totalInputTokens += stageMetrics.inputTokens || 0;
-    totalOutputTokens += stageMetrics.outputTokens || 0;
-    totalEstimatedCostUsd += stageMetrics.estimatedCostUsd || 0;
-    await markStep(deps, run.id, "stage_detection", "completed", {
-      provider: stage.provider,
-      model: stage.model,
-      inputTokens: stageMetrics.inputTokens,
-      outputTokens: stageMetrics.outputTokens,
-      cachedInputTokens: stageMetrics.cachedInputTokens,
-      unitInputPricePerMillion: stageMetrics.unitInputPricePerMillion,
-      unitOutputPricePerMillion: stageMetrics.unitOutputPricePerMillion,
-      estimatedCostUsd: stageMetrics.estimatedCostUsd,
-      output: { analysis: stage.analysis, source: stage.source }
-    });
-  } catch (error) {
-    const safeError = toSafeError(error);
-    await markStep(deps, run.id, "stage_detection", "failed", { error: safeError });
-    await markStep(deps, run.id, "fact_extraction", "skipped", { error: "stage_detection_failed" });
-    await markStep(deps, run.id, "priority_scoring", "skipped", { error: "stage_detection_failed" });
-    await markStep(deps, run.id, "strategic_advisor", "skipped", { error: "stage_detection_failed" });
-    await markStep(deps, run.id, "reply_generator", "skipped", { error: "stage_detection_failed" });
-    await markStep(deps, run.id, "brand_guardian", "skipped", { error: "stage_detection_failed" });
-    await finalizeRunSafely("failed");
-    return {
-      runId: run.id,
-      leadId,
-      messageId,
-      status: "failed",
-      stageAnalysis: null,
-      strategy: null,
-      priority: null,
-      topReplyCard: null,
-      reasoningSource
-    };
+  if (resumeFromStrategic) {
+    stageAnalysis = persistedLeadState?.stageAnalysis && typeof persistedLeadState.stageAnalysis === "object"
+      ? (persistedLeadState.stageAnalysis as Record<string, unknown>)
+      : null;
+    facts = persistedLeadState?.facts && typeof persistedLeadState.facts === "object"
+      ? (persistedLeadState.facts as Record<string, unknown>)
+      : null;
+    priorityItem = persistedLeadState?.priorityItem && typeof persistedLeadState.priorityItem === "object"
+      ? (persistedLeadState.priorityItem as PrioritySnapshot)
+      : null;
+    providers.stage_detection = String((persistedLeadState?.providers || {})["stage_detection"] || "").trim() || "cached";
+    await markStep(deps, run.id, "stage_detection", "skipped", { error: "reused_from_previous_state" });
+    await markStep(deps, run.id, "fact_extraction", "skipped", { error: "reused_from_previous_state" });
+    await markStep(deps, run.id, "priority_scoring", "skipped", { error: "reused_from_previous_state" });
+  } else {
+    try {
+      await markStep(deps, run.id, "stage_detection", "running");
+      const stage =
+        reasoningSource === "state_delta"
+          ? await deps.detectStageFromDelta({
+              leadId,
+              currentState: delta.currentState as unknown as Record<string, unknown>,
+              latestMessageDelta: delta.latestMessageDelta as unknown as Record<string, unknown>,
+              recentMinimalContext: delta.recentMinimalContext as unknown as Array<Record<string, unknown>>
+            })
+          : await deps.detectStage({
+              leadId,
+              transcript: transcript as LeadTranscriptResult
+            });
+      stageAnalysis = stage.analysis as unknown as Record<string, unknown>;
+      providers.stage_detection = stage.provider;
+      const stageMetrics = buildStepCostMetrics({ provider: stage.provider, model: stage.model, usage: stage.usage });
+      totalInputTokens += stageMetrics.inputTokens || 0;
+      totalOutputTokens += stageMetrics.outputTokens || 0;
+      totalEstimatedCostUsd += stageMetrics.estimatedCostUsd || 0;
+      await markStep(deps, run.id, "stage_detection", "completed", {
+        provider: stage.provider,
+        model: stage.model,
+        inputTokens: stageMetrics.inputTokens,
+        outputTokens: stageMetrics.outputTokens,
+        cachedInputTokens: stageMetrics.cachedInputTokens,
+        unitInputPricePerMillion: stageMetrics.unitInputPricePerMillion,
+        unitOutputPricePerMillion: stageMetrics.unitOutputPricePerMillion,
+        estimatedCostUsd: stageMetrics.estimatedCostUsd,
+        output: { analysis: stage.analysis, source: stage.source }
+      });
+    } catch (error) {
+      const safeError = toSafeError(error);
+      await markStep(deps, run.id, "stage_detection", "failed", { error: safeError });
+      await markStep(deps, run.id, "fact_extraction", "skipped", { error: "stage_detection_failed" });
+      await markStep(deps, run.id, "priority_scoring", "skipped", { error: "stage_detection_failed" });
+      await markStep(deps, run.id, "strategic_advisor", "skipped", { error: "stage_detection_failed" });
+      await markStep(deps, run.id, "reply_generator", "skipped", { error: "stage_detection_failed" });
+      await markStep(deps, run.id, "brand_guardian", "skipped", { error: "stage_detection_failed" });
+      await finalizeRunSafely("failed");
+      return {
+        runId: run.id,
+        leadId,
+        messageId,
+        status: "failed",
+        stageAnalysis: null,
+        strategy: null,
+        priority: null,
+        topReplyCard: null,
+        reasoningSource
+      };
+    }
   }
 
-  try {
-    await markStep(deps, run.id, "fact_extraction", "running");
-    facts = stageAnalysis && stageAnalysis.facts && typeof stageAnalysis.facts === "object"
-      ? (stageAnalysis.facts as Record<string, unknown>)
-      : {};
-    await markStep(deps, run.id, "fact_extraction", "completed", { output: { facts } });
-  } catch (error) {
-    finalStatus = "partial";
-    await markStep(deps, run.id, "fact_extraction", "failed", { error: toSafeError(error) });
+  if (!resumeFromStrategic) {
+    try {
+      await markStep(deps, run.id, "fact_extraction", "running");
+      facts = stageAnalysis && stageAnalysis.facts && typeof stageAnalysis.facts === "object"
+        ? (stageAnalysis.facts as Record<string, unknown>)
+        : {};
+      await markStep(deps, run.id, "fact_extraction", "completed", { output: { facts } });
+    } catch (error) {
+      finalStatus = "partial";
+      await markStep(deps, run.id, "fact_extraction", "failed", { error: toSafeError(error) });
+    }
   }
 
   if (stageAnalysis) {
@@ -560,97 +615,99 @@ export async function runWhatsAppAgentOrchestrator(
     }) as unknown as Record<string, unknown>;
   }
 
-  try {
-    await markStep(deps, run.id, "priority_scoring", "running");
-    const messages = await deps.getMessages(leadId);
-    const timing = computeTiming(messages);
-    const stage = String(stageAnalysis?.stage || "NEW").trim().toUpperCase();
-    const signals = Array.isArray(stageAnalysis?.signals) ? stageAnalysis?.signals : [];
-    const objections = Array.isArray(stageAnalysis?.objections) ? stageAnalysis?.objections : [];
-    const factsSource = stageAnalysis?.facts && typeof stageAnalysis.facts === "object" ? (stageAnalysis.facts as Record<string, unknown>) : {};
-    const eventDate = String(factsSource.event_date || "").trim();
-    const nowMs = Date.now();
-    const eventDateNear = (() => {
-      if (!eventDate) return false;
-      const eventMs = new Date(`${eventDate}T00:00:00.000Z`).getTime();
-      if (!Number.isFinite(eventMs)) return false;
-      const days = Math.floor((eventMs - nowMs) / 86400000);
-      return days >= 0 && days <= 10;
-    })();
-    const hasSignal = (type: string): boolean =>
-      signals.some((row) => {
-        if (!row || typeof row !== "object") return false;
-        return String((row as Record<string, unknown>).type || "").toLowerCase() === type;
+  if (!resumeFromStrategic) {
+    try {
+      await markStep(deps, run.id, "priority_scoring", "running");
+      const messages = await deps.getMessages(leadId);
+      const timing = computeTiming(messages);
+      const stage = String(stageAnalysis?.stage || "NEW").trim().toUpperCase();
+      const signals = Array.isArray(stageAnalysis?.signals) ? stageAnalysis?.signals : [];
+      const objections = Array.isArray(stageAnalysis?.objections) ? stageAnalysis?.objections : [];
+      const factsSource = stageAnalysis?.facts && typeof stageAnalysis.facts === "object" ? (stageAnalysis.facts as Record<string, unknown>) : {};
+      const eventDate = String(factsSource.event_date || "").trim();
+      const nowMs = Date.now();
+      const eventDateNear = (() => {
+        if (!eventDate) return false;
+        const eventMs = new Date(`${eventDate}T00:00:00.000Z`).getTime();
+        if (!Number.isFinite(eventMs)) return false;
+        const days = Math.floor((eventMs - nowMs) / 86400000);
+        return days >= 0 && days <= 10;
+      })();
+      const hasSignal = (type: string): boolean =>
+        signals.some((row) => {
+          if (!row || typeof row !== "object") return false;
+          return String((row as Record<string, unknown>).type || "").toLowerCase() === type;
+        });
+      const hasObjection = (type: string): boolean =>
+        objections.some((row) => {
+          if (!row || typeof row !== "object") return false;
+          return String((row as Record<string, unknown>).type || "").toLowerCase() === type;
+        });
+      const intelligence = computePriorityIntelligence({
+        leadId,
+        stage,
+        awaitingReply: timing.needsReply,
+        waitingMinutes: timing.waitingSinceMinutes,
+        silenceMinutes: timing.silenceSinceMinutes,
+        reactivationState: {
+          shouldReactivate: !timing.needsReply && timing.silenceSinceMinutes > 360,
+          reactivationPriority: !timing.needsReply && timing.silenceSinceMinutes > 1440 ? "high" : timing.silenceSinceMinutes > 360 ? "medium" : "low",
+          stalledStage: !timing.needsReply && timing.silenceSinceMinutes > 360 ? stage : null
+        },
+        signals: {
+          product_interest_detected: hasSignal("product_interest"),
+          price_request_detected: hasSignal("price_request"),
+          payment_intent_detected: Boolean(stageAnalysis?.payment_intent) || hasSignal("payment_intent"),
+          deposit_intent_detected: stage === "DEPOSIT_PENDING",
+          shipping_question_detected: hasSignal("shipping_question") || String(factsSource.destination_country || "").trim().length > 0,
+          delivery_timing_detected: hasSignal("deadline_risk") || String(factsSource.delivery_deadline || "").trim().length > 0,
+          customization_request_detected: hasSignal("customization_request") || Array.isArray(factsSource.customization_requests),
+          video_interest_detected: hasSignal("video_interest") || stage.includes("VIDEO"),
+          event_date_detected: eventDate.length > 0,
+          event_date_near: eventDateNear,
+          high_ticket_context: false,
+          repeat_customer_detected: false,
+          price_objection_detected: hasObjection("price"),
+          timing_objection_detected: hasObjection("timing"),
+          trust_friction_detected: hasObjection("trust"),
+          fit_uncertainty_detected: hasObjection("fit") || hasObjection("uncertainty"),
+          fabric_uncertainty_detected: hasObjection("fabric"),
+          external_approval_delay_detected: hasObjection("external_approval"),
+          recent_inbound_message: timing.needsReply && timing.waitingSinceMinutes <= 120
+        }
       });
-    const hasObjection = (type: string): boolean =>
-      objections.some((row) => {
-        if (!row || typeof row !== "object") return false;
-        return String((row as Record<string, unknown>).type || "").toLowerCase() === type;
-      });
-    const intelligence = computePriorityIntelligence({
-      leadId,
-      stage,
-      awaitingReply: timing.needsReply,
-      waitingMinutes: timing.waitingSinceMinutes,
-      silenceMinutes: timing.silenceSinceMinutes,
-      reactivationState: {
-        shouldReactivate: !timing.needsReply && timing.silenceSinceMinutes > 360,
-        reactivationPriority: !timing.needsReply && timing.silenceSinceMinutes > 1440 ? "high" : timing.silenceSinceMinutes > 360 ? "medium" : "low",
-        stalledStage: !timing.needsReply && timing.silenceSinceMinutes > 360 ? stage : null
-      },
-      signals: {
-        product_interest_detected: hasSignal("product_interest"),
-        price_request_detected: hasSignal("price_request"),
-        payment_intent_detected: Boolean(stageAnalysis?.payment_intent) || hasSignal("payment_intent"),
-        deposit_intent_detected: stage === "DEPOSIT_PENDING",
-        shipping_question_detected: hasSignal("shipping_question") || String(factsSource.destination_country || "").trim().length > 0,
-        delivery_timing_detected: hasSignal("deadline_risk") || String(factsSource.delivery_deadline || "").trim().length > 0,
-        customization_request_detected: hasSignal("customization_request") || Array.isArray(factsSource.customization_requests),
-        video_interest_detected: hasSignal("video_interest") || stage.includes("VIDEO"),
-        event_date_detected: eventDate.length > 0,
-        event_date_near: eventDateNear,
-        high_ticket_context: false,
-        repeat_customer_detected: false,
-        price_objection_detected: hasObjection("price"),
-        timing_objection_detected: hasObjection("timing"),
-        trust_friction_detected: hasObjection("trust"),
-        fit_uncertainty_detected: hasObjection("fit") || hasObjection("uncertainty"),
-        fabric_uncertainty_detected: hasObjection("fabric"),
-        external_approval_delay_detected: hasObjection("external_approval"),
-        recent_inbound_message: timing.needsReply && timing.waitingSinceMinutes <= 120
-      }
-    });
-    const estimatedHeat = intelligence.priorityBand === "critical" || intelligence.priorityBand === "high"
-      ? "hot"
-      : intelligence.priorityBand === "medium"
-        ? "warm"
-        : "cold";
-    priorityItem = {
-      conversion_probability: intelligence.conversionProbability,
-      dropoff_risk: intelligence.dropoffRisk,
-      priority_score: intelligence.priorityScore,
-      priority_band: intelligence.priorityBand,
-      recommended_attention: intelligence.recommendedAttention,
-      reason_codes: intelligence.reasonCodes,
-      primary_reason_code: intelligence.primaryReasonCode,
-      priorityScore: intelligence.priorityScore,
-      priorityBand: intelligence.priorityBand,
-      needsReply: timing.needsReply,
-      waitingSinceMinutes: timing.waitingSinceMinutes,
-      silenceSinceMinutes: timing.silenceSinceMinutes,
-      stage: String(stageAnalysis?.stage || ""),
-      urgency: String(stageAnalysis?.urgency || "low"),
-      paymentIntent: Boolean(stageAnalysis?.payment_intent),
-      dropoffRisk: intelligence.dropoffRisk,
-      recommendedAction: String(stageAnalysis?.recommended_next_action || "wait"),
-      commercialPriority: "medium",
-      estimatedHeat,
-      reasons: intelligence.reasonCodes
-    };
-    await markStep(deps, run.id, "priority_scoring", "completed", { output: priorityItem });
-  } catch (error) {
-    finalStatus = "partial";
-    await markStep(deps, run.id, "priority_scoring", "failed", { error: toSafeError(error) });
+      const estimatedHeat = intelligence.priorityBand === "critical" || intelligence.priorityBand === "high"
+        ? "hot"
+        : intelligence.priorityBand === "medium"
+          ? "warm"
+          : "cold";
+      priorityItem = {
+        conversion_probability: intelligence.conversionProbability,
+        dropoff_risk: intelligence.dropoffRisk,
+        priority_score: intelligence.priorityScore,
+        priority_band: intelligence.priorityBand,
+        recommended_attention: intelligence.recommendedAttention,
+        reason_codes: intelligence.reasonCodes,
+        primary_reason_code: intelligence.primaryReasonCode,
+        priorityScore: intelligence.priorityScore,
+        priorityBand: intelligence.priorityBand,
+        needsReply: timing.needsReply,
+        waitingSinceMinutes: timing.waitingSinceMinutes,
+        silenceSinceMinutes: timing.silenceSinceMinutes,
+        stage: String(stageAnalysis?.stage || ""),
+        urgency: String(stageAnalysis?.urgency || "low"),
+        paymentIntent: Boolean(stageAnalysis?.payment_intent),
+        dropoffRisk: intelligence.dropoffRisk,
+        recommendedAction: String(stageAnalysis?.recommended_next_action || "wait"),
+        commercialPriority: "medium",
+        estimatedHeat,
+        reasons: intelligence.reasonCodes
+      };
+      await markStep(deps, run.id, "priority_scoring", "completed", { output: priorityItem });
+    } catch (error) {
+      finalStatus = "partial";
+      await markStep(deps, run.id, "priority_scoring", "failed", { error: toSafeError(error) });
+    }
   }
 
   try {
@@ -695,6 +752,85 @@ export async function runWhatsAppAgentOrchestrator(
     await markStep(deps, run.id, "strategic_advisor", "failed", { error: toSafeError(error) });
     await markStep(deps, run.id, "reply_generator", "skipped", { error: "strategic_advisor_failed" });
     await markStep(deps, run.id, "brand_guardian", "skipped", { error: "strategic_advisor_failed" });
+    await persistLeadStateSafely({
+      leadId,
+      latestRunId: run.id,
+      latestMessageId: messageId,
+      stageAnalysis,
+      facts,
+      structuredState,
+      priorityItem,
+      strategy,
+      replyOptions: null,
+      brandReview: null,
+      topReplyCard: null,
+      providers,
+      reasoningSource
+    });
+    await finalizeRunSafely(finalStatus);
+    return {
+      runId: run.id,
+      leadId,
+      messageId,
+      status: finalStatus,
+      stageAnalysis,
+      strategy,
+      priority: priorityItem,
+      topReplyCard: null,
+      reasoningSource
+    };
+  }
+
+  if (strategyNeedsHumanConfirmation(strategy)) {
+    finalStatus = "partial";
+    const clarificationQuestions = parseHumanClarificationQuestions(strategy);
+    try {
+      const lead = await deps.getLeadById(leadId).catch(() => null);
+      const phoneNumber = lead && String(lead.phoneNumber || "").trim() ? String(lead.phoneNumber || "").trim() : null;
+      if (clarificationQuestions.length) {
+        await deps.queueHumanClarificationQuestions({
+          leadId,
+          phoneNumber,
+          questions: clarificationQuestions,
+          context: {
+            runId: run.id,
+            messageId,
+            source: "strategic_advisor"
+          }
+        });
+      }
+      providers.human_clarification = clarificationQuestions.length ? "requested" : "required_without_questions";
+    } catch (error) {
+      providers.human_clarification = "request_failed";
+      console.warn("[whatsapp-agent-orchestrator] human_clarification_enqueue_failed", {
+        runId: run.id,
+        leadId,
+        error: toSafeError(error)
+      });
+    }
+
+    const clarificationState = {
+      pending: clarificationQuestions.length > 0,
+      pendingFields: clarificationQuestions.map((item) => item.field),
+      pendingQuestions: clarificationQuestions.map((item) => item.question),
+      requestedAt: deps.nowIso()
+    };
+    const existingHumanClarifications =
+      structuredState &&
+      typeof structuredState.humanClarifications === "object" &&
+      !Array.isArray(structuredState.humanClarifications)
+        ? (structuredState.humanClarifications as Record<string, unknown>)
+        : {};
+    structuredState = {
+      ...(structuredState || {}),
+      humanClarifications: {
+        ...existingHumanClarifications,
+        ...clarificationState
+      }
+    };
+
+    await markStep(deps, run.id, "reply_generator", "skipped", { error: "human_confirmation_required" });
+    await markStep(deps, run.id, "brand_guardian", "skipped", { error: "human_confirmation_required" });
     await persistLeadStateSafely({
       leadId,
       latestRunId: run.id,
@@ -854,16 +990,38 @@ export function triggerWhatsAppAgentOrchestratorForInbound(
   const messageId = String(input.messageId || "").trim();
   if (!leadId || !messageId) return;
   setImmediate(() => {
-    void runWhatsAppAgentOrchestrator(
-      { leadId, messageId, trigger: input.trigger || "zoko_inbound_webhook" },
-      depsOverride
-    ).catch((error) => {
-      console.error("[whatsapp-agent-orchestrator] async_run_failed", {
-        leadId,
-        messageId,
-        error: error instanceof Error ? error.message : String(error)
+    const deps: OrchestratorDeps = { ...defaultDeps(), ...(depsOverride || {}) };
+    void (async () => {
+      let trigger = String(input.trigger || "zoko_inbound_webhook");
+      try {
+        const recentMessages = await deps.getRecentMessages(leadId);
+        const inbound = recentMessages.find((row) => row.id === messageId && row.direction === "IN");
+        const messageText = String((inbound && inbound.text) || "").trim();
+        if (messageText) {
+          const clarification = await deps.applyInboundHumanClarificationAnswer({
+            leadId,
+            messageText
+          });
+          if (clarification.resumed) {
+            trigger = "human_clarification_answered";
+          }
+        }
+      } catch (error) {
+        console.warn("[whatsapp-agent-orchestrator] human_clarification_check_failed", {
+          leadId,
+          messageId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      return runWhatsAppAgentOrchestrator({ leadId, messageId, trigger }, deps);
+    })().catch((error) => {
+        console.error("[whatsapp-agent-orchestrator] async_run_failed", {
+          leadId,
+          messageId,
+          error: error instanceof Error ? error.message : String(error)
+        });
       });
-    });
   });
 }
 

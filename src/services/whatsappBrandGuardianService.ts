@@ -20,8 +20,21 @@ import {
 import { getAiProviderForStep, type AiProvider } from "./aiProviderRouting.js";
 import type { AiUsageMetrics } from "./aiPricing.js";
 import { attachReasonShortToReplyOptions } from "./whatsappSuggestionReasonService.js";
+import {
+  buildAiStepCacheKey,
+  getAiStepCache,
+  resolveLatestMessageIdForLead,
+  setAiStepCache
+} from "./aiStepCache.js";
+import {
+  compactReplyOptionsForPrompt,
+  compactStageAnalysisForPrompt,
+  compactStrategyForPrompt,
+  enforceTokenBudget
+} from "./aiTokenBudget.js";
 
 const MESSAGE_MAX_LENGTH = 280;
+const BRAND_PROMPT_VERSION = "v2";
 
 const ReplyOptionSchema = z
   .object({
@@ -107,13 +120,9 @@ export function validateBrandGuardianReview(parsed: unknown): BrandGuardianRevie
 
 function buildBrandGuardianSystemPrompt(): string {
   return [
-    "You are Brand Guardian for Maison BFL WhatsApp replies.",
-    "Your task is quality control only.",
-    "Assess if replies are elegant, concise, refined, human, premium, non-robotic, non-pushy, non-repetitive, and aligned with quiet luxury.",
-    "You may lightly rewrite weak options while preserving strategic intent.",
-    "Do not fully rewrite strong options.",
-    "Return strict JSON only with the required shape.",
-    "No markdown, no extra prose."
+    "You are brand guardian for luxury WhatsApp replies.",
+    "Do quality control and light refinements only.",
+    "Return JSON only. No markdown."
   ].join("\n");
 }
 
@@ -123,30 +132,17 @@ function buildBrandGuardianUserPrompt(input: {
   strategy: StrategicAdvisorStrategy;
   replyOptions: ReplyGeneratorPayload;
 }): string {
+  const compactStage = compactStageAnalysisForPrompt(input.stageAnalysis);
+  const compactStrategy = compactStrategyForPrompt(input.strategy);
+  const compactReplies = compactReplyOptionsForPrompt(input.replyOptions);
   return [
-    "Review and refine the reply options if needed. Keep edits light and preserve intent.",
-    "Return only valid JSON using this exact shape:",
-    "{",
-    '  "approved": true,',
-    '  "issues": [],',
-    '  "reply_options": [',
-    '    {"label":"Option 1","intent":"short description","messages":["short bubble 1","short bubble 2"]},',
-    '    {"label":"Option 2","intent":"short description","messages":["short bubble 1","short bubble 2","short bubble 3"]},',
-    '    {"label":"Option 3","intent":"short description","messages":["short bubble 1","short bubble 2"]}',
-    "  ]",
-    "}",
-    "Hard constraints:",
-    "- reply_options must contain exactly 3 options.",
-    "- each option must contain 2 to 4 messages.",
-    "- each message must be concise and <= 280 chars.",
-    "- no emojis, no robotic phrasing, no pushy language.",
-    "- keep tone quiet luxury.",
+    'Return JSON keys: approved, issues, reply_options.',
     "Stage analysis JSON:",
-    JSON.stringify(input.stageAnalysis),
+    JSON.stringify(compactStage),
     "Strategy JSON:",
-    JSON.stringify(input.strategy),
+    JSON.stringify(compactStrategy),
     "Current reply options JSON:",
-    JSON.stringify(input.replyOptions),
+    JSON.stringify(compactReplies),
     "Transcript:",
     input.transcript
   ].join("\n");
@@ -315,9 +311,45 @@ export async function buildBrandGuardianFromContext(input: {
     transcriptPreview: sanitizeForPrompt(transcriptText, 500)
   });
 
+  const providerForKey = getAiProviderForStep("brand");
+  const modelForKey = providerForKey === "claude"
+    ? (String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001")
+    : (String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini");
+  const latestMessageId = await resolveLatestMessageIdForLead(safeLeadId);
+  const cacheKey = latestMessageId
+    ? buildAiStepCacheKey({
+        leadId: safeLeadId,
+        latestMessageId,
+        step: "brand_guardian",
+        provider: providerForKey,
+        model: modelForKey,
+        promptVersion: BRAND_PROMPT_VERSION
+      })
+    : "";
+  if (cacheKey) {
+    const cached = getAiStepCache<BrandGuardianResult>(cacheKey);
+    if (cached) {
+      console.info("[brand-guardian] cache_hit", { leadId: safeLeadId, latestMessageId, provider: providerForKey, model: modelForKey });
+      return {
+        ...cached,
+        usage: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  const budgeted = enforceTokenBudget({
+    step: "brand_guardian",
+    transcript: transcriptText,
+    context: {
+      stage: compactStageAnalysisForPrompt(input.stageAnalysis),
+      strategy: compactStrategyForPrompt(input.strategy),
+      replies: compactReplyOptionsForPrompt(input.replyOptions)
+    }
+  });
   const systemPrompt = buildBrandGuardianSystemPrompt();
   const userPrompt = buildBrandGuardianUserPrompt({
-    transcript: transcriptText,
+    transcript: budgeted.transcript,
     stageAnalysis: input.stageAnalysis,
     strategy: input.strategy,
     replyOptions: input.replyOptions
@@ -347,7 +379,7 @@ export async function buildBrandGuardianFromContext(input: {
     })
   };
 
-  return {
+  const output: BrandGuardianResult = {
     review,
     replyOptions: input.replyOptions,
     strategy: input.strategy,
@@ -359,6 +391,8 @@ export async function buildBrandGuardianFromContext(input: {
     usage: modelResult.usage,
     timestamp: new Date().toISOString()
   };
+  if (cacheKey) setAiStepCache(cacheKey, output);
+  return output;
 }
 
 export async function getLeadBrandGuardian(leadId: string): Promise<BrandGuardianResult> {

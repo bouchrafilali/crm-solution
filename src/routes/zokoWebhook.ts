@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createHmac } from "node:crypto";
 import { env } from "../config/env.js";
+import { getDbPool } from "../db/client.js";
 import {
   createWhatsAppLead,
   getWhatsAppLeadById,
@@ -26,6 +27,8 @@ import {
 import { triggerWhatsAppAgentOrchestratorForInbound } from "../services/whatsappAgentOrchestratorService.js";
 
 export const zokoWebhookRouter = Router();
+const ANALYSIS_TRIGGER_TTL_MS = 5 * 60 * 1000;
+const analysisTriggerByExternalId = new Map<string, number>();
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -618,6 +621,47 @@ function withinMinutes(a: string, b: string, minutes: number): boolean {
   return Math.abs(ta - tb) <= minutes * 60 * 1000;
 }
 
+async function findExistingZokoMessageByExternalId(externalId: string): Promise<{ id: string; leadId: string } | null> {
+  const safeExternalId = String(externalId || "").trim();
+  if (!safeExternalId) return null;
+  const db = getDbPool();
+  if (!db) return null;
+  const q = await db.query<{ id: string; lead_id: string }>(
+    `
+      select id, lead_id
+      from whatsapp_lead_messages
+      where provider = 'zoko'
+        and external_id = $1::text
+      order by created_at desc
+      limit 1
+    `,
+    [safeExternalId]
+  );
+  const row = q.rows[0];
+  if (!row) return null;
+  return {
+    id: String(row.id || "").trim(),
+    leadId: String(row.lead_id || "").trim()
+  };
+}
+
+function shouldTriggerInboundAnalysisForExternalId(externalId: string | null | undefined): boolean {
+  const safeExternalId = String(externalId || "").trim();
+  if (!safeExternalId) return true;
+  const now = Date.now();
+  const existing = analysisTriggerByExternalId.get(safeExternalId);
+  if (existing && now - existing <= ANALYSIS_TRIGGER_TTL_MS) {
+    return false;
+  }
+  analysisTriggerByExternalId.set(safeExternalId, now);
+  for (const [key, ts] of analysisTriggerByExternalId.entries()) {
+    if (now - ts > ANALYSIS_TRIGGER_TTL_MS) {
+      analysisTriggerByExternalId.delete(key);
+    }
+  }
+  return true;
+}
+
 zokoWebhookRouter.get("/webhooks/zoko/messages", (req, res) => {
   const challenge = String(req.query.challenge || req.query["hub.challenge"] || "").trim();
   const expected = String(env.ZOKO_WEBHOOK_TOKEN || "").trim();
@@ -787,6 +831,25 @@ zokoWebhookRouter.post([
       });
     }
 
+    if (payload.externalMessageId) {
+      const alreadyPersisted = await findExistingZokoMessageByExternalId(payload.externalMessageId);
+      if (alreadyPersisted && alreadyPersisted.id) {
+        console.info("[zoko] duplicate_blocked", {
+          dedupeMode: "message_id_db_exact",
+          providerMessageId: payload.externalMessageId,
+          messageId: alreadyPersisted.id,
+          leadId: alreadyPersisted.leadId
+        });
+        return res.status(200).json({
+          ok: true,
+          deduped: true,
+          dedupe_mode: "message_id_db_exact",
+          lead_id: alreadyPersisted.leadId,
+          message_id: alreadyPersisted.id
+        });
+      }
+    }
+
     let lead = await getWhatsAppLeadByPhone(payload.phoneNumber);
     if (!lead) {
       lead = await createWhatsAppLead({
@@ -814,6 +877,7 @@ zokoWebhookRouter.post([
     const recent = await listRecentWhatsAppLeadMessages(lead.id, 12);
     const normalizedIncoming = normalizeComparableText(normalizedText);
     let resolvedDirection: "IN" | "OUT" = payload.direction;
+    const providerMessageId = String(payload.externalMessageId || "").trim();
 
     // If Zoko webhook is ambiguous and we just sent identical OUT text, force OUT.
     if (resolvedDirection === "IN") {
@@ -829,22 +893,58 @@ zokoWebhookRouter.post([
       }
     }
 
-    // Skip duplicate webhook echo (same text, same direction, close timestamp).
-    const duplicate = recent.find(
-      (msg) =>
-        String(msg.provider || "").toLowerCase() === "zoko" &&
-        msg.direction === resolvedDirection &&
-        normalizeComparableText(msg.text) === normalizedIncoming &&
-        withinMinutes(msg.createdAt, payload.createdAt, 3)
-    );
-    if (duplicate) {
-      return res.status(200).json({
-        ok: true,
-        deduped: true,
-        lead_id: lead.id,
-        message_id: duplicate.id
-      });
+    // Prefer provider message-id anchored dedupe to block duplicate deliveries safely.
+    if (providerMessageId) {
+      const duplicateByMessageId = recent.find(
+        (msg) =>
+          String(msg.provider || "").toLowerCase() === "zoko" &&
+          String(msg.externalId || "").trim() === providerMessageId
+      );
+      if (duplicateByMessageId) {
+        console.info("[zoko] duplicate_blocked", {
+          dedupeMode: "message_id",
+          leadId: lead.id,
+          providerMessageId
+        });
+        return res.status(200).json({
+          ok: true,
+          deduped: true,
+          dedupe_mode: "message_id",
+          lead_id: lead.id,
+          message_id: duplicateByMessageId.id
+        });
+      }
+    } else {
+      // Fallback dedupe only when provider id is unavailable.
+      const duplicateByContent = recent.find(
+        (msg) =>
+          String(msg.provider || "").toLowerCase() === "zoko" &&
+          msg.direction === resolvedDirection &&
+          normalizeComparableText(msg.text) === normalizedIncoming &&
+          withinMinutes(msg.createdAt, payload.createdAt, 3)
+      );
+      if (duplicateByContent) {
+        console.info("[zoko] duplicate_blocked", {
+          dedupeMode: "content_window",
+          leadId: lead.id,
+          direction: resolvedDirection
+        });
+        return res.status(200).json({
+          ok: true,
+          deduped: true,
+          dedupe_mode: "content_window",
+          lead_id: lead.id,
+          message_id: duplicateByContent.id
+        });
+      }
     }
+
+    console.info("[zoko] duplicate_not_blocked", {
+      leadId: lead.id,
+      dedupeMode: providerMessageId ? "message_id_available_no_match" : "content_window_no_match",
+      providerMessageId: providerMessageId || null,
+      direction: resolvedDirection
+    });
 
     const message = await createWhatsAppLeadMessageWithTracking({
       leadId: lead.id,
@@ -866,11 +966,19 @@ zokoWebhookRouter.post([
     });
     if (!message) return res.status(503).json({ error: "message_store_failed" });
     if (resolvedDirection === "IN") {
-      triggerWhatsAppAgentOrchestratorForInbound({
-        leadId: lead.id,
-        messageId: message.id,
-        trigger: "zoko_inbound_webhook"
-      });
+      if (shouldTriggerInboundAnalysisForExternalId(payload.externalMessageId)) {
+        triggerWhatsAppAgentOrchestratorForInbound({
+          leadId: lead.id,
+          messageId: message.id,
+          trigger: "zoko_inbound_webhook"
+        });
+      } else {
+        console.info("[zoko] analysis_trigger_blocked_duplicate_external_id", {
+          leadId: lead.id,
+          messageId: message.id,
+          providerMessageId: payload.externalMessageId || null
+        });
+      }
     }
 
     if (resolvedDirection === "OUT" && /\bprix\b|\bprice\b|€|\$|\bmad\b|\bdhs?\b/i.test(String(payload.text || ""))) {

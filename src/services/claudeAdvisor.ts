@@ -11,6 +11,7 @@ const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_TIMEOUT_MS = 15000;
 const CLAUDE_MAX_TOKENS_PRIMARY = 700;
 const CLAUDE_MAX_TOKENS_RETRY = 1400;
+const DEFAULT_LEGACY_ADVISOR_MESSAGE_LIMIT_MAX = 40;
 const EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F\u200D]/u;
 const CLAUDE_MODEL_ALIASES: Record<string, string> = {
   "claude-3-5-haiku-latest": DEFAULT_CLAUDE_MODEL,
@@ -87,6 +88,20 @@ function resolveClaudeModel(rawValue: unknown): string {
 
 function sanitizeText(input: unknown): string {
   return String(input || "").replace(/\u0000/g, "").trim();
+}
+
+function resolveLegacyAdvisorMessageLimitMax(): number {
+  const candidates = [
+    env.WHATSAPP_LEGACY_ADVISOR_MESSAGE_LIMIT_MAX,
+    env.WHATSAPP_MANUAL_AI_ANALYZE_MESSAGE_LIMIT
+  ];
+  for (const candidate of candidates) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.max(1, Math.min(200, Math.round(parsed)));
+    }
+  }
+  return DEFAULT_LEGACY_ADVISOR_MESSAGE_LIMIT_MAX;
 }
 
 function inferPreferredLanguage(
@@ -438,7 +453,8 @@ export async function runClaudeAdvisor(input: {
 
   const lead = await getWhatsAppLeadById(leadId);
   if (!lead) throw new Error("lead_not_found");
-  const messageLimit = Math.max(1, Math.min(200, Math.round(Number(input.messageLimit || 20))));
+  const messageLimitMax = resolveLegacyAdvisorMessageLimitMax();
+  const messageLimit = Math.max(1, Math.min(messageLimitMax, Math.round(Number(input.messageLimit || 20))));
   const messages = await listRecentWhatsAppLeadMessages(leadId, messageLimit);
   const promptText = buildAdvisorPrompt(lead, messages);
   const model = resolveClaudeModel(env.CLAUDE_MODEL);

@@ -96,8 +96,8 @@ export async function createWhatsAppLeadMessageWithTracking(
   const message = await createWhatsAppLeadMessage(input);
   if (!message) return null;
 
-  // Non-blocking Claude advisor analysis hook (inbound + outbound).
-  onMessagePersistedAdvisor(input.leadId, message.id);
+  // Legacy advisor remains callable for explicit/manual usage, but auto mode is disabled by default.
+  onMessagePersistedAdvisor(input.leadId, message.id, `message_persisted_${String(meta.source || "unknown").toLowerCase()}`);
   setImmediate(() => {
     void runDynamicDecisionShadowForMessage({
       leadId: input.leadId,

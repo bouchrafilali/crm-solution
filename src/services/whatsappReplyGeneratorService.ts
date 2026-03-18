@@ -15,8 +15,20 @@ import {
 import { getAiProviderForStep, type AiProvider } from "./aiProviderRouting.js";
 import type { AiUsageMetrics } from "./aiPricing.js";
 import { attachReasonShortToReplyOptions } from "./whatsappSuggestionReasonService.js";
+import {
+  buildAiStepCacheKey,
+  getAiStepCache,
+  resolveLatestMessageIdForLead,
+  setAiStepCache
+} from "./aiStepCache.js";
+import {
+  compactStageAnalysisForPrompt,
+  compactStrategyForPrompt,
+  enforceTokenBudget
+} from "./aiTokenBudget.js";
 
 const MESSAGE_MAX_LENGTH = 280;
+const REPLY_PROMPT_VERSION = "v2";
 
 const ReplyOptionSchema = z
   .object({
@@ -99,16 +111,10 @@ export function validateReplyGenerator(parsed: unknown): ReplyGeneratorPayload {
 
 function buildReplyGeneratorSystemPrompt(): string {
   return [
-    "You write WhatsApp reply options for a luxury couture sales context.",
-    "Return JSON only. No markdown.",
-    "Generate exactly 3 reply options.",
-    "Each option must have 2 to 4 short natural message bubbles.",
-    "Tone must feel quiet luxury, human, refined, concise.",
-    "No emojis.",
-    "No robotic phrasing.",
-    "No analysis, commentary, headings, bullet points, or markdown in messages.",
-    "Avoid generic filler unless strategically necessary.",
-    "Do not repeat the exact same wording across options."
+    "Generate luxury WhatsApp reply options.",
+    "Return JSON only.",
+    "Exactly 3 options; each has 2-4 short messages.",
+    "No emoji, no markdown, no analysis."
   ].join("\n");
 }
 
@@ -117,25 +123,14 @@ function buildReplyGeneratorUserPrompt(input: {
   stageAnalysis: StageDetectionAnalysis;
   strategy: StrategicAdvisorStrategy;
 }): string {
+  const compactStage = compactStageAnalysisForPrompt(input.stageAnalysis);
+  const compactStrategy = compactStrategyForPrompt(input.strategy);
   return [
-    "Generate WhatsApp reply options using this exact output JSON shape:",
-    "{",
-    '  "reply_options": [',
-    '    {"label":"Option 1","intent":"short description","messages":["short bubble 1","short bubble 2"]},',
-    '    {"label":"Option 2","intent":"short description","messages":["short bubble 1","short bubble 2","short bubble 3"]},',
-    '    {"label":"Option 3","intent":"short description","messages":["short bubble 1","short bubble 2"]}',
-    "  ]",
-    "}",
-    "Rules:",
-    "- Exactly 3 options.",
-    "- Each option must contain 2 to 4 short messages.",
-    "- Each message max 280 chars.",
-    "- No emojis.",
-    "- No analysis text.",
+    'Return JSON: {"reply_options":[{"label":"...","intent":"...","messages":["..."]}]}',
     "Stage analysis JSON:",
-    JSON.stringify(input.stageAnalysis),
+    JSON.stringify(compactStage),
     "Strategic advisor JSON:",
-    JSON.stringify(input.strategy),
+    JSON.stringify(compactStrategy),
     "Transcript:",
     input.transcript
   ].join("\n");
@@ -303,9 +298,44 @@ export async function buildReplyGeneratorFromContext(input: {
     transcriptPreview: sanitizeForPrompt(transcriptText, 500)
   });
 
+  const providerForKey = getAiProviderForStep("reply");
+  const modelForKey = providerForKey === "claude"
+    ? (String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001")
+    : (String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini");
+  const latestMessageId = await resolveLatestMessageIdForLead(safeLeadId);
+  const cacheKey = latestMessageId
+    ? buildAiStepCacheKey({
+        leadId: safeLeadId,
+        latestMessageId,
+        step: "reply_generator",
+        provider: providerForKey,
+        model: modelForKey,
+        promptVersion: REPLY_PROMPT_VERSION
+      })
+    : "";
+  if (cacheKey) {
+    const cached = getAiStepCache<ReplyGeneratorResult>(cacheKey);
+    if (cached) {
+      console.info("[reply-generator] cache_hit", { leadId: safeLeadId, latestMessageId, provider: providerForKey, model: modelForKey });
+      return {
+        ...cached,
+        usage: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  const budgeted = enforceTokenBudget({
+    step: "reply_generator",
+    transcript: transcriptText,
+    context: {
+      stage: compactStageAnalysisForPrompt(input.stageAnalysis),
+      strategy: compactStrategyForPrompt(input.strategy)
+    }
+  });
   const systemPrompt = buildReplyGeneratorSystemPrompt();
   const userPrompt = buildReplyGeneratorUserPrompt({
-    transcript: transcriptText,
+    transcript: budgeted.transcript,
     stageAnalysis: input.stageAnalysis,
     strategy: input.strategy
   });
@@ -333,7 +363,7 @@ export async function buildReplyGeneratorFromContext(input: {
     })
   };
 
-  return {
+  const output: ReplyGeneratorResult = {
     replyOptions,
     strategy: input.strategy,
     stageAnalysis: input.stageAnalysis,
@@ -344,6 +374,8 @@ export async function buildReplyGeneratorFromContext(input: {
     usage: modelResult.usage,
     timestamp: new Date().toISOString()
   };
+  if (cacheKey) setAiStepCache(cacheKey, output);
+  return output;
 }
 
 export async function getLeadReplyGenerator(leadId: string): Promise<ReplyGeneratorResult> {

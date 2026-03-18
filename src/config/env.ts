@@ -24,6 +24,8 @@ const envSchema = z.object({
   TRENDS_GEO: z.string().optional(),
   GA4_PROPERTY_ID: z.string().optional(),
   SHOPIFY_SHOP: z.string().optional(),
+  SHOPIFY_ADMIN_TOKEN: z.string().optional(),
+  SHOPIFY_API_VERSION: z.string().default("2025-01"),
   SHOPIFY_ADMIN_ACCESS_TOKEN: z.string().optional(),
   SHOPIFY_STOREFRONT_ACCESS_TOKEN: z.string().optional(),
   SHOPIFY_STOREFRONT_API_VERSION: z.string().optional(),

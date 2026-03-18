@@ -9,6 +9,17 @@ import {
 } from "./whatsappStageDetectionService.js";
 import { getAiProviderForStep, type AiProvider } from "./aiProviderRouting.js";
 import type { AiUsageMetrics } from "./aiPricing.js";
+import {
+  buildAiStepCacheKey,
+  getAiStepCache,
+  runAiStepSingleFlight,
+  resolveLatestMessageIdForLead,
+  setAiStepCache
+} from "./aiStepCache.js";
+import {
+  compactStageAnalysisForPrompt,
+  enforceTokenBudget
+} from "./aiTokenBudget.js";
 
 const ACTION_VALUES = [
   "qualify",
@@ -27,6 +38,7 @@ const ACTION_VALUES = [
 const COMMERCIAL_PRIORITY_VALUES = ["low", "medium", "high", "critical"] as const;
 const TONE_VALUES = ["soft_luxury", "reassuring", "decisive_elegant", "warm_refined", "calm_urgent"] as const;
 const PRESSURE_VALUES = ["none", "low", "medium"] as const;
+const STRATEGY_PROMPT_VERSION = "v2";
 
 const StrategicAdvisorSchema = z
   .object({
@@ -40,7 +52,18 @@ const StrategicAdvisorSchema = z
     missed_opportunities: z.array(z.string()),
     strategy_rationale: z.array(z.string()),
     do_now: z.array(z.string()),
-    avoid: z.array(z.string())
+    avoid: z.array(z.string()),
+    needsHumanConfirmation: z.boolean().optional(),
+    questions: z
+      .array(
+        z
+          .object({
+            field: z.string().min(1),
+            question: z.string().min(1)
+          })
+          .strict()
+      )
+      .optional()
   })
   .strict();
 
@@ -66,6 +89,16 @@ export class StrategicAdvisorError extends Error {
     this.code = code;
   }
 }
+
+type ProviderFailureClass =
+  | "timeout"
+  | "network"
+  | "http_5xx"
+  | "http_4xx"
+  | "validation"
+  | "schema"
+  | "config"
+  | "unknown";
 
 export function parseStrategicAdvisorJson(raw: string): unknown {
   const source = String(raw || "").trim();
@@ -110,32 +143,19 @@ export function validateStrategicAdvisor(parsed: unknown): StrategicAdvisorStrat
 
 function buildStrategicAdvisorSystemPrompt(): string {
   return [
-    "You are a senior commercial strategist for luxury WhatsApp couture sales.",
-    "Decide the next best business action only. Do not draft client replies.",
-    "Return strict JSON only, following the exact required shape and enum values.",
-    "Focus on conversion quality, timing, friction reduction, and premium positioning.",
-    "Never include markdown or explanatory prose outside JSON."
+    "You are a luxury WhatsApp sales strategist.",
+    "Decide next best action only.",
+    "Return JSON only. No markdown."
   ].join("\n");
 }
 
 function buildStrategicAdvisorUserPrompt(input: { transcript: string; stageAnalysis: StageDetectionAnalysis }): string {
+  const compactStage = compactStageAnalysisForPrompt(input.stageAnalysis);
   return [
-    "Based on the transcript and stage analysis, output only valid JSON with this exact shape:",
-    "{",
-    '  "recommended_action": "qualify | answer_precisely | reassure | propose_video | narrow_options | clarify_deadline | push_softly_to_deposit | reduce_friction_to_payment | reactivate_gently | wait | close_out",',
-    '  "action_confidence": 0.0,',
-    '  "commercial_priority": "low | medium | high | critical",',
-    '  "tone": "soft_luxury | reassuring | decisive_elegant | warm_refined | calm_urgent",',
-    '  "pressure_level": "none | low | medium",',
-    '  "primary_goal": "one sentence goal",',
-    '  "secondary_goal": "one sentence goal",',
-    '  "missed_opportunities": [],',
-    '  "strategy_rationale": [],',
-    '  "do_now": [],',
-    '  "avoid": []',
-    "}",
+    "Return JSON keys exactly:",
+    "recommended_action, action_confidence, commercial_priority, tone, pressure_level, primary_goal, secondary_goal, missed_opportunities, strategy_rationale, do_now, avoid, needsHumanConfirmation, questions",
     "Stage analysis JSON:",
-    JSON.stringify(input.stageAnalysis),
+    JSON.stringify(compactStage),
     "Transcript:",
     input.transcript
   ].join("\n");
@@ -147,23 +167,12 @@ function buildStrategicAdvisorStateDeltaPrompt(input: {
   latestMessageDelta: Record<string, unknown>;
   recentMinimalContext: Array<Record<string, unknown>>;
 }): string {
+  const compactStage = compactStageAnalysisForPrompt(input.stageAnalysis);
   return [
-    "Based on stage analysis + structured state + latest delta, output only valid JSON with this exact shape:",
-    "{",
-    '  "recommended_action": "qualify | answer_precisely | reassure | propose_video | narrow_options | clarify_deadline | push_softly_to_deposit | reduce_friction_to_payment | reactivate_gently | wait | close_out",',
-    '  "action_confidence": 0.0,',
-    '  "commercial_priority": "low | medium | high | critical",',
-    '  "tone": "soft_luxury | reassuring | decisive_elegant | warm_refined | calm_urgent",',
-    '  "pressure_level": "none | low | medium",',
-    '  "primary_goal": "one sentence goal",',
-    '  "secondary_goal": "one sentence goal",',
-    '  "missed_opportunities": [],',
-    '  "strategy_rationale": [],',
-    '  "do_now": [],',
-    '  "avoid": []',
-    "}",
+    "Return JSON keys exactly:",
+    "recommended_action, action_confidence, commercial_priority, tone, pressure_level, primary_goal, secondary_goal, missed_opportunities, strategy_rationale, do_now, avoid, needsHumanConfirmation, questions",
     "Stage analysis JSON:",
-    JSON.stringify(input.stageAnalysis),
+    JSON.stringify(compactStage),
     "Current structured state JSON:",
     JSON.stringify(input.currentState),
     "Latest message delta JSON:",
@@ -189,6 +198,47 @@ function toUsageMetrics(value: unknown): AiUsageMetrics | null {
     outputTokens: Number.isFinite(output) ? Math.max(0, Math.round(output)) : null,
     cachedInputTokens: Number.isFinite(cached) ? Math.max(0, Math.round(cached)) : null
   };
+}
+
+function isCrossProviderFallbackEnabled(): boolean {
+  const raw = String(env.AI_CROSS_PROVIDER_FALLBACK_ENABLED || "").trim().toLowerCase();
+  if (!raw) return true;
+  return ["1", "true", "yes", "on"].includes(raw);
+}
+
+function classifyProviderFailure(error: unknown): { failureClass: ProviderFailureClass; fallbackAllowed: boolean } {
+  const message = error instanceof Error ? String(error.message || "") : String(error || "");
+  const lower = message.toLowerCase();
+  if (error instanceof StrategicAdvisorError) {
+    const code = String(error.code || "").toLowerCase();
+    if (code.includes("provider_not_configured")) return { failureClass: "config", fallbackAllowed: false };
+    if (code.includes("invalid_json") || code.includes("invalid_schema") || code.includes("provider_non_json")) {
+      return { failureClass: "schema", fallbackAllowed: false };
+    }
+  }
+  if (error instanceof Error && String(error.name || "").toLowerCase() === "aborterror") {
+    return { failureClass: "timeout", fallbackAllowed: true };
+  }
+  if (/(timed?\s*out|timeout|etimedout)/i.test(lower)) {
+    return { failureClass: "timeout", fallbackAllowed: true };
+  }
+  if (/(econnreset|econnrefused|enotfound|eai_again|fetch failed|networkerror|network error)/i.test(lower)) {
+    return { failureClass: "network", fallbackAllowed: true };
+  }
+  const httpStatus = lower.match(/\((\d{3})\)/);
+  if (httpStatus && httpStatus[1]) {
+    const status = Number(httpStatus[1]);
+    if (Number.isFinite(status) && status >= 500 && status <= 599) {
+      return { failureClass: "http_5xx", fallbackAllowed: true };
+    }
+    if (Number.isFinite(status) && status >= 400 && status <= 499) {
+      return { failureClass: "http_4xx", fallbackAllowed: false };
+    }
+  }
+  if (/invalid|schema|validation|bad request|context|prompt too large|token/i.test(lower)) {
+    return { failureClass: "validation", fallbackAllowed: false };
+  }
+  return { failureClass: "unknown", fallbackAllowed: false };
 }
 
 export async function callStrategicAdvisorModel(input: {
@@ -224,7 +274,7 @@ export async function callStrategicAdvisorModel(input: {
       const rawResponseText = await response.text();
       if (!response.ok) {
         throw new StrategicAdvisorError(
-          "strategic_advisor_provider_error",
+          `strategic_advisor_provider_http_${response.status}`,
           `Claude request failed (${response.status}): ${rawResponseText.slice(0, 500)}`
         );
       }
@@ -247,11 +297,18 @@ export async function callStrategicAdvisorModel(input: {
 
       return { provider: "claude", model, rawOutput: text, usage: toUsageMetrics(root.usage) };
     } catch (error) {
-      if (String(env.OPENAI_API_KEY || "").trim()) {
-        console.warn("[strategic-advisor] claude_failed_fallback_openai", {
-          error: error instanceof Error ? error.message : String(error)
-        });
-      } else {
+      const openAiConfigured = Boolean(String(env.OPENAI_API_KEY || "").trim());
+      const fallbackEnabled = isCrossProviderFallbackEnabled();
+      const classified = classifyProviderFailure(error);
+      const fallbackAllowed = openAiConfigured && fallbackEnabled && classified.fallbackAllowed;
+      console.warn("[strategic-advisor] provider_failure", {
+        originalProvider: "claude",
+        failureClass: classified.failureClass,
+        fallbackAllowed,
+        fallbackProvider: fallbackAllowed ? "openai" : null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      if (!fallbackAllowed) {
         throw error;
       }
     }
@@ -349,30 +406,76 @@ export async function buildStrategicAdvisorFromContext(input: {
     transcriptPreview: sanitizeForPrompt(transcriptText, 500)
   });
 
-  const systemPrompt = buildStrategicAdvisorSystemPrompt();
-  const userPrompt = buildStrategicAdvisorUserPrompt({ transcript: transcriptText, stageAnalysis: input.stageAnalysis });
-  const modelCaller = input.callModel || callStrategicAdvisorModel;
-  const modelResult = await modelCaller({ systemPrompt, userPrompt });
+  const providerForKey = getAiProviderForStep("strategy");
+  const modelForKey = providerForKey === "claude"
+    ? (String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001")
+    : (String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini");
+  const latestMessageId = await resolveLatestMessageIdForLead(safeLeadId);
+  const cacheKey = latestMessageId
+    ? buildAiStepCacheKey({
+        leadId: safeLeadId,
+        latestMessageId,
+        step: "strategic_advisor",
+        provider: providerForKey,
+        model: modelForKey,
+        promptVersion: STRATEGY_PROMPT_VERSION
+      })
+    : "";
+  if (cacheKey) {
+    const cached = getAiStepCache<StrategicAdvisorResult>(cacheKey);
+    if (cached) {
+      console.info("[strategic-advisor] cache_hit", { leadId: safeLeadId, latestMessageId, provider: providerForKey, model: modelForKey });
+      return {
+        ...cached,
+        usage: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
 
-  console.info("[strategic-advisor] raw-output", {
-    leadId: safeLeadId,
-    provider: modelResult.provider,
-    model: modelResult.model,
-    rawOutput: modelResult.rawOutput
+  const execution = await runAiStepSingleFlight(cacheKey, async () => {
+    const cachedInside = cacheKey ? getAiStepCache<StrategicAdvisorResult>(cacheKey) : null;
+    if (cachedInside) return cachedInside;
+    const budgeted = enforceTokenBudget({
+      step: "strategic_advisor",
+      transcript: transcriptText,
+      context: { stage: compactStageAnalysisForPrompt(input.stageAnalysis) }
+    });
+    const systemPrompt = buildStrategicAdvisorSystemPrompt();
+    const userPrompt = buildStrategicAdvisorUserPrompt({ transcript: budgeted.transcript, stageAnalysis: input.stageAnalysis });
+    const modelCaller = input.callModel || callStrategicAdvisorModel;
+    const modelResult = await modelCaller({ systemPrompt, userPrompt });
+
+    console.info("[strategic-advisor] raw-output", {
+      leadId: safeLeadId,
+      provider: modelResult.provider,
+      model: modelResult.model,
+      rawOutput: modelResult.rawOutput
+    });
+
+    const parsed = parseStrategicAdvisorJson(modelResult.rawOutput);
+    const strategy = validateStrategicAdvisor(parsed);
+
+    const output: StrategicAdvisorResult = {
+      strategy,
+      stageAnalysis: input.stageAnalysis,
+      transcriptLength,
+      messageCount,
+      source: "transcript_fallback",
+      provider: modelResult.provider,
+      model: modelResult.model,
+      usage: modelResult.usage,
+      timestamp: new Date().toISOString()
+    };
+    if (cacheKey) setAiStepCache(cacheKey, output);
+    return output;
   });
-
-  const parsed = parseStrategicAdvisorJson(modelResult.rawOutput);
-  const strategy = validateStrategicAdvisor(parsed);
-
+  if (execution.joined && cacheKey) {
+    console.info("[strategic-advisor] singleflight_join", { leadId: safeLeadId, latestMessageId, cacheKey });
+  }
   return {
-    strategy,
-    stageAnalysis: input.stageAnalysis,
-    transcriptLength,
-    messageCount,
-    source: "transcript_fallback",
-    provider: modelResult.provider,
-    model: modelResult.model,
-    usage: modelResult.usage,
+    ...execution.value,
+    usage: execution.joined ? null : execution.value.usage,
     timestamp: new Date().toISOString()
   };
 }
@@ -389,26 +492,95 @@ export async function buildStrategicAdvisorFromStateDelta(input: {
   if (!safeLeadId) {
     throw new StrategicAdvisorError("invalid_lead_id", "Lead ID is required");
   }
-  const systemPrompt = buildStrategicAdvisorSystemPrompt();
-  const userPrompt = buildStrategicAdvisorStateDeltaPrompt({
-    stageAnalysis: input.stageAnalysis,
-    currentState: input.currentState || {},
-    latestMessageDelta: input.latestMessageDelta || {},
-    recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
+  const providerForKey = getAiProviderForStep("strategy");
+  const modelForKey = providerForKey === "claude"
+    ? (String(env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim() || "claude-haiku-4-5-20251001")
+    : (String(env.OPENAI_MODEL || "gpt-4.1-mini").trim() || "gpt-4.1-mini");
+  const latestMessageId = String((input.latestMessageDelta && input.latestMessageDelta.id) || "").trim() || await resolveLatestMessageIdForLead(safeLeadId);
+  const cacheKey = latestMessageId
+    ? buildAiStepCacheKey({
+        leadId: safeLeadId,
+        latestMessageId,
+        step: "strategic_advisor",
+        provider: providerForKey,
+        model: modelForKey,
+        promptVersion: STRATEGY_PROMPT_VERSION
+      })
+    : "";
+  if (cacheKey) {
+    const cached = getAiStepCache<StrategicAdvisorResult>(cacheKey);
+    if (cached) {
+      console.info("[strategic-advisor] cache_hit_state_delta", { leadId: safeLeadId, latestMessageId, provider: providerForKey, model: modelForKey });
+      return {
+        ...cached,
+        usage: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  const execution = await runAiStepSingleFlight(cacheKey, async () => {
+    const cachedInside = cacheKey ? getAiStepCache<StrategicAdvisorResult>(cacheKey) : null;
+    if (cachedInside) return cachedInside;
+    const deltaText = JSON.stringify({
+      stageAnalysis: input.stageAnalysis,
+      currentState: input.currentState || {},
+      latestMessageDelta: input.latestMessageDelta || {},
+      recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
+    });
+    const budgeted = enforceTokenBudget({
+      step: "strategic_advisor",
+      transcript: deltaText,
+      context: {}
+    });
+    const safeInput = (() => {
+      try {
+        return JSON.parse(budgeted.transcript) as {
+          stageAnalysis: StageDetectionAnalysis;
+          currentState: Record<string, unknown>;
+          latestMessageDelta: Record<string, unknown>;
+          recentMinimalContext: Array<Record<string, unknown>>;
+        };
+      } catch {
+        return {
+          stageAnalysis: input.stageAnalysis,
+          currentState: input.currentState || {},
+          latestMessageDelta: input.latestMessageDelta || {},
+          recentMinimalContext: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext : []
+        };
+      }
+    })();
+    const systemPrompt = buildStrategicAdvisorSystemPrompt();
+    const userPrompt = buildStrategicAdvisorStateDeltaPrompt({
+      stageAnalysis: safeInput.stageAnalysis,
+      currentState: safeInput.currentState || {},
+      latestMessageDelta: safeInput.latestMessageDelta || {},
+      recentMinimalContext: Array.isArray(safeInput.recentMinimalContext) ? safeInput.recentMinimalContext : []
+    });
+    const modelCaller = input.callModel || callStrategicAdvisorModel;
+    const modelResult = await modelCaller({ systemPrompt, userPrompt });
+    const parsed = parseStrategicAdvisorJson(modelResult.rawOutput);
+    const strategy = validateStrategicAdvisor(parsed);
+    const output: StrategicAdvisorResult = {
+      strategy,
+      stageAnalysis: input.stageAnalysis,
+      transcriptLength: JSON.stringify(input.recentMinimalContext || []).length,
+      messageCount: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext.length : 0,
+      source: "state_delta",
+      provider: modelResult.provider,
+      model: modelResult.model,
+      usage: modelResult.usage,
+      timestamp: new Date().toISOString()
+    };
+    if (cacheKey) setAiStepCache(cacheKey, output);
+    return output;
   });
-  const modelCaller = input.callModel || callStrategicAdvisorModel;
-  const modelResult = await modelCaller({ systemPrompt, userPrompt });
-  const parsed = parseStrategicAdvisorJson(modelResult.rawOutput);
-  const strategy = validateStrategicAdvisor(parsed);
+  if (execution.joined && cacheKey) {
+    console.info("[strategic-advisor] singleflight_join_state_delta", { leadId: safeLeadId, latestMessageId, cacheKey });
+  }
   return {
-    strategy,
-    stageAnalysis: input.stageAnalysis,
-    transcriptLength: JSON.stringify(input.recentMinimalContext || []).length,
-    messageCount: Array.isArray(input.recentMinimalContext) ? input.recentMinimalContext.length : 0,
-    source: "state_delta",
-    provider: modelResult.provider,
-    model: modelResult.model,
-    usage: modelResult.usage,
+    ...execution.value,
+    usage: execution.joined ? null : execution.value.usage,
     timestamp: new Date().toISOString()
   };
 }
