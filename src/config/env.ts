@@ -1,6 +1,13 @@
 import "dotenv/config";
 import { z } from "zod";
 
+// Railway (and some CI environments) set unused vars to "" instead of omitting them.
+// z.string().url().optional() rejects "", so we preprocess empty strings to undefined first.
+const optionalUrl = z.preprocess(
+  (v) => (v === "" ? undefined : v),
+  z.string().url().optional()
+);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
@@ -8,7 +15,7 @@ const envSchema = z.object({
   SHOPIFY_API_SECRET: z.string().min(1),
   SHOPIFY_SCOPES: z.string().min(1),
   SHOPIFY_APP_URL: z.string().url(),
-  DATABASE_URL: z.string().url().optional(),
+  DATABASE_URL: optionalUrl,
   DB_SSL_REJECT_UNAUTHORIZED: z.string().optional(),
   GCP_PROJECT_ID: z.string().optional(),
   BIGQUERY_DATASET: z.string().optional(),
@@ -54,9 +61,9 @@ const envSchema = z.object({
   WHATSAPP_LEGACY_ADVISOR_MESSAGE_LIMIT_MAX: z.coerce.number().optional(),
   WHATSAPP_DYNAMIC_DECISION_SHADOW_ENABLED: z.string().optional(),
   WHATSAPP_DYNAMIC_DECISION_DEBUG: z.string().optional(),
-  ZOKO_API_URL: z.string().url().optional(),
-  ZOKO_TEMPLATES_API_URL: z.string().url().optional(),
-  ZOKO_SEND_TEMPLATE_API_URL: z.string().url().optional(),
+  ZOKO_API_URL: optionalUrl,
+  ZOKO_TEMPLATES_API_URL: optionalUrl,
+  ZOKO_SEND_TEMPLATE_API_URL: optionalUrl,
   ZOKO_HISTORY_API_URL: z.string().optional(),
   ZOKO_HISTORY_SYNC_ON_STARTUP: z.string().optional(),
   ZOKO_HISTORY_SYNC_INTERVAL_MINUTES: z.coerce.number().optional(),
