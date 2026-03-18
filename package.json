@@ -5,9 +5,10 @@
   "description": "Custom Shopify app starter with business-specific rules and webhook automation.",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npm run build:agent-control-center-v1 && tsc -p tsconfig.json && npm run copy:runtime-assets",
+    "build": "npm run build:agent-control-center-v1 && npm run build:shopping && tsc -p tsconfig.json && npm run copy:runtime-assets",
     "build:agent-control-center-v1": "tsc -p frontend/mobile-lab-agent-control-center-v1/tsconfig.json && npx esbuild frontend/mobile-lab-agent-control-center-v1/src/main.tsx --bundle --platform=browser --format=esm --target=es2020 --outfile=frontend/mobile-lab-agent-control-center-v1/dist/bundle.js",
-    "copy:runtime-assets": "sh -c 'mkdir -p dist/frontend; if [ -d frontend/blueprint-v2 ]; then cp -R frontend/blueprint-v2 dist/frontend/; fi; if [ -d frontend/mobile-lab-agent-control-center-v1 ]; then cp -R frontend/mobile-lab-agent-control-center-v1 dist/frontend/; fi; if [ -f system-blueprint.json ]; then cp system-blueprint.json dist/system-blueprint.json; fi'",
+    "build:shopping": "mkdir -p frontend/shopping/dist && npx esbuild frontend/shopping/src/main.tsx --bundle --platform=browser --format=esm --target=es2020 --external:react --external:react-dom --external:react/jsx-runtime --outfile=frontend/shopping/dist/bundle.js && npx esbuild frontend/shopping/src/styles.css --bundle --outfile=frontend/shopping/dist/bundle.css",
+    "copy:runtime-assets": "sh -c 'mkdir -p dist/frontend; if [ -d frontend/blueprint-v2 ]; then cp -R frontend/blueprint-v2 dist/frontend/; fi; if [ -d frontend/mobile-lab-agent-control-center-v1 ]; then cp -R frontend/mobile-lab-agent-control-center-v1 dist/frontend/; fi; if [ -d frontend/shopping ]; then cp -R frontend/shopping dist/frontend/; fi; if [ -f system-blueprint.json ]; then cp system-blueprint.json dist/system-blueprint.json; fi'",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "seed:whatsapp": "tsx src/db/seed/seedWhatsappLeads.ts",

@@ -11,6 +11,8 @@ import { registerOrdersDeleteWebhook, webhooksRouter } from "./routes/webhooks.j
 import { blueprintV2Router } from "./routes/blueprintV2.js";
 import { mlAutomationRouter } from "./routes/mlAutomation.js";
 import { agentControlCenterV1Router } from "./routes/agentControlCenterV1.js";
+import { shopifyFilesUploadRouter } from "./routes/shopifyFilesUpload.js";
+import { shoppingBrainRouter } from "./routes/shoppingBrain.js";
 import { addManyOrderSnapshots } from "./services/orderSnapshots.js";
 import { startZokoHistorySyncWorker } from "./services/zokoHistorySyncWorker.js";
 import { startAuto24hFollowupWorker } from "./services/autoFollowUpRule.js";
@@ -18,7 +20,8 @@ import { startOperatorLearningLoopWorker } from "./services/operatorLearningLoop
 import "./shopify/client.js";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use((req, res, next) => {
   const shopParam = typeof req.query.shop === "string" ? req.query.shop : "";
@@ -1169,9 +1172,11 @@ app.use(whatsappLabRouter);
 app.use("/health", healthRouter);
 app.use("/webhooks", webhooksRouter);
 app.use(zokoWebhookRouter);
+app.use(shopifyFilesUploadRouter);
 app.use(blueprintV2Router);
 app.use(mlAutomationRouter);
 app.use(agentControlCenterV1Router);
+app.use(shoppingBrainRouter);
 
 async function loadRecentOrdersFromDBIntoMemory(): Promise<void> {
   if (!isDbEnabled()) return;
