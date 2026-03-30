@@ -1,455 +1,511 @@
 import PDFDocument from "pdfkit";
-import type { OrderSnapshot } from "./orderSnapshots.js";
-const BFL_LOGO_URL = "https://cdn.shopify.com/s/files/1/0551/5558/9305/files/logoo.svg?v=1727895516";
-const BFL_LOGO_FALLBACK_URL = "https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750";
+import type { OrderArticle, OrderSnapshot } from "./orderSnapshots.js";
+
 const PT_PER_MM = 72 / 25.4;
+
+const COLORS = {
+  text: "#111111",
+  muted: "#6f6a63",
+  faint: "#b8b1a8",
+  line: "#e7e1d8",
+  lineStrong: "#d8d0c5",
+  ivory: "#fbf8f2",
+  ivoryStrong: "#f4efe6",
+  accent: "#2a2520",
+  danger: "#8f3d2f"
+} as const;
+
+type FinancialSummary = {
+  subtotal: number;
+  discount: number;
+  total: number;
+  paid: number;
+  outstanding: number;
+  articlesSubtotal: number;
+};
+
+type DocumentPreset = {
+  internalTitle: string;
+  visibleTitle: string;
+  eyebrow: string;
+  footerNote: string;
+};
 
 function mm(value: number): number {
   return value * PT_PER_MM;
 }
 
-function paymentStatusLabel(order: OrderSnapshot): string {
-  const status = String(order.financialStatus || "").toLowerCase();
-  if (status === "paid" || Number(order.outstandingAmount || 0) <= 0) return "Paid";
-  if (status === "partially_paid") return "Partially Paid";
-  return "Pending";
+function toNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function safeText(value: unknown, fallback: string): string {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return safeText(value, "Date non renseignee");
+  const dateLabel = date.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  });
+  const timeLabel = date.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  return `${dateLabel} · ${timeLabel}`;
+}
+
+function formatMoney(value: number, currency: string): string {
+  const amount = Math.abs(Number(value || 0));
+  const formatted = new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+  const code = String(currency || "MAD").trim().toUpperCase() || "MAD";
+  return `${value < 0 ? "-" : ""}${formatted} ${code}`;
 }
 
 function paymentStatusFr(order: OrderSnapshot): string {
   const status = String(order.financialStatus || "").toLowerCase();
-  if (status === "paid" || Number(order.outstandingAmount || 0) <= 0) return "Payée";
-  if (status === "partially_paid") return "Partiellement payée";
-  return "Paiement en attente";
+  if (status === "paid" || Number(order.outstandingAmount || 0) <= 0) return "Reglee";
+  if (status === "partially_paid") return "Partiellement reglee";
+  return "En attente de reglement";
 }
 
-function formatMoney(value: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency || "MAD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(Number(value || 0));
+function paymentMethodFr(order: OrderSnapshot): string {
+  const gateway = String(order.paymentGateway || "").trim();
+  if (!gateway) return "Non renseigne";
+  return gateway;
 }
 
-function invoiceTitle(template: string): string {
-  if (template === "coin") return "Coin de Couture Invoice";
-  if (template === "showroom_receipt") return "Reçu showroom";
-  if (template === "international_invoice") return "International Couture Invoice";
-  return "Invoice";
+function documentPreset(templateChoice: string): DocumentPreset {
+  if (templateChoice === "showroom_receipt") {
+    return {
+      internalTitle: "Recu showroom",
+      visibleTitle: "Recu showroom",
+      eyebrow: "Document de paiement",
+      footerNote: "Creation couture editee pour la cliente et la Maison."
+    };
+  }
+  if (templateChoice === "international_invoice") {
+    return {
+      internalTitle: "Facture couture internationale",
+      visibleTitle: "Facture couture internationale",
+      eyebrow: "Document commercial",
+      footerNote: "Document edite pour suivi de commande et reglement."
+    };
+  }
+  if (templateChoice === "coin") {
+    return {
+      internalTitle: "Facture atelier",
+      visibleTitle: "Facture atelier",
+      eyebrow: "Document commercial",
+      footerNote: "Document edite par la Maison pour confirmation de commande."
+    };
+  }
+  return {
+    internalTitle: "Facture couture",
+    visibleTitle: "Facture couture",
+    eyebrow: "Document commercial",
+    footerNote: "Document edite par la Maison pour confirmation de commande."
+  };
 }
 
-function drawCard(
+function computeFinancialSummary(order: OrderSnapshot): FinancialSummary {
+  const articlesSubtotal = (order.articles || []).reduce((sum, article) => {
+    const quantity = Math.max(0, toNumber(article.quantity || 0));
+    const unitPrice = Math.max(0, toNumber(article.unitPrice || 0));
+    return sum + quantity * unitPrice;
+  }, 0);
+
+  let subtotal = Math.max(0, toNumber(order.subtotalAmount));
+  if (!(subtotal > 0)) subtotal = articlesSubtotal;
+  if (articlesSubtotal > subtotal) subtotal = articlesSubtotal;
+
+  let discount = Math.max(0, toNumber(order.discountAmount));
+  if (discount > subtotal) discount = subtotal;
+
+  let total = Math.max(0, toNumber(order.totalAmount));
+  const expectedTotal = Math.max(0, subtotal - discount);
+  if (!(total > 0)) {
+    total = expectedTotal;
+  } else if (Math.abs(total - expectedTotal) > 0.01) {
+    total = expectedTotal;
+  }
+
+  const payments = Array.isArray(order.paymentTransactions) ? order.paymentTransactions : [];
+  const paidFromTransactions = payments.reduce((sum, entry) => {
+    const sameCurrency = !entry.currency || String(entry.currency).toUpperCase() === String(order.currency || "MAD").toUpperCase();
+    return sameCurrency ? sum + Math.max(0, toNumber(entry.amount)) : sum;
+  }, 0);
+
+  const rawOutstanding = clamp(Math.max(0, toNumber(order.outstandingAmount)), 0, total);
+  const paidFromOutstanding = clamp(total - rawOutstanding, 0, total);
+  const paid = clamp(paidFromTransactions > 0 ? paidFromTransactions : paidFromOutstanding, 0, total);
+  const outstanding = clamp(total - paid, 0, total);
+
+  return {
+    subtotal,
+    discount,
+    total,
+    paid,
+    outstanding,
+    articlesSubtotal
+  };
+}
+
+function ensureSpace(doc: PDFKit.PDFDocument, neededHeight: number): void {
+  const bottomLimit = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + neededHeight <= bottomLimit) return;
+  doc.addPage();
+}
+
+function ensureSpaceWithHeader(
   doc: PDFKit.PDFDocument,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  title: string,
-  lines: string[]
+  neededHeight: number,
+  order: OrderSnapshot,
+  preset: DocumentPreset,
+  financials: FinancialSummary
 ): void {
-  doc.roundedRect(x, y, width, height, 8).lineWidth(1).strokeColor("#e6e6e6").stroke();
-  doc.fillColor("#1f1f1f").font("Helvetica-Bold").fontSize(10).text(title, x + 10, y + 10, { width: width - 20 });
-  let cy = y + 30;
-  doc.font("Helvetica").fontSize(9.5).fillColor("#2a2a2a");
-  lines.forEach((line) => {
-    if (!line) {
-      cy += 6;
-      return;
-    }
-    doc.text(line, x + 10, cy, { width: width - 20 });
-    cy = doc.y + 2;
+  const bottomLimit = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + neededHeight <= bottomLimit) return;
+  doc.addPage();
+  drawHeader(doc, order, preset, financials);
+}
+
+function drawRule(doc: PDFKit.PDFDocument, y?: number): void {
+  const drawY = y ?? doc.y;
+  doc
+    .moveTo(doc.page.margins.left, drawY)
+    .lineTo(doc.page.width - doc.page.margins.right, drawY)
+    .lineWidth(0.8)
+    .strokeColor(COLORS.line)
+    .stroke();
+}
+
+function writeMutedLabel(doc: PDFKit.PDFDocument, text: string, x: number, y: number, width: number): void {
+  doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8.5).text(text.toUpperCase(), x, y, {
+    width,
+    characterSpacing: 1
   });
 }
 
-function formatReceiptDateTime(createdAt: string): string {
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return String(createdAt || "");
-  const dateLabel = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
-  const timeLabel = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  return `${dateLabel} ${timeLabel}`;
+function writeValue(doc: PDFKit.PDFDocument, text: string, x: number, y: number, width: number, align: "left" | "right" = "left"): void {
+  doc.fillColor(COLORS.text).font("Helvetica").fontSize(11).text(text, x, y, { width, align });
 }
 
-function drawKeyValueRows(
-  doc: PDFKit.PDFDocument,
-  x: number,
-  y: number,
-  width: number,
-  rows: Array<{ key: string; value: string }>
-): number {
-  let cursorY = y;
-  for (const row of rows) {
-    doc.fillColor("#666666").font("Helvetica").fontSize(9.5).text(row.key, x, cursorY, { width: width * 0.42 });
-    doc.fillColor("#1f1f1f").font("Helvetica-Bold").fontSize(9.5).text(row.value, x + width * 0.44, cursorY, {
-      width: width * 0.56
-    });
-    cursorY += mm(6.4);
-  }
-  return cursorY;
+function writeStrongValue(doc: PDFKit.PDFDocument, text: string, x: number, y: number, width: number, align: "left" | "right" = "left"): void {
+  doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11).text(text, x, y, { width, align });
 }
 
-async function drawShowroomReceiptPdf(doc: PDFKit.PDFDocument, order: OrderSnapshot): Promise<void> {
+function drawHeader(doc: PDFKit.PDFDocument, order: OrderSnapshot, preset: DocumentPreset, financials: FinancialSummary): void {
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
-  const contentWidth = right - left;
+  const width = right - left;
   const top = doc.page.margins.top;
-  const paidAmount = Math.max(0, Number(order.totalAmount || 0) - Number(order.outstandingAmount || 0));
-  const subtotalAmount = Math.max(0, Number(order.subtotalAmount ?? order.totalAmount ?? 0));
-  const discountAmount = Math.max(0, Number(order.discountAmount || 0));
-  const paymentGateway = String(order.paymentGateway || "Non précisée");
-  const shippingAddress = String(order.shippingAddress || "Aucune adresse de livraison renseignée");
-  const paymentLabel = paymentStatusFr(order);
 
-  doc.fillColor("#111111");
-  doc.font("Times-Bold").fontSize(20).text("MAISON BOUCHRA FILALI LAHLOU", left, top + mm(4), {
-    width: contentWidth,
+  doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.5).text(preset.eyebrow.toUpperCase(), left, top, {
+    width,
+    align: "center",
+    characterSpacing: 1.2
+  });
+
+  doc.font("Times-Bold").fontSize(24).text("MAISON BOUCHRA FILALI LAHLOU", left, top + mm(6), {
+    width,
     align: "center"
   });
-  doc.fillColor("#666666").font("Helvetica").fontSize(10.5).text(
-    "Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com",
+
+  doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.5).text(
+    "Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com",
     left,
-    top + mm(14),
-    { width: contentWidth, align: "center" }
+    top + mm(15.5),
+    { width, align: "center" }
   );
-  doc.fillColor("#111111").font("Helvetica").fontSize(14).text("RECU SHOWROOM", left, top + mm(23), {
-    width: contentWidth,
-    align: "center"
+
+  drawRule(doc, top + mm(24));
+
+  const metaTop = top + mm(30);
+  const colGap = mm(8);
+  const leftColW = width * 0.54;
+  const rightColW = width - leftColW - colGap;
+  const rightColX = left + leftColW + colGap;
+
+  doc.fillColor(COLORS.text).font("Times-Roman").fontSize(19).text(preset.visibleTitle, left, metaTop, {
+    width: leftColW
+  });
+  doc.fillColor(COLORS.muted).font("Helvetica").fontSize(10).text("Edition du " + formatDateTime(order.createdAt), left, metaTop + mm(8), {
+    width: leftColW
   });
 
-  const cardGap = mm(4);
-  const cardY = top + mm(33);
-  const cardW = (contentWidth - cardGap) / 2;
-  const cardH = mm(44);
+  writeMutedLabel(doc, "Commande", rightColX, metaTop, rightColW);
+  writeStrongValue(doc, safeText(order.name, "Non renseignee"), rightColX, metaTop + mm(4.8), rightColW);
+  writeMutedLabel(doc, "Statut", rightColX, metaTop + mm(13), rightColW);
+  writeValue(doc, paymentStatusFr(order), rightColX, metaTop + mm(17.8), rightColW);
+  writeMutedLabel(doc, "Total", rightColX, metaTop + mm(26), rightColW);
+  writeStrongValue(doc, formatMoney(financials.total, order.currency || "MAD"), rightColX, metaTop + mm(30.8), rightColW);
 
-  doc.roundedRect(left, cardY, cardW, cardH, 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
-  doc.roundedRect(left + cardW + cardGap, cardY, cardW, cardH, 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
-
-  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11).text("COMMANDE", left + 12, cardY + 12);
-  drawKeyValueRows(doc, left + 12, cardY + 30, cardW - 24, [
-    { key: "Numero", value: String(order.name || "-") },
-    { key: "Date", value: formatReceiptDateTime(order.createdAt) },
-    { key: "Statut de paiement", value: paymentLabel },
-    { key: "Mode de paiement", value: paymentGateway }
-  ]);
-
-  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11).text("CLIENT", left + cardW + cardGap + 12, cardY + 12);
-  drawKeyValueRows(doc, left + cardW + cardGap + 12, cardY + 30, cardW - 24, [
-    { key: "Nom", value: String(order.customerLabel || "Client inconnu") },
-    { key: "Telephone", value: String(order.customerPhone || "-") },
-    { key: "E-mail", value: String(order.customerEmail || "-") },
-    { key: "Adresse", value: shippingAddress }
-  ]);
-
-  let y = cardY + cardH + mm(8);
-  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11);
-  doc.text("QTE", left + 10, y);
-  doc.text("ARTICLE", left + 58, y);
-  doc.text("MONTANT", right - 120, y, { width: 110, align: "right" });
-  y += mm(4.5);
-  doc.moveTo(left, y).lineTo(right, y).lineWidth(1).strokeColor("#e8e8e8").stroke();
-  y += mm(4);
-
-  for (const article of order.articles) {
-    const amount = Number(article.unitPrice || 0) * Number(article.quantity || 0);
-    doc.fillColor("#1f1f1f").font("Helvetica").fontSize(10.5).text(String(article.quantity || 1), left + 10, y, { width: 36 });
-    doc.font("Helvetica-Bold").text(article.title, left + 58, y, { width: contentWidth - 190 });
-    doc.text(formatMoney(amount, order.currency), right - 120, y, { width: 110, align: "right" });
-    y += mm(6.8);
-    doc.moveTo(left, y).lineTo(right, y).lineWidth(1).strokeColor("#ededed").stroke();
-    y += mm(4.2);
-  }
-
-  const totalsW = mm(68);
-  const totalsX = right - totalsW;
-  const totalsY = y + mm(2);
-  let lineY = totalsY + 12;
-  doc.roundedRect(totalsX, totalsY, totalsW, discountAmount > 0 ? mm(34) : mm(28), 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
-  doc.fillColor("#1f1f1f").font("Helvetica").fontSize(10.5);
-  doc.text("Sous-total", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
-  doc.text(formatMoney(subtotalAmount, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
-  lineY += mm(6.4);
-  if (discountAmount > 0) {
-    doc.text("Remise", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
-    doc.text(`-${formatMoney(discountAmount, order.currency)}`, totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
-    lineY += mm(6.4);
-  }
-  doc.text("Total", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
-  doc.text(formatMoney(order.totalAmount || 0, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
-  lineY += mm(6.4);
-  doc.text("Total paye", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
-  doc.text(formatMoney(paidAmount, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
-  lineY += mm(6.4);
-  doc.font("Helvetica-Bold");
-  doc.text("Reste a payer", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
-  doc.text(
-    Number(order.outstandingAmount || 0) > 0 ? formatMoney(order.outstandingAmount || 0, order.currency) : "-",
-    totalsX + totalsW - 110,
-    lineY,
-    { width: 98, align: "right" }
-  );
+  doc.y = metaTop + mm(42);
 }
 
-async function loadRemoteImageBuffer(url: string): Promise<Buffer | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const ab = await res.arrayBuffer();
-    return Buffer.from(ab);
-  } catch {
-    return null;
-  }
-}
+function drawClientAndOrderBlocks(
+  doc: PDFKit.PDFDocument,
+  order: OrderSnapshot,
+  preset: DocumentPreset,
+  financials: FinancialSummary
+): void {
+  ensureSpaceWithHeader(doc, mm(42), order, preset, financials);
 
-async function drawClassicPdf(doc: PDFKit.PDFDocument, order: OrderSnapshot): Promise<void> {
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
-  const contentWidth = right - left;
-  const top = doc.page.margins.top;
+  const width = right - left;
+  const gap = mm(8);
+  const colW = (width - gap) / 2;
+  const startY = doc.y;
+  const boxHeight = mm(33);
 
-  doc.font("Helvetica").fillColor("#212121");
-  const logoCandidates = [BFL_LOGO_URL, BFL_LOGO_FALLBACK_URL];
-  const logoW = mm(52);
-  const logoH = mm(10);
-  let logoDrawn = false;
-  for (const candidate of logoCandidates) {
-    const logoBuffer = await loadRemoteImageBuffer(candidate);
-    if (!logoBuffer) continue;
-    try {
-      doc.image(logoBuffer, left, top + mm(0.5), { fit: [logoW, logoH], valign: "center" });
-      logoDrawn = true;
-      break;
-    } catch {
-      // Try next candidate (SVG can fail depending on renderer support).
-    }
-  }
-  if (!logoDrawn) {
-    doc.fontSize(11).fillColor("#b88b53").text("BOUCHRA FILALI LAHLOU", left, top + mm(1.5));
-  }
-  doc.fillColor("#3f4348").font("Helvetica-Bold").fontSize(13).text("Bouchra Filali Lahlou", left + mm(44), top + mm(0.8));
-  doc.fillColor("#3f4348").font("Helvetica").fontSize(10).text("www.bouchrafilalilahlou.com", left + mm(44), top + mm(8));
-  doc.font("Helvetica-Bold").fontSize(20).fillColor("#1b1b1b").text("Facture", left, top + mm(18));
+  doc.rect(left, startY, colW, boxHeight).fill(COLORS.ivory);
+  doc.rect(left + colW + gap, startY, colW, boxHeight).fill(COLORS.ivory);
+  doc.strokeColor(COLORS.line);
+  doc.lineWidth(0.8).rect(left, startY, colW, boxHeight).stroke();
+  doc.lineWidth(0.8).rect(left + colW + gap, startY, colW, boxHeight).stroke();
 
-  const createdAt = new Date(order.createdAt);
-  const createdLabel = Number.isNaN(createdAt.getTime())
-    ? String(order.createdAt || "")
-    : createdAt.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  writeMutedLabel(doc, "Cliente", left + mm(4), startY + mm(4), colW - mm(8));
+  writeStrongValue(doc, safeText(order.customerLabel, "Cliente non renseignee"), left + mm(4), startY + mm(10), colW - mm(8));
+  writeValue(doc, safeText(order.customerPhone, "Telephone non renseigne"), left + mm(4), startY + mm(16.5), colW - mm(8));
+  writeValue(doc, safeText(order.customerEmail, "E-mail non renseigne"), left + mm(4), startY + mm(22.5), colW - mm(8));
 
-  const badgeW = mm(24);
-  const badgeH = mm(20);
-  const badgeX = right - badgeW;
-  doc.roundedRect(badgeX, top, badgeW, badgeH, mm(2.5)).fillAndStroke("#f5f5f5", "#e1e1e1");
-  doc.fillColor("#5c5c5c").font("Helvetica").fontSize(10).text("Facture", badgeX + mm(3.2), top + mm(2.8));
-  doc.fillColor("#1f1f1f").font("Helvetica-Bold").fontSize(14).text(order.name, badgeX + mm(3.2), top + mm(9.2));
-  doc.fillColor("#3d3d3d")
-    .font("Helvetica")
-    .fontSize(11)
-    .text(`Statut : ${paymentStatusFr(order)}`, right - mm(48), top + mm(24), { width: mm(48), align: "right" });
-  doc.fillColor("#3d3d3d").font("Helvetica").fontSize(11).text(createdLabel, right - mm(48), top + mm(30), { width: mm(48), align: "right" });
+  writeMutedLabel(doc, "Livraison et paiement", left + colW + gap + mm(4), startY + mm(4), colW - mm(8));
+  writeStrongValue(doc, paymentMethodFr(order), left + colW + gap + mm(4), startY + mm(10), colW - mm(8));
+  writeValue(
+    doc,
+    safeText(order.shippingAddress, "Adresse de livraison non renseignee"),
+    left + colW + gap + mm(4),
+    startY + mm(16.5),
+    colW - mm(8)
+  );
 
-  const cardY = top + mm(43);
-  const gap = mm(3.5);
-  const cardW = (contentWidth - gap * 3) / 4;
-  const cardH = mm(44);
+  doc.y = startY + boxHeight + mm(8);
+}
 
-  drawCard(doc, left, cardY, cardW, cardH, "De", [
-    "www.bouchrafilalilahlou.com",
-    "19/21 Rond-point des Sports",
-    "Casablanca, 20250"
-  ]);
-  drawCard(doc, left + cardW + gap, cardY, cardW, cardH, "Client", [
-    order.customerLabel || "-",
-    order.customerPhone || "-",
-    order.customerEmail || ""
-  ]);
-  drawCard(doc, left + (cardW + gap) * 2, cardY, cardW, cardH, "Adresse de Facturation", [
-    " ",
-    order.billingAddress || "Aucune adresse de facturation renseignée"
-  ]);
-  drawCard(doc, left + (cardW + gap) * 3, cardY, cardW, cardH, "Adresse de Livraison", [
-    order.shippingAddress || "Aucune adresse de livraison renseignée"
-  ]);
+function drawArticlesHeader(doc: PDFKit.PDFDocument): void {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const width = right - left;
+  const qtyW = mm(18);
+  const amountW = mm(42);
+  const articleX = left + qtyW + mm(4);
+  const articleW = width - qtyW - amountW - mm(8);
 
-  let y = cardY + cardH + mm(7);
-  doc.moveTo(left, y).lineTo(right, y).lineWidth(1).strokeColor("#ececec").stroke();
-  y += mm(4);
+  writeMutedLabel(doc, "Qte", left, doc.y, qtyW);
+  writeMutedLabel(doc, "Piece", articleX, doc.y, articleW);
+  writeMutedLabel(doc, "Montant", right - amountW, doc.y, amountW);
+  doc.y += mm(5);
+  drawRule(doc);
+  doc.y += mm(3.5);
+}
 
-  const headerTop = y - mm(1.2);
-  const headerHeight = mm(9.2);
-  doc.rect(left, headerTop, contentWidth, headerHeight).fill("#f5f5f5");
-  const headerTextY = headerTop + mm(2.3);
-  doc.font("Helvetica-Bold").fontSize(11).fillColor("#666").text("Qté", left + 8, headerTextY);
-  doc.text("Article", left + 70, headerTextY);
-  doc.text("Prix", right - 120, headerTextY, { width: 100, align: "right" });
-  doc.moveTo(left, headerTop + headerHeight).lineTo(right, headerTop + headerHeight).lineWidth(1).strokeColor("#ececec").stroke();
-  y = headerTop + headerHeight + mm(3.1);
+function articleRowHeight(doc: PDFKit.PDFDocument, article: OrderArticle, articleWidth: number): number {
+  const titleHeight = doc.heightOfString(safeText(article.title, "Piece couture"), {
+    width: articleWidth,
+    align: "left"
+  });
+  return Math.max(mm(10), titleHeight + mm(4.5));
+}
 
-  doc.font("Helvetica").fontSize(10.5).fillColor("#222");
-  order.articles.forEach((article) => {
-    const amount = Number(article.unitPrice || 0) * Number(article.quantity || 0);
-    doc.text(String(article.quantity), left + 8, y, { width: 48 });
-    doc.font("Helvetica-Bold").text(article.title, left + 70, y, { width: contentWidth - 200 });
-    doc.font("Helvetica-Bold").text(formatMoney(amount, order.currency), right - 120, y, { width: 100, align: "right" });
-    y += mm(6);
-    doc.moveTo(left, y).lineTo(right, y).lineWidth(1).strokeColor("#f0f0f0").stroke();
-    y += mm(3);
-    doc.font("Helvetica");
+function drawArticleRow(
+  doc: PDFKit.PDFDocument,
+  article: OrderArticle,
+  currency: string,
+  order: OrderSnapshot,
+  preset: DocumentPreset,
+  financials: FinancialSummary
+): void {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const width = right - left;
+  const qtyW = mm(18);
+  const amountW = mm(42);
+  const articleX = left + qtyW + mm(4);
+  const articleW = width - qtyW - amountW - mm(8);
+  const rowHeight = articleRowHeight(doc, article, articleW);
+  const amount = Math.max(0, toNumber(article.quantity)) * Math.max(0, toNumber(article.unitPrice));
+  ensureSpaceWithHeader(doc, rowHeight + mm(6) + mm(10), order, preset, financials);
+  const startY = doc.y;
+
+  doc.fillColor(COLORS.text).font("Helvetica").fontSize(10.5).text(String(Math.max(0, toNumber(article.quantity))), left, startY, {
+    width: qtyW
+  });
+  doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10.8).text(safeText(article.title, "Piece couture"), articleX, startY, {
+    width: articleW
+  });
+  doc.fillColor(COLORS.text).font("Helvetica").fontSize(10.5).text(formatMoney(amount, currency), right - amountW, startY, {
+    width: amountW,
+    align: "right"
   });
 
-  const subtotal = Number(order.totalAmount || 0);
-  const paid = Math.max(0, subtotal - Number(order.outstandingAmount || 0));
-  const outstanding = Number(order.outstandingAmount || 0);
+  doc.y = Math.max(doc.y, startY + rowHeight);
+  drawRule(doc, doc.y);
+  doc.y += mm(3.5);
+}
 
-  const labelX = right - 220;
-  const valueX = right - 120;
-  doc.font("Helvetica").fontSize(10).fillColor("#333");
-  doc.text("Sous-total", labelX, y, { width: 100, align: "right" });
-  doc.font("Helvetica-Bold").text(formatMoney(subtotal, order.currency), valueX, y, { width: 100, align: "right" });
-  y += mm(6.8);
-  doc.font("Helvetica-Bold").fontSize(11).text("Total", labelX, y, { width: 100, align: "right" });
-  doc.text(formatMoney(subtotal, order.currency), valueX, y, { width: 100, align: "right" });
-  y += mm(6.8);
-  doc.font("Helvetica").fontSize(10).text("Total payé", labelX, y, { width: 100, align: "right" });
-  doc.font("Helvetica-Bold").text(formatMoney(paid, order.currency), valueX, y, { width: 100, align: "right" });
+function drawArticlesTable(
+  doc: PDFKit.PDFDocument,
+  order: OrderSnapshot,
+  preset: DocumentPreset,
+  financials: FinancialSummary
+): void {
+  drawArticlesHeader(doc);
+  const articles = Array.isArray(order.articles) && order.articles.length > 0
+    ? order.articles
+    : [{ id: "empty", title: "Aucune piece ajoutee", quantity: 0, unitPrice: 0, status: "pending" as const }];
 
-  if (outstanding > 0) {
-    y += mm(6.8);
-    doc.font("Helvetica-Bold").fontSize(11).fillColor("#b41c18").text("Montant impayé", labelX, y, {
-      width: 100,
+  for (const article of articles) {
+    if (doc.y + mm(18) > doc.page.height - doc.page.margins.bottom - mm(55)) {
+      doc.addPage();
+      drawHeader(doc, order, preset, financials);
+      drawArticlesHeader(doc);
+    }
+    drawArticleRow(doc, article, order.currency || "MAD", order, preset, financials);
+  }
+}
+
+function drawTotalsBlock(
+  doc: PDFKit.PDFDocument,
+  order: OrderSnapshot,
+  financials: FinancialSummary,
+  preset: DocumentPreset
+): void {
+  ensureSpaceWithHeader(doc, mm(50), order, preset, financials);
+
+  const blockWidth = mm(78);
+  const x = doc.page.width - doc.page.margins.right - blockWidth;
+  const y = doc.y + mm(3);
+  const lineGap = mm(6.4);
+  const height = y + (financials.discount > 0 ? mm(34) : mm(28));
+
+  doc.rect(x, y, blockWidth, height - y).fill(COLORS.ivory);
+  doc.strokeColor(COLORS.lineStrong).lineWidth(0.8).rect(x, y, blockWidth, height - y).stroke();
+
+  let rowY = y + mm(6);
+  writeMutedLabel(doc, "Sous-total", x + mm(4), rowY, blockWidth - mm(8));
+  writeStrongValue(doc, formatMoney(financials.subtotal, order.currency || "MAD"), x + mm(4), rowY + mm(4.2), blockWidth - mm(8), "right");
+  rowY += lineGap;
+
+  if (financials.discount > 0) {
+    writeMutedLabel(doc, "Remise", x + mm(4), rowY, blockWidth - mm(8));
+    writeValue(doc, formatMoney(-financials.discount, order.currency || "MAD"), x + mm(4), rowY + mm(4.2), blockWidth - mm(8), "right");
+    rowY += lineGap;
+  }
+
+  writeMutedLabel(doc, "Total", x + mm(4), rowY, blockWidth - mm(8));
+  writeStrongValue(doc, formatMoney(financials.total, order.currency || "MAD"), x + mm(4), rowY + mm(4.2), blockWidth - mm(8), "right");
+  rowY += lineGap;
+
+  writeMutedLabel(doc, "Total regle", x + mm(4), rowY, blockWidth - mm(8));
+  writeValue(doc, formatMoney(financials.paid, order.currency || "MAD"), x + mm(4), rowY + mm(4.2), blockWidth - mm(8), "right");
+  rowY += lineGap;
+
+  doc.fillColor(financials.outstanding > 0 ? COLORS.danger : COLORS.text).font("Helvetica-Bold").fontSize(11.2).text(
+    "Reste a payer",
+    x + mm(4),
+    rowY,
+    { width: blockWidth - mm(8) }
+  );
+  doc.text(
+    financials.outstanding > 0 ? formatMoney(financials.outstanding, order.currency || "MAD") : "-",
+    x + mm(4),
+    rowY,
+    { width: blockWidth - mm(8), align: "right" }
+  );
+
+  doc.y = height + mm(8);
+}
+
+function drawClosingNote(doc: PDFKit.PDFDocument, order: OrderSnapshot, financials: FinancialSummary, preset: DocumentPreset): void {
+  ensureSpaceWithHeader(doc, mm(24), order, preset, financials);
+
+  const left = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const note =
+    financials.outstanding > 0
+      ? "Nous vous remercions pour votre confiance. Le solde restant pourra etre regle selon les modalites convenues avec la Maison."
+      : "Nous vous remercions pour votre confiance. Ce document confirme le reglement de votre commande couture.";
+
+  doc.rect(left, doc.y, width, mm(18)).fill(COLORS.ivoryStrong);
+  doc.strokeColor(COLORS.line).lineWidth(0.8).rect(left, doc.y, width, mm(18)).stroke();
+  doc.fillColor(COLORS.text).font("Helvetica").fontSize(10.2).text(note, left + mm(4), doc.y + mm(5.3), {
+    width: width - mm(8),
+    align: "left"
+  });
+  doc.y += mm(24);
+}
+
+function addFooters(doc: PDFKit.PDFDocument, preset: DocumentPreset): void {
+  const range = doc.bufferedPageRange();
+  for (let index = 0; index < range.count; index += 1) {
+    doc.switchToPage(range.start + index);
+    const left = doc.page.margins.left;
+    const right = doc.page.width - doc.page.margins.right;
+    const footerY = doc.page.height - doc.page.margins.bottom + mm(2);
+    drawRule(doc, footerY - mm(3));
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8.5).text(preset.footerNote, left, footerY, {
+      width: right - left - mm(24)
+    });
+    doc.text(`Page ${index + 1}/${range.count}`, right - mm(24), footerY, {
+      width: mm(24),
       align: "right"
     });
-    doc.text(formatMoney(outstanding, order.currency), valueX, y, { width: 100, align: "right" });
-    doc.fillColor("#222");
   }
+}
 
-  if (outstanding > 0) {
-    y += mm(9.8);
-    doc
-      .roundedRect(left, y, contentWidth, mm(24), mm(2.8))
-      .lineWidth(1)
-      .dash(2, { space: 2 })
-      .strokeColor("#dddddd")
-      .stroke()
-      .undash();
-    doc.font("Helvetica-Bold").fontSize(11).fillColor("#1f1f1f").text("Coordonnées Bancaires", left + 10, y + 10);
-    doc.font("Helvetica").fontSize(10).fillColor("#666");
-    if (order.bankDetails && Object.values(order.bankDetails).some(Boolean)) {
-      const lines = [
-        order.bankDetails.beneficiaryName ? `Bénéficiaire: ${order.bankDetails.beneficiaryName}` : "",
-        order.bankDetails.bankName ? `Banque: ${order.bankDetails.bankName}` : "",
-        order.bankDetails.accountNumber ? `Compte: ${order.bankDetails.accountNumber}` : "",
-        order.bankDetails.swiftBic ? `SWIFT/BIC: ${order.bankDetails.swiftBic}` : "",
-        order.bankDetails.routingNumber ? `Code: ${order.bankDetails.routingNumber}` : "",
-        order.bankDetails.paymentReference ? `Référence: ${order.bankDetails.paymentReference}` : ""
-      ].filter(Boolean);
-      doc.text(lines.join(" · "), left + 10, y + 30, { width: contentWidth - 20 });
-    } else {
-      doc.text("Aucune coordonnée bancaire renseignée.", left + 10, y + 30);
-    }
-    y += mm(28);
-  } else {
-    y += mm(8.2);
-    const boxGap = mm(4.5);
-    const boxW = (contentWidth - boxGap) / 2;
-    const boxH = mm(36);
+async function renderPremiumDocument(
+  doc: PDFKit.PDFDocument,
+  order: OrderSnapshot,
+  templateChoice: string
+): Promise<void> {
+  const preset = documentPreset(templateChoice);
+  const financials = computeFinancialSummary(order);
 
-    doc.roundedRect(left, y, boxW, boxH, 8).lineWidth(1).strokeColor("#d7e9e0").fillAndStroke("#edf8f2", "#d7e9e0");
-    doc.fillColor("#128a4a").font("Helvetica-Bold").fontSize(11).text("Paiement reçu", left + 12, y + 12);
-    doc.fillColor("#1f1f1f").font("Helvetica").fontSize(10);
-    doc.text("Montant réglé : ", left + 12, y + 36, { continued: true });
-    doc.font("Helvetica-Bold").text(formatMoney(paid, order.currency));
-    doc.font("Helvetica").text("Statut financier : ", left + 12, y + 54, { continued: true });
-    doc.font("Helvetica-Bold").text(paymentStatusFr(order));
-    doc.font("Helvetica").text("Méthode : ", left + 12, y + 72, { continued: true });
-    doc.font("Helvetica-Bold").text(order.paymentGateway || "manual");
-
-    const box2X = left + boxW + boxGap;
-    doc.roundedRect(box2X, y, boxW, boxH, 8).lineWidth(1).strokeColor("#e6e6e6").stroke();
-    doc.fillColor("#1f1f1f").font("Helvetica-Bold").fontSize(11).text("Récapitulatif des paiements", box2X + 12, y + 12);
-    const headY = y + mm(13.8);
-    doc.roundedRect(box2X + 12, headY, boxW - 24, 24, 0).fill("#f5f5f5");
-    const col1X = box2X + 18;
-    const col2X = box2X + boxW - 160;
-    const col3X = box2X + boxW - 78;
-    doc.fillColor("#666").font("Helvetica-Bold").fontSize(9.5);
-    doc.text("Paiement", col1X, headY + 7, { width: col2X - col1X - 12 });
-    doc.text("Montant", col2X, headY + 7, { width: 72, align: "right" });
-    doc.text("Statut", col3X, headY + 7, { width: 62, align: "right" });
-    doc.fillColor("#1f1f1f").font("Helvetica").fontSize(10);
-    doc.text("Paiement", col1X, headY + 32, { width: col2X - col1X - 12 });
-    doc.text(formatMoney(paid, order.currency), col2X, headY + 32, { width: 72, align: "right" });
-    doc.text("Success", col3X, headY + 32, { width: 62, align: "right" });
-
-    y += boxH + mm(5.2);
-  }
-
-  doc.roundedRect(left, y, contentWidth, mm(25), mm(2.8)).lineWidth(1).strokeColor("#e6e6e6").stroke();
-  doc.font("Helvetica-Bold").fontSize(11).fillColor("#1f1f1f").text("Merci pour votre confiance.", left + 10, y + 12);
-  doc
-    .font("Helvetica")
-    .fontSize(10)
-    .fillColor("#444")
-    .text(
-      "Chaque pièce est confectionnée sur mesure avec le plus grand soin. Si vous avez des questions concernant cette facture ou votre commande, n’hésitez pas à nous contacter.",
-      left + 10,
-      y + 30,
-      { width: contentWidth - 20 }
-    );
-
-  doc.fillColor("#666").font("Helvetica").fontSize(10).text("Document généré par www.bouchrafilalilahlou.com", left, y + mm(30.5));
+  drawHeader(doc, order, preset, financials);
+  drawClientAndOrderBlocks(doc, order, preset, financials);
+  drawArticlesTable(doc, order, preset, financials);
+  drawTotalsBlock(doc, order, financials, preset);
+  drawClosingNote(doc, order, financials, preset);
+  addFooters(doc, preset);
 }
 
 export async function buildOrderInvoicePdf(order: OrderSnapshot, templateChoice: string): Promise<Buffer> {
+  const preset = documentPreset(templateChoice);
   const doc = new PDFDocument({
     size: "A4",
-    margins: { top: mm(12), left: mm(12), right: mm(12), bottom: mm(12) },
+    margins: { top: mm(18), left: mm(18), right: mm(18), bottom: mm(18) },
+    bufferPages: true,
     info: {
-      Title: `${invoiceTitle(templateChoice)} ${order.name}`,
+      Title: `${preset.internalTitle} ${safeText(order.name, "")}`.trim(),
       Author: "Maison Bouchra Filali Lahlou",
-      Subject: "Order invoice"
+      Subject: preset.internalTitle
     }
   });
 
   const chunks: Buffer[] = [];
   doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
 
-  if (templateChoice === "classic") {
-    await drawClassicPdf(doc, order);
-  } else if (templateChoice === "showroom_receipt") {
-    await drawShowroomReceiptPdf(doc, order);
-  } else {
-    doc.fontSize(20).font("Helvetica-Bold").text(templateChoice === "coin" ? "COIN DE COUTURE" : "MAISON BOUCHRA FILALI LAHLOU");
-    doc.moveDown(0.2);
-    doc
-      .fontSize(10)
-      .fillColor("#666666")
-      .font("Helvetica")
-      .text(
-        templateChoice === "coin"
-          ? "Casablanca · ICE 002031076000092 · RC 401313 · contact@bouchrafilalilahlou.com"
-          : "Casablanca, Morocco · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com"
-      )
-      .fillColor("#111111");
-    doc.moveDown(1.2);
-    doc.fontSize(14).font("Helvetica-Bold").text(invoiceTitle(templateChoice).toUpperCase());
-    doc.moveDown(0.8);
-    doc.font("Helvetica").fontSize(10).text(`Order: ${order.name}`);
-    doc.text(`Payment Status: ${paymentStatusLabel(order)}`);
-    doc.text(`Client: ${order.customerLabel || "-"}`);
-    doc.moveDown(0.8);
-    order.articles.forEach((article) => {
-      const amount = Number(article.unitPrice || 0) * Number(article.quantity || 0);
-      doc.text(`${article.quantity} x ${article.title} — ${formatMoney(amount, order.currency)}`);
-    });
-    doc.moveDown(0.8);
-    doc.font("Helvetica-Bold").text(`Total: ${formatMoney(order.totalAmount || 0, order.currency)}`);
-    if (Number(order.outstandingAmount || 0) > 0) {
-      doc.text(`Outstanding: ${formatMoney(order.outstandingAmount || 0, order.currency)}`);
-    }
-  }
+  await renderPremiumDocument(doc, order, templateChoice);
 
   const bufferPromise = new Promise<Buffer>((resolve, reject) => {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
   });
+
   doc.end();
   return await bufferPromise;
 }
