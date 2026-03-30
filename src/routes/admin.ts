@@ -3769,9 +3769,22 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         try {
           const latestOrder = await fetchFreshOrderSnapshot();
           const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
-          syncStatusEl.textContent = "Préparation de l’envoi facture...";
+          syncStatusEl.textContent = "Préparation du document...";
           const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails, initialTemplateChoice);
           if (!modalResult) {
+            syncStatusEl.textContent = "Envoi annulé.";
+            return;
+          }
+
+          const templateChoice = modalResult.templateChoice || "classic";
+          const documentLabel = templateChoice === "showroom_receipt" ? "reçu" : "facture";
+          const destinationLabel = recipientPhone === maisonPhone
+            ? "Bouchra Filali Lahlou"
+            : (latestOrder.customerLabel || "le client");
+          const confirmed = window.confirm(
+            "Confirmer l'envoi du " + documentLabel + " pour " + latestOrder.name + " a " + destinationLabel + " ?"
+          );
+          if (!confirmed) {
             syncStatusEl.textContent = "Envoi annulé.";
             return;
           }
@@ -3789,7 +3802,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              templateChoice: modalResult.templateChoice || "classic",
+              templateChoice,
               recipientPhone: recipientPhone
             })
           });
@@ -3799,7 +3812,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
             return;
           }
-          syncStatusEl.textContent = "Facture envoyée via API template.";
+          syncStatusEl.textContent = documentLabel.charAt(0).toUpperCase() + documentLabel.slice(1) + " envoye via API template.";
         } catch (error) {
           syncStatusEl.textContent =
             "Envoi API échoué: " +
