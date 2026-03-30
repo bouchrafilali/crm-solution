@@ -51,6 +51,13 @@ export type OrderSnapshot = {
   articles: OrderArticle[];
 };
 
+export type OrderPaymentEntry = {
+  gateway: string;
+  amount: number;
+  currency: string;
+  occurredAt?: string;
+};
+
 type ShopifyLineItem = {
   id?: string | number;
   title?: string;
@@ -76,6 +83,7 @@ export type ShopifyOrderPayload = {
   created_at?: string;
   subtotal_price?: string | number;
   total_price?: string | number;
+  current_total_price?: string | number;
   total_discounts?: string | number;
   current_subtotal_price?: string | number;
   current_total_discounts?: string | number;
@@ -149,6 +157,14 @@ function inferOutstandingAmount(payload: ShopifyOrderPayload, totalAmount: numbe
   return existing?.outstandingAmount ?? totalAmount;
 }
 
+function inferTotalAmount(payload: ShopifyOrderPayload, existing?: OrderSnapshot): number {
+  const preferred = payload.current_total_price ?? payload.total_price;
+  if (preferred !== undefined) {
+    return Math.max(0, toNumber(preferred));
+  }
+  return Math.max(0, Number(existing?.totalAmount ?? 0));
+}
+
 function inferSubtotalAmount(payload: ShopifyOrderPayload, totalAmount: number, existing?: OrderSnapshot): number {
   const preferred = payload.current_subtotal_price ?? payload.subtotal_price;
   if (preferred !== undefined) {
@@ -197,21 +213,21 @@ function toArticles(payload: ShopifyOrderPayload, existing?: OrderSnapshot): Ord
           : toNumber(item.quantity);
       if (effectiveQuantity <= 0) return null;
 
-    const id = item.id ? String(item.id) : `line-${index}-${String(item.title ?? "item")}`;
-    const existingStatus =
-      existing?.articles.find((article) => article.id === id)?.status ?? inferArticleStatus(item);
+      const id = item.id ? String(item.id) : `line-${index}-${String(item.title ?? "item")}`;
+      const existingStatus =
+        existing?.articles.find((article) => article.id === id)?.status ?? inferArticleStatus(item);
 
-    return {
-      id,
-      title: String(item.title ?? "Untitled article"),
-      quantity: Math.max(1, effectiveQuantity),
-      unitPrice:
-        item.price !== undefined
-          ? Math.max(0, toNumber(item.price))
-          : existing?.articles.find((article) => article.id === id)?.unitPrice ?? 0,
-      status: existingStatus
-    };
-  })
+      return {
+        id,
+        title: String(item.title ?? "Untitled article"),
+        quantity: Math.max(1, effectiveQuantity),
+        unitPrice:
+          item.price !== undefined
+            ? Math.max(0, toNumber(item.price))
+            : existing?.articles.find((article) => article.id === id)?.unitPrice ?? 0,
+        status: existingStatus
+      };
+    })
     .filter((item): item is OrderArticle => Boolean(item));
 
   return incoming;
@@ -315,6 +331,23 @@ function paymentBreakdownFromPayload(
   return existing?.paymentBreakdown;
 }
 
+function sumPaymentEntries(
+  entries: Array<OrderPaymentEntry | { gateway: string; amount: number; currency: string }> | undefined,
+  fallbackCurrency: string
+): { amount: number; currency: string } | null {
+  if (!entries || entries.length === 0) return null;
+  const totals = new Map<string, number>();
+  entries.forEach((entry) => {
+    const amount = Math.max(0, toNumber(entry.amount));
+    if (amount <= 0) return;
+    const currency = String(entry.currency || fallbackCurrency || "MAD").toUpperCase();
+    totals.set(currency, (totals.get(currency) || 0) + amount);
+  });
+  if (totals.size !== 1) return null;
+  const [currency, amount] = Array.from(totals.entries())[0];
+  return { currency, amount };
+}
+
 function paymentTransactionsFromPayload(
   payload: ShopifyOrderPayload,
   fallbackCurrency: string,
@@ -354,10 +387,25 @@ function locationFromPayload(payload: ShopifyOrderPayload, existing?: OrderSnaps
 function upsertOrder(payload: ShopifyOrderPayload): OrderSnapshot {
   const id = payload.id ? String(payload.id) : `unknown-${Date.now()}-${Math.random()}`;
   const existing = ordersById.get(id);
-  const totalAmount = payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0;
+  const totalAmount = inferTotalAmount(payload, existing);
   const subtotalAmount = inferSubtotalAmount(payload, totalAmount, existing);
   const discountAmount = inferDiscountAmount(payload, subtotalAmount, totalAmount, existing);
-  const outstandingAmount = inferOutstandingAmount(payload, totalAmount, existing);
+  const paymentTransactions = paymentTransactionsFromPayload(
+    payload,
+    payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
+    existing
+  );
+  const paymentSum = sumPaymentEntries(paymentTransactions, payload.currency ? String(payload.currency) : existing?.currency ?? "USD");
+  const inferredOutstanding = inferOutstandingAmount(payload, totalAmount, existing);
+  const outstandingAmount = paymentSum
+    ? Math.max(0, totalAmount - paymentSum.amount)
+    : inferredOutstanding;
+  const paymentBreakdown = paymentBreakdownFromPayload(
+    payload,
+    paymentSum ? paymentSum.amount : Math.max(0, totalAmount - outstandingAmount),
+    payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
+    existing
+  );
 
   const next: OrderSnapshot = {
     id,
@@ -368,17 +416,8 @@ function upsertOrder(payload: ShopifyOrderPayload): OrderSnapshot {
     shippingAddress: shippingAddressFromPayload(payload, existing),
     billingAddress: billingAddressFromPayload(payload, existing),
     paymentGateway: paymentGatewayFromPayload(payload, existing),
-    paymentBreakdown: paymentBreakdownFromPayload(
-      payload,
-      Math.max(0, totalAmount - outstandingAmount),
-      payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
-      existing
-    ),
-    paymentTransactions: paymentTransactionsFromPayload(
-      payload,
-      payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
-      existing
-    ),
+    paymentBreakdown,
+    paymentTransactions,
     bankDetails: existing?.bankDetails,
     orderLocation: locationFromPayload(payload, existing),
     createdAt: payload.created_at ? String(payload.created_at) : existing?.createdAt ?? new Date().toISOString(),

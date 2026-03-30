@@ -6,6 +6,7 @@ type ShopifyOrder = {
   created_at: string;
   subtotal_price?: string;
   total_price: string;
+  current_total_price?: string;
   total_discounts?: string;
   current_subtotal_price?: string;
   current_total_discounts?: string;
@@ -138,7 +139,7 @@ export async function fetchOrdersForPeriod(
   const shop = assertShopifyShop();
   const token = await getShopifyAdminToken(shop);
   const fields =
-    "id,name,created_at,subtotal_price,total_price,total_discounts,current_subtotal_price,current_total_discounts,total_outstanding,currency,financial_status,fulfillment_status,source_name,location_id,customer,shipping_address,billing_address,payment_gateway_names,transactions,line_items";
+    "id,name,created_at,subtotal_price,total_price,current_total_price,total_discounts,current_subtotal_price,current_total_discounts,total_outstanding,currency,financial_status,fulfillment_status,source_name,location_id,customer,shipping_address,billing_address,payment_gateway_names,transactions,line_items";
   let url: string | null = `https://${shop}/admin/api/2026-01/orders.json?status=any&limit=250&fields=${fields}&created_at_min=${encodeURIComponent(fromIso)}&created_at_max=${encodeURIComponent(toIso)}`;
   const orders: ShopifyOrder[] = [];
   let pageCount = 0;
