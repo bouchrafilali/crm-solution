@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import type { OrderArticle, OrderSnapshot } from "./orderSnapshots.js";
 
 const PT_PER_MM = 72 / 25.4;
+const RECEIPT_LOGO_URL = "https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750";
 const RECEIPT_PDF_MARGINS_MM = {
   top: 18,
   right: 20,
@@ -56,6 +57,8 @@ type ReceiptHtmlViewModel = {
   hasOutstanding: boolean;
 };
 
+let embeddedReceiptLogoPromise: Promise<string | null> | null = null;
+
 function mm(value: number): number {
   return value * PT_PER_MM;
 }
@@ -81,6 +84,24 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+async function getEmbeddedReceiptLogoDataUrl(): Promise<string | null> {
+  if (!embeddedReceiptLogoPromise) {
+    embeddedReceiptLogoPromise = (async () => {
+      try {
+        const response = await fetch(RECEIPT_LOGO_URL);
+        if (!response.ok) return null;
+        const arrayBuffer = await response.arrayBuffer();
+        const contentType = response.headers.get("content-type") || "image/png";
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+        return `data:${contentType};base64,${base64}`;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return embeddedReceiptLogoPromise;
 }
 
 function pageLeft(doc: PDFKit.PDFDocument): number {
@@ -239,7 +260,7 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     ".footer{margin-top:18px;padding-top:10px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#2b2724}" +
     "@media (max-width: 820px){.page{width:auto;min-height:auto;padding:10mm 10mm 9mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:32px 1fr 120px;gap:8px}.brand img{max-width:100%}.doc-title{font-size:22px}.piece{font-size:13px}.balance-label{font-size:17px}.balance-value{font-size:16px}}</style></head><body><div class='page'>" +
     "<div class='overline'>" + escapeHtml(view.tone.overline) + "</div>" +
-    "<div class='brand'><img src='https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750' alt='Bouchra Filali Lahlou' /></div>" +
+    "<div class='brand'><img src='" + RECEIPT_LOGO_URL + "' alt='Bouchra Filali Lahlou' /></div>" +
     "<div class='meta'>Casablanca · info@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
     "<div class='rule'></div>" +
     "<div class='hero'><div><div class='doc-title'>" + escapeHtml(view.tone.title) + "</div><div class='doc-sub'>Édité le " + escapeHtml(view.dateLabel) + "</div></div><div class='meta-stack'>" +
@@ -584,6 +605,10 @@ function drawShowroomFooter(doc: PDFKit.PDFDocument, tone: DocumentTone, y: numb
 export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
   const puppeteerModule = await import("puppeteer");
   const puppeteer = puppeteerModule.default;
+  const embeddedLogoDataUrl = await getEmbeddedReceiptLogoDataUrl();
+  const printableHtml = embeddedLogoDataUrl
+    ? html.replaceAll(RECEIPT_LOGO_URL, embeddedLogoDataUrl)
+    : html;
   const localMacChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
     || (process.platform === "darwin" && existsSync(localMacChrome) ? localMacChrome : undefined);
@@ -596,7 +621,7 @@ export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 1810, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "domcontentloaded" });
+    await page.setContent(printableHtml, { waitUntil: "domcontentloaded" });
     await page.emulateMediaType("screen");
     const pdf = await page.pdf({
       format: "A4",
