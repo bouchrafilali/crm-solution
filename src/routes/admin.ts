@@ -82,7 +82,8 @@ const articleStatusSchema = z.enum(["pending", "in_progress", "prepared", "shipp
 const invoiceTemplateSchema = z.enum(["classic", "coin", "showroom_receipt", "international_invoice"]);
 
 const sendInvoiceTemplateSchema = z.object({
-  templateChoice: invoiceTemplateSchema.optional()
+  templateChoice: invoiceTemplateSchema.optional(),
+  recipientPhone: z.string().optional()
 });
 
 function buildBaselineDailyPointsFromForecast(
@@ -1687,6 +1688,27 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       color: #6d7175;
       font-size: 13px;
     }
+    .template-toggle-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .template-toggle-btn {
+      border: 1px solid #c7c9cc;
+      border-radius: 10px;
+      background: #fff;
+      color: #202223;
+      min-height: 42px;
+      padding: 0 16px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .template-toggle-btn.active {
+      background: #202223;
+      color: #fff;
+      border-color: #202223;
+    }
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -1917,12 +1939,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     <div id="bankDetailsModal" class="modal-backdrop hidden">
       <div class="modal-card">
         <h3 class="modal-title">Coordonnées bancaires bénéficiaire (facture)</h3>
-        <div class="status">Choisissez le format de compte puis complétez les champs à afficher dans la facture.</div>
+        <div class="status">Choisissez le modèle de document puis complétez les champs à afficher.</div>
         <div style="margin-top:10px;">
-          <label for="bankTemplateSelect">Modèle de facture</label>
-          <select id="bankTemplateSelect">
-            <option value="classic">Version 1 (Facture)</option>
-          </select>
+          <label>Modèle de document</label>
+          <div class="template-toggle-row">
+            <button id="bankTemplateInvoiceBtn" type="button" class="template-toggle-btn">Facture</button>
+            <button id="bankTemplateReceiptBtn" type="button" class="template-toggle-btn">Reçu</button>
+          </div>
         </div>
         <div id="bankProfileGroup" class="modal-grid">
           <div>
@@ -1971,13 +1994,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         </div>
         <div id="bankProfileHelp" class="modal-help"></div>
         <div id="bankModalPreviewWrap" class="modal-preview-wrap hidden">
-          <div class="modal-preview-head">Aperçu de la facture</div>
+          <div id="bankModalPreviewHead" class="modal-preview-head">Aperçu du document</div>
           <iframe id="bankModalPreviewFrame" class="modal-preview-frame"></iframe>
         </div>
         <div class="modal-actions">
           <button id="bankModalCancelBtn" type="button" class="btn-secondary">Annuler</button>
           <button id="bankModalPreviewBtn" type="button" class="btn-secondary">Aperçu</button>
-          <button id="bankModalConfirmBtn" type="button">Utiliser pour la facture</button>
+          <button id="bankModalConfirmBtn" type="button">Utiliser ce document</button>
         </div>
       </div>
     </div>
@@ -2035,7 +2058,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const kpiShippedEl = document.getElementById("kpiShipped");
     const bankModalEl = document.getElementById("bankDetailsModal");
     const bankProfileTypeEl = document.getElementById("bankProfileType");
-    const bankTemplateSelectEl = document.getElementById("bankTemplateSelect");
+    const bankTemplateInvoiceBtn = document.getElementById("bankTemplateInvoiceBtn");
+    const bankTemplateReceiptBtn = document.getElementById("bankTemplateReceiptBtn");
     const bankBeneficiaryNameEl = document.getElementById("bankBeneficiaryName");
     const bankNameInputEl = document.getElementById("bankNameInput");
     const swiftInputEl = document.getElementById("swiftInput");
@@ -2052,6 +2076,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const bankModalPreviewBtn = document.getElementById("bankModalPreviewBtn");
     const bankModalConfirmBtn = document.getElementById("bankModalConfirmBtn");
     const bankModalPreviewWrap = document.getElementById("bankModalPreviewWrap");
+    const bankModalPreviewHead = document.getElementById("bankModalPreviewHead");
     const bankModalPreviewFrame = document.getElementById("bankModalPreviewFrame");
     const bankProfileGroupEl = document.getElementById("bankProfileGroup");
     const bankFieldsGroupEl = document.getElementById("bankFieldsGroup");
@@ -2064,6 +2089,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     let syncInFlight = false;
     let syncQueued = false;
     let invoicePreviewBlobUrl = "";
+    let currentBankTemplateChoice = "classic";
     let chartRangeFrom = "";
     let chartRangeTo = "";
     let orderSearchTerm = "";
@@ -2652,11 +2678,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       return "other";
     }
 
-    function openInvoiceModal(order, showBankSection) {
+    function openInvoiceModal(order, showBankSection, initialTemplateChoice = "classic") {
       return new Promise((resolve) => {
         const existing = order.bankDetails || {};
         bankProfileTypeEl.value = guessBankProfile(existing);
-        bankTemplateSelectEl.value = "classic";
+        currentBankTemplateChoice = initialTemplateChoice === "showroom_receipt" ? "showroom_receipt" : "classic";
         bankBeneficiaryNameEl.value = existing.beneficiaryName || "";
         bankNameInputEl.value = existing.bankName || "";
         swiftInputEl.value = existing.swiftBic || "";
@@ -2669,12 +2695,15 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         bankProfileGroupEl.classList.toggle("hidden", !showBankSection);
         bankModalPreviewWrap.classList.add("hidden");
         bankModalPreviewFrame.removeAttribute("src");
+        syncBankTemplateUi();
         bankModalEl.classList.remove("hidden");
 
         const cleanup = () => {
           bankModalConfirmBtn.onclick = null;
           bankModalCancelBtn.onclick = null;
           bankModalPreviewBtn.onclick = null;
+          bankTemplateInvoiceBtn.onclick = null;
+          bankTemplateReceiptBtn.onclick = null;
           bankProfileTypeEl.onchange = null;
           if (invoicePreviewBlobUrl) {
             URL.revokeObjectURL(invoicePreviewBlobUrl);
@@ -2683,6 +2712,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         };
 
         bankProfileTypeEl.onchange = () => applyBankProfileUI(bankProfileTypeEl.value);
+        bankTemplateInvoiceBtn.onclick = () => {
+          currentBankTemplateChoice = "classic";
+          syncBankTemplateUi();
+        };
+        bankTemplateReceiptBtn.onclick = () => {
+          currentBankTemplateChoice = "showroom_receipt";
+          syncBankTemplateUi();
+        };
         bankModalCancelBtn.onclick = () => {
           bankModalEl.classList.add("hidden");
           cleanup();
@@ -2702,7 +2739,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
                     paymentReference: referenceInputEl.value.trim() || undefined
                   }
                 : undefined,
-            templateChoice: bankTemplateSelectEl.value
+            templateChoice: currentBankTemplateChoice
           };
           const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
           if (invoicePreviewBlobUrl) {
@@ -2728,7 +2765,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
                     paymentReference: referenceInputEl.value.trim() || undefined
                   }
                 : undefined,
-            templateChoice: bankTemplateSelectEl.value
+            templateChoice: currentBankTemplateChoice
           };
           bankModalEl.classList.add("hidden");
           cleanup();
@@ -3620,8 +3657,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             paymentInfoRows.join("") +
             "</div>" +
             "<div class='line' style='margin-top:10px; gap:8px;'>" +
-              "<button type='button' id='invoiceBtn' class='save-order-btn' style='margin-top:0;'>Imprimer la facture</button>" +
-              "<button type='button' id='whatsappBtn' class='save-order-btn' style='margin-top:0;'>Envoyer facture via WhatsApp</button>" +
+              "<button type='button' id='printInvoiceBtn' class='save-order-btn' style='margin-top:0;'>Imprimer facture</button>" +
+              "<button type='button' id='printReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer reçu</button>" +
+              "<button type='button' id='sendClientBtn' class='save-order-btn' style='margin-top:0;'>Envoyer au client</button>" +
+              "<button type='button' id='sendMaisonBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer à Bouchra</button>" +
             "</div>" +
           "</div>" +
         "</div>";
@@ -3711,8 +3750,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const quickContainer = detail.querySelector("#quickOrderForm");
       quickContainer.appendChild(form);
       const reviewBtn = detail.querySelector("#reviewBtn");
-      const whatsappBtn = detail.querySelector("#whatsappBtn");
-      const invoiceBtn = detail.querySelector("#invoiceBtn");
+      const sendClientBtn = detail.querySelector("#sendClientBtn");
+      const sendMaisonBtn = detail.querySelector("#sendMaisonBtn");
+      const printInvoiceBtn = detail.querySelector("#printInvoiceBtn");
+      const printReceiptBtn = detail.querySelector("#printReceiptBtn");
+      const maisonPhone = "+212 6 27 37 68 82";
 
       async function fetchFreshOrderSnapshot() {
         const res = await fetch("/admin/api/orders/" + encodeURIComponent(order.id));
@@ -3723,12 +3765,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         return parsed.data;
       }
 
-      whatsappBtn.addEventListener("click", async () => {
+      async function sendDocument(recipientPhone, initialTemplateChoice) {
         try {
           const latestOrder = await fetchFreshOrderSnapshot();
           const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
           syncStatusEl.textContent = "Préparation de l’envoi facture...";
-          const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails);
+          const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails, initialTemplateChoice);
           if (!modalResult) {
             syncStatusEl.textContent = "Envoi annulé.";
             return;
@@ -3746,7 +3788,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id) + "/send-invoice-template", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ templateChoice: modalResult.templateChoice || "classic" })
+            body: JSON.stringify({
+              templateChoice: modalResult.templateChoice || "classic",
+              recipientPhone: recipientPhone
+            })
           });
           const parsed = await readJsonSafe(sendRes);
           if (!sendRes.ok) {
@@ -3760,6 +3805,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             "Envoi API échoué: " +
             (error instanceof Error ? error.message : "Erreur inattendue");
         }
+      }
+
+      sendClientBtn.addEventListener("click", async () => {
+        await sendDocument(order.customerPhone || "", "classic");
+      });
+
+      sendMaisonBtn.addEventListener("click", async () => {
+        await sendDocument(maisonPhone, "classic");
       });
 
       reviewBtn.addEventListener("click", async () => {
@@ -3783,10 +3836,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         }
       });
 
-      invoiceBtn.addEventListener("click", async () => {
+      async function printDocument(initialTemplateChoice) {
         const latestOrder = await fetchFreshOrderSnapshot();
         const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
-        const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails);
+        const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails, initialTemplateChoice);
         if (!modalResult) return;
         if (modalResult.bankDetails) {
           await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id), {
@@ -3806,6 +3859,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         popup.document.close();
         popup.focus();
         popup.print();
+      }
+
+      printInvoiceBtn.addEventListener("click", async () => {
+        await printDocument("classic");
+      });
+
+      printReceiptBtn.addEventListener("click", async () => {
+        await printDocument("showroom_receipt");
       });
 
       form.addEventListener("submit", async (e) => {
@@ -15756,9 +15817,10 @@ adminRouter.post("/api/orders/:orderId/send-invoice-template", async (req, res) 
     return res.status(404).json({ error: "Commande introuvable." });
   }
 
-  const phone = normalizePhoneForApi(order.customerPhone || "");
+  const requestedPhone = typeof parsed.data.recipientPhone === "string" ? parsed.data.recipientPhone : "";
+  const phone = normalizePhoneForApi(requestedPhone || order.customerPhone || "");
   if (!phone) {
-    return res.status(400).json({ error: "Numéro client invalide pour envoi API." });
+    return res.status(400).json({ error: "Numéro destinataire invalide pour envoi API." });
   }
 
   const templateChoice = parsed.data.templateChoice ?? "classic";
