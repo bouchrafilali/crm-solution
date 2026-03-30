@@ -398,7 +398,7 @@ function drawTableHeader(doc: PDFKit.PDFDocument): void {
   const right = pageRight(doc);
   const width = pageWidth(doc);
   const qtyW = mm(16);
-  const amountW = mm(42);
+  const amountW = mm(50);
   const articleX = left + qtyW + mm(6);
   const articleW = width - qtyW - amountW - mm(10);
   const top = doc.y;
@@ -421,7 +421,7 @@ function drawArticleRow(doc: PDFKit.PDFDocument, article: OrderArticle, currency
   const right = pageRight(doc);
   const width = pageWidth(doc);
   const qtyW = mm(16);
-  const amountW = mm(42);
+  const amountW = mm(50);
   const articleX = left + qtyW + mm(6);
   const articleW = width - qtyW - amountW - mm(10);
   const title = textOr(article.title, "Piece couture");
@@ -485,7 +485,7 @@ function drawFinancialSummary(doc: PDFKit.PDFDocument, order: OrderSnapshot, ton
     y += mm(6.5);
   }
 
-  mutedLabel(doc, "Total de la piece", x, y, labelW);
+  mutedLabel(doc, "Total", x, y, labelW);
   strongText(doc, formatMoney(financials.total, order.currency || "MAD"), x + labelW, y, amountW, "right", 10.9);
   y += mm(6.5);
 
@@ -518,13 +518,15 @@ function drawFooterNote(doc: PDFKit.PDFDocument, tone: DocumentTone): void {
   doc.y += mm(8);
 }
 
-function addPageFooters(doc: PDFKit.PDFDocument): void {
+function addPageFooters(doc: PDFKit.PDFDocument, templateChoice: string): void {
+  if (templateChoice === "showroom_receipt") return;
+
   const range = doc.bufferedPageRange();
   for (let index = 0; index < range.count; index += 1) {
     doc.switchToPage(range.start + index);
     const left = pageLeft(doc);
     const right = pageRight(doc);
-    const y = doc.page.height - doc.page.margins.bottom + mm(1.5);
+    const y = doc.page.height - mm(11);
     doc.fillColor(COLORS.faint).font("Helvetica").fontSize(7.5).text("Maison Bouchra Filali Lahlou", left, y, {
       width: pageWidth(doc) / 2
     });
@@ -544,7 +546,7 @@ async function renderDocument(doc: PDFKit.PDFDocument, order: OrderSnapshot, tem
   drawArticles(doc, order, tone, financials);
   drawFinancialSummary(doc, order, tone, financials);
   drawFooterNote(doc, tone);
-  addPageFooters(doc);
+  addPageFooters(doc, templateChoice);
 }
 
 export async function buildOrderInvoicePdf(order: OrderSnapshot, templateChoice: string): Promise<Buffer> {
