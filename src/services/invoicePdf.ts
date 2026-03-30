@@ -18,7 +18,8 @@ const COLORS = {
   line: "#ded6cb",
   lineSoft: "#ebe5dc",
   paper: "#fcfaf6",
-  accent: "#5f5346"
+  accent: "#5f5346",
+  brandGold: "#b78b49"
 } as const;
 
 type FinancialSummary = {
@@ -130,8 +131,8 @@ function paymentMethodLabel(order: OrderSnapshot): string {
 function toneForTemplate(templateChoice: string): DocumentTone {
   if (templateChoice === "showroom_receipt") {
     return {
-      title: "Reçu de maison",
-      overline: "Édition privée",
+      title: "Reçu",
+      overline: "Maison",
       footer: "Avec nos remerciements."
     };
   }
@@ -194,12 +195,12 @@ function buildReceiptHtmlViewModel(order: OrderSnapshot, templateChoice: string)
     paymentMethod: paymentMethodLabel(order),
     customerName: textOr(order.customerLabel, "Cliente non renseignée"),
     customerPhone: textOr(order.customerPhone, "Téléphone non renseigné"),
-    customerEmail: textOr(order.customerEmail, "E-mail non renseigne"),
+    customerEmail: textOr(order.customerEmail, "E-mail non renseigné"),
     shippingAddress: textOr(order.shippingAddress, "Adresse de livraison non renseignée"),
     currency: order.currency || "MAD",
     articles: (Array.isArray(order.articles) && order.articles.length > 0
       ? order.articles
-      : [{ id: "empty", title: "Aucune piece ajoutee", quantity: 0, unitPrice: 0, status: "pending" as const }]).map((article) => ({
+      : [{ id: "empty", title: "Aucune pièce ajoutée", quantity: 0, unitPrice: 0, status: "pending" as const }]).map((article) => ({
         quantity: Math.max(0, toNumber(article.quantity)),
         title: textOr(article.title, "Pièce couture"),
         amountLabel: formatMoney(lineTotal(article), order.currency || "MAD")
@@ -219,10 +220,10 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
   const view = buildReceiptHtmlViewModel(order, templateChoice);
   return (
     "<!doctype html><html><head><meta charset='utf-8' /><title>" + escapeHtml(view.tone.title + " " + view.reference) + "</title>" +
-    "<style>@page{size:A4;margin:0}html,body{margin:0;padding:0;background:#fcfaf6;color:#121212;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}" +
-    "*{box-sizing:border-box}.page{width:210mm;min-height:297mm;margin:0 auto;padding:12mm 14mm 10mm;background:#fcfaf6;overflow:hidden}.overline{text-align:center;font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
-    ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:28px;letter-spacing:.045em;line-height:1.08;margin-top:8px}" +
-    ".meta{text-align:center;color:#756e66;font-size:11px;margin-top:6px}.rule{height:1px;background:#ebe5dc;margin:16px 0 18px}" +
+    "<style>@page{size:A4;margin:0}html,body{margin:0;padding:0;width:210mm;min-height:297mm;background:#fcfaf6 !important;color:#121212;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+    "*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{width:210mm;min-height:297mm;margin:0;padding:12mm 14mm 10mm;background:#fcfaf6 !important;overflow:hidden}.overline{text-align:center;font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
+    ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:31px;letter-spacing:.12em;line-height:1.02;margin-top:8px;color:#b78b49;text-transform:uppercase;font-weight:500}" +
+    ".meta{text-align:center;color:#756e66;font-size:11px;margin-top:7px}.rule{height:1px;background:#ebe5dc;margin:16px 0 18px}" +
     ".hero{display:grid;grid-template-columns:1.45fr .85fr;gap:28px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.05;font-weight:500}" +
     ".doc-sub{margin-top:6px;color:#756e66;font-size:12px}.meta-stack{padding-top:1px}.meta-label{font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;margin-top:10px}" +
     ".meta-label:first-child{margin-top:0}.meta-value{margin-top:3px;font-size:13px;line-height:1.28}.meta-value.strong{font-weight:700}" +
@@ -238,8 +239,8 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     ".footer{margin-top:18px;padding-top:10px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#2b2724}" +
     "@media (max-width: 820px){.page{width:auto;min-height:auto;padding:10mm 10mm 9mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:32px 1fr 120px;gap:8px}.brand{font-size:24px}.doc-title{font-size:22px}.piece{font-size:13px}.balance-label{font-size:17px}.balance-value{font-size:16px}}</style></head><body><div class='page'>" +
     "<div class='overline'>" + escapeHtml(view.tone.overline) + "</div>" +
-    "<div class='brand'>Maison Bouchra Filali Lahlou</div>" +
-    "<div class='meta'>Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
+    "<div class='brand'>Bouchra Filali Lahlou</div>" +
+    "<div class='meta'>Casablanca · info@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
     "<div class='rule'></div>" +
     "<div class='hero'><div><div class='doc-title'>" + escapeHtml(view.tone.title) + "</div><div class='doc-sub'>Édité le " + escapeHtml(view.dateLabel) + "</div></div><div class='meta-stack'>" +
     "<div class='meta-label'>Référence</div><div class='meta-value strong'>" + escapeHtml(view.reference) + "</div>" +
@@ -255,8 +256,8 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     "</div>" +
     "<div class='financials'><div class='financial-copy'>" + escapeHtml(
       view.hasOutstanding
-        ? "Le solde restant pourra etre regle selon les modalites convenues avec la Maison."
-        : "Ce document confirme le reglement de votre commande couture."
+        ? "Le solde restant pourra être réglé selon les modalités convenues avec la Maison."
+        : "Ce document confirme le règlement de votre commande couture."
     ) + "</div><div class='totals'>" +
       "<div class='totals-row'><div class='totals-label'>Sous-total</div><div class='totals-value'>" + escapeHtml(view.subtotalLabel) + "</div></div>" +
     (view.discountLabel ? "<div class='totals-row'><div class='totals-label'>Remise</div><div class='totals-value'>" + escapeHtml(view.discountLabel) + "</div></div>" : "") +
