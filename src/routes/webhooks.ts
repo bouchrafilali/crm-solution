@@ -252,11 +252,24 @@ webhooksRouter.post("/orders/updated", async (req, res) => {
     return res.status(401).json({ error: "Invalid webhook signature" });
   }
   try {
+    const snapshot = addOrderSnapshot(req.body);
+    try {
+      await persistOrderPayload(req.body);
+    } catch (error) {
+      console.error("Failed to persist updated webhook order", error);
+    }
     const phoneNumber = readOrderPhone(req.body);
     const clientName = readOrderClientName(req.body);
     const country = readOrderCountry(req.body);
     const match = await matchWhatsAppLeadForConversion({ phoneNumber, clientName, country });
-    if (!match) return res.status(200).json({ processed: true, linked: false });
+    if (!match) {
+      addWebhookEvent({
+        topic: "orders/updated",
+        orderId: req.body?.id ? String(req.body.id) : undefined,
+        summary: `Order snapshot refreshed (${snapshot.articles.length} article(s)), no WhatsApp lead matched`
+      });
+      return res.status(200).json({ processed: true, linked: false });
+    }
     await updateWhatsAppLeadShopifySignals({
       leadId: match.id,
       orderId: req.body?.id ? String(req.body.id) : null,
@@ -264,6 +277,11 @@ webhooksRouter.post("/orders/updated", async (req, res) => {
       paymentReceived: isPaidFinancialStatus(req.body),
       depositPaid: isPaidFinancialStatus(req.body),
       orderTotal: readOrderTotal(req.body)
+    });
+    addWebhookEvent({
+      topic: "orders/updated",
+      orderId: req.body?.id ? String(req.body.id) : undefined,
+      summary: `Order snapshot refreshed (${snapshot.articles.length} article(s)) and WhatsApp linkage updated`
     });
     return res.status(200).json({ processed: true, linked: true });
   } catch (error) {

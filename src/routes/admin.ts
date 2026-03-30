@@ -3714,17 +3714,28 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const whatsappBtn = detail.querySelector("#whatsappBtn");
       const invoiceBtn = detail.querySelector("#invoiceBtn");
 
+      async function fetchFreshOrderSnapshot() {
+        const res = await fetch("/admin/api/orders/" + encodeURIComponent(order.id));
+        const parsed = await readJsonSafe(res);
+        if (!parsed.ok || !parsed.data) {
+          throw new Error(parsed.ok ? "Commande introuvable" : "Impossible de recharger la commande.");
+        }
+        return parsed.data;
+      }
+
       whatsappBtn.addEventListener("click", async () => {
         try {
+          const latestOrder = await fetchFreshOrderSnapshot();
+          const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
           syncStatusEl.textContent = "Préparation de l’envoi facture...";
-          const modalResult = await openInvoiceModal(order, needsBankDetails);
+          const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails);
           if (!modalResult) {
             syncStatusEl.textContent = "Envoi annulé.";
             return;
           }
 
           if (modalResult.bankDetails) {
-            await fetch("/admin/api/orders/" + encodeURIComponent(order.id), {
+            await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id), {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ bankDetails: modalResult.bankDetails })
@@ -3732,7 +3743,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           }
 
           syncStatusEl.textContent = "Envoi API en cours...";
-          const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(order.id) + "/send-invoice-template", {
+          const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id) + "/send-invoice-template", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ templateChoice: modalResult.templateChoice || "classic" })
@@ -3773,16 +3784,18 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       });
 
       invoiceBtn.addEventListener("click", async () => {
-        const modalResult = await openInvoiceModal(order, needsBankDetails);
+        const latestOrder = await fetchFreshOrderSnapshot();
+        const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
+        const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails);
         if (!modalResult) return;
         if (modalResult.bankDetails) {
-          await fetch("/admin/api/orders/" + encodeURIComponent(order.id), {
+          await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id), {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ bankDetails: modalResult.bankDetails })
           });
         }
-        const html = buildInvoiceHtml(order, modalResult.bankDetails, modalResult.templateChoice);
+        const html = buildInvoiceHtml(latestOrder, modalResult.bankDetails, modalResult.templateChoice);
         const popup = window.open("", "_blank");
         if (!popup) {
           syncStatusEl.textContent = "Autorisez les popups pour imprimer la facture.";
