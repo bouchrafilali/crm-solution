@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { getShopifyAdminToken } from "./shopifyAdminAuth.js";
 
 type ShopifyUserError = {
   field?: string[] | null;
@@ -36,14 +37,6 @@ function resolveShop(): string {
   return shop;
 }
 
-function resolveAdminToken(): string {
-  const token = String(env.SHOPIFY_ADMIN_TOKEN || env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-  if (!token) {
-    throw new Error("Missing SHOPIFY_ADMIN_TOKEN.");
-  }
-  return token;
-}
-
 function resolveApiVersion(): string {
   const version = String(env.SHOPIFY_API_VERSION || "2025-01").trim();
   return version || "2025-01";
@@ -64,7 +57,7 @@ function logPrefix(step: string, details: Record<string, unknown>): void {
 
 async function graphqlAdmin<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const shop = resolveShop();
-  const token = resolveAdminToken();
+  const token = await getShopifyAdminToken(shop);
   const apiVersion = resolveApiVersion();
 
   logPrefix("graphql_request", {
