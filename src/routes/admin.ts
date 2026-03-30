@@ -799,9 +799,14 @@ async function sendZokoTemplate(
   attempts?: { templates: string[]; languages: string[]; types: string[] };
   error?: string;
 }> {
+  const apiUrl = String(env.ZOKO_SEND_TEMPLATE_API_URL || env.ZOKO_API_URL || "").trim();
   const authHeader = String(env.ZOKO_AUTH_HEADER || "apikey").trim();
   const authPrefix = String(env.ZOKO_AUTH_PREFIX || "").trim();
   const tokenValue = authPrefix ? `${authPrefix} ${env.ZOKO_AUTH_TOKEN}` : env.ZOKO_AUTH_TOKEN;
+
+  if (!apiUrl || !String(tokenValue || "").trim()) {
+    return { ok: false, error: "Configuration API Zoko manquante." };
+  }
 
   const allowInsecureTls = String(env.ZOKO_ALLOW_INSECURE_TLS || "").toLowerCase() === "true";
   const previousTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
@@ -839,7 +844,7 @@ async function sendZokoTemplate(
                 }
               : payload;
 
-          const apiRes = await fetch(env.ZOKO_API_URL as string, {
+          const apiRes = await fetch(apiUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -15938,6 +15943,16 @@ adminRouter.post("/api/orders/:orderId/send-invoice-template", async (req, res) 
 
   const sendResult = await sendZokoTemplate(payload, configuredTemplateName, configuredTemplateLanguage);
   if (!sendResult.ok) {
+    console.warn("[orders] zoko invoice template failed", {
+      orderId: order.id,
+      orderName: order.name,
+      templateChoice,
+      configuredTemplateName,
+      configuredTemplateLanguage,
+      recipient: phone,
+      status: sendResult.status || 0,
+      providerResponse: sendResult.providerResponse || null
+    });
     return res.status(502).json({
       error: sendResult.error || "Envoi template API échoué.",
       status: sendResult.status || 0,
@@ -15945,6 +15960,15 @@ adminRouter.post("/api/orders/:orderId/send-invoice-template", async (req, res) 
       attempts: sendResult.attempts || null
     });
   }
+  console.info("[orders] zoko invoice template sent", {
+    orderId: order.id,
+    orderName: order.name,
+    templateChoice,
+    configuredTemplateName: sendResult.usedTemplate || configuredTemplateName,
+    configuredTemplateLanguage: sendResult.usedLanguage || configuredTemplateLanguage,
+    recipient: phone,
+    usedType: sendResult.usedType || null
+  });
   return res.status(200).json({
     ok: true,
     providerResponse: sendResult.providerResponse,
