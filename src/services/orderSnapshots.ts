@@ -55,6 +55,7 @@ type ShopifyLineItem = {
   id?: string | number;
   title?: string;
   quantity?: string | number;
+  current_quantity?: string | number;
   price?: string | number;
   fulfillment_status?: string | null;
 };
@@ -188,7 +189,14 @@ function inferArticleStatus(item: ShopifyLineItem): ArticleStatus {
 }
 
 function toArticles(payload: ShopifyOrderPayload, existing?: OrderSnapshot): OrderArticle[] {
-  const incoming = (payload.line_items ?? []).map((item, index) => {
+  const incoming = (payload.line_items ?? [])
+    .map((item, index) => {
+      const effectiveQuantity =
+        item.current_quantity !== undefined
+          ? toNumber(item.current_quantity)
+          : toNumber(item.quantity);
+      if (effectiveQuantity <= 0) return null;
+
     const id = item.id ? String(item.id) : `line-${index}-${String(item.title ?? "item")}`;
     const existingStatus =
       existing?.articles.find((article) => article.id === id)?.status ?? inferArticleStatus(item);
@@ -196,14 +204,15 @@ function toArticles(payload: ShopifyOrderPayload, existing?: OrderSnapshot): Ord
     return {
       id,
       title: String(item.title ?? "Untitled article"),
-      quantity: Math.max(1, toNumber(item.quantity)),
+      quantity: Math.max(1, effectiveQuantity),
       unitPrice:
         item.price !== undefined
           ? Math.max(0, toNumber(item.price))
           : existing?.articles.find((article) => article.id === id)?.unitPrice ?? 0,
       status: existingStatus
     };
-  });
+  })
+    .filter((item): item is OrderArticle => Boolean(item));
 
   return incoming;
 }

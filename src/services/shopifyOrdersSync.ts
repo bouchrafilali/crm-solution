@@ -53,6 +53,7 @@ type ShopifyOrder = {
     id?: number;
     title?: string;
     quantity?: number;
+    current_quantity?: number;
     price?: string;
     fulfillment_status?: string | null;
   }>;
