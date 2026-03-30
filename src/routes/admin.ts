@@ -1703,6 +1703,15 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       padding: 0 16px;
       font-weight: 600;
       font-size: 15px;
+      cursor: pointer;
+      transition: transform 140ms ease, background 140ms ease, color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+    }
+    .template-toggle-btn:hover {
+      border-color: #202223;
+      box-shadow: 0 1px 0 rgba(32, 34, 35, 0.08);
+    }
+    .template-toggle-btn:active {
+      transform: translateY(1px) scale(0.99);
     }
     .template-toggle-btn.active {
       background: #202223;
@@ -2678,6 +2687,57 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       return "other";
     }
 
+    function bankTemplateLabel(templateChoice) {
+      return templateChoice === "showroom_receipt" ? "reçu" : "facture";
+    }
+
+    function collectBankModalSelection(showBankSection) {
+      return {
+        bankDetails:
+          showBankSection
+            ? {
+                bankName: bankNameInputEl.value.trim() || undefined,
+                swiftBic: swiftInputEl.value.trim() || undefined,
+                routingNumber: routingInputEl.value.trim() || undefined,
+                beneficiaryName: bankBeneficiaryNameEl.value.trim() || undefined,
+                accountNumber: accountInputEl.value.trim() || undefined,
+                bankAddress: bankAddressInputEl.value.trim() || undefined,
+                paymentReference: referenceInputEl.value.trim() || undefined
+              }
+            : undefined,
+        templateChoice: currentBankTemplateChoice
+      };
+    }
+
+    function syncBankTemplateUi() {
+      const isReceipt = currentBankTemplateChoice === "showroom_receipt";
+      const label = bankTemplateLabel(currentBankTemplateChoice);
+      bankTemplateInvoiceBtn.classList.toggle("active", !isReceipt);
+      bankTemplateReceiptBtn.classList.toggle("active", isReceipt);
+      bankTemplateInvoiceBtn.setAttribute("aria-pressed", String(!isReceipt));
+      bankTemplateReceiptBtn.setAttribute("aria-pressed", String(isReceipt));
+      bankModalPreviewHead.textContent = "Aperçu du " + label;
+      bankModalConfirmBtn.textContent = isReceipt ? "Utiliser ce reçu" : "Utiliser cette facture";
+      bankModalPreviewBtn.textContent = bankModalPreviewWrap.classList.contains("hidden")
+        ? "Aperçu du " + label
+        : "Actualiser l'aperçu";
+    }
+
+    function renderBankModalPreview(order, showBankSection) {
+      const currentSelection = collectBankModalSelection(showBankSection);
+      const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
+      if (invoicePreviewBlobUrl) {
+        URL.revokeObjectURL(invoicePreviewBlobUrl);
+        invoicePreviewBlobUrl = "";
+      }
+      const blob = new Blob([html], { type: "text/html" });
+      invoicePreviewBlobUrl = URL.createObjectURL(blob);
+      bankModalPreviewFrame.src = invoicePreviewBlobUrl;
+      bankModalPreviewWrap.classList.remove("hidden");
+      syncBankTemplateUi();
+      return currentSelection;
+    }
+
     function openInvoiceModal(order, showBankSection, initialTemplateChoice = "classic") {
       return new Promise((resolve) => {
         const existing = order.bankDetails || {};
@@ -2715,10 +2775,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         bankTemplateInvoiceBtn.onclick = () => {
           currentBankTemplateChoice = "classic";
           syncBankTemplateUi();
+          if (!bankModalPreviewWrap.classList.contains("hidden")) {
+            renderBankModalPreview(order, showBankSection);
+          }
         };
         bankTemplateReceiptBtn.onclick = () => {
           currentBankTemplateChoice = "showroom_receipt";
           syncBankTemplateUi();
+          if (!bankModalPreviewWrap.classList.contains("hidden")) {
+            renderBankModalPreview(order, showBankSection);
+          }
         };
         bankModalCancelBtn.onclick = () => {
           bankModalEl.classList.add("hidden");
@@ -2726,47 +2792,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           resolve(null);
         };
         bankModalPreviewBtn.onclick = () => {
-          const currentSelection = {
-            bankDetails:
-              showBankSection
-                ? {
-                    bankName: bankNameInputEl.value.trim() || undefined,
-                    swiftBic: swiftInputEl.value.trim() || undefined,
-                    routingNumber: routingInputEl.value.trim() || undefined,
-                    beneficiaryName: bankBeneficiaryNameEl.value.trim() || undefined,
-                    accountNumber: accountInputEl.value.trim() || undefined,
-                    bankAddress: bankAddressInputEl.value.trim() || undefined,
-                    paymentReference: referenceInputEl.value.trim() || undefined
-                  }
-                : undefined,
-            templateChoice: currentBankTemplateChoice
-          };
-          const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
-          if (invoicePreviewBlobUrl) {
-            URL.revokeObjectURL(invoicePreviewBlobUrl);
-            invoicePreviewBlobUrl = "";
-          }
-          const blob = new Blob([html], { type: "text/html" });
-          invoicePreviewBlobUrl = URL.createObjectURL(blob);
-          bankModalPreviewFrame.src = invoicePreviewBlobUrl;
-          bankModalPreviewWrap.classList.remove("hidden");
+          renderBankModalPreview(order, showBankSection);
         };
         bankModalConfirmBtn.onclick = () => {
-          const selected = {
-            bankDetails:
-              showBankSection
-                ? {
-                    bankName: bankNameInputEl.value.trim() || undefined,
-                    swiftBic: swiftInputEl.value.trim() || undefined,
-                    routingNumber: routingInputEl.value.trim() || undefined,
-                    beneficiaryName: bankBeneficiaryNameEl.value.trim() || undefined,
-                    accountNumber: accountInputEl.value.trim() || undefined,
-                    bankAddress: bankAddressInputEl.value.trim() || undefined,
-                    paymentReference: referenceInputEl.value.trim() || undefined
-                  }
-                : undefined,
-            templateChoice: currentBankTemplateChoice
-          };
+          const selected = collectBankModalSelection(showBankSection);
           bankModalEl.classList.add("hidden");
           cleanup();
           resolve(selected);
