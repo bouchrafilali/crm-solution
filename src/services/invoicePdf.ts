@@ -583,13 +583,9 @@ function drawShowroomFooter(doc: PDFKit.PDFDocument, tone: DocumentTone, y: numb
 export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
   const puppeteerModule = await import("puppeteer");
   const puppeteer = puppeteerModule.default;
+  const localMacChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-    || [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-      "/usr/bin/google-chrome",
-      "/usr/bin/chromium-browser",
-      "/usr/bin/chromium"
-    ].find((candidate) => existsSync(candidate));
+    || (process.platform === "darwin" && existsSync(localMacChrome) ? localMacChrome : undefined);
   const browser = await puppeteer.launch({
     headless: true,
     executablePath,
