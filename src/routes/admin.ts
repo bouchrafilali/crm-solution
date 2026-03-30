@@ -2516,7 +2516,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         ? "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Remise</td><td style='text-align:right;padding:10px 12px;'>-" + formatMoney(discountAmount, order.currency) + "</td></tr>"
         : "";
       const compactDiscountLine = discountAmount > 0
-        ? "<div class='line'><span>Discount</span><span>-" + formatMoney(discountAmount, order.currency) + "</span></div>"
+        ? "<div class='line'><span>Remise</span><span>-" + formatMoney(discountAmount, order.currency) + "</span></div>"
         : "";
       const classicInvoice = (
         "<!doctype html><html><head><meta charset='utf-8' /><title>Facture " + escapeHtml(order.name) + "</title>" +
@@ -2586,7 +2586,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "</body></html>"
       );
       const showroomInvoice = (
-        "<!doctype html><html><head><meta charset='utf-8' /><title>Showroom Receipt " + escapeHtml(order.name) + "</title>" +
+        "<!doctype html><html><head><meta charset='utf-8' /><title>Reçu showroom " + escapeHtml(order.name) + "</title>" +
         "<style>@page{size:A4;margin:12mm}body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#111;background:#fff}" +
         ".page{padding:8mm 6mm}.head{text-align:center;margin-bottom:16px}.brand{font-family:Georgia,'Times New Roman',serif;letter-spacing:.08em;font-size:20px;text-transform:uppercase;font-weight:600}" +
         ".meta{margin-top:6px;color:#666;font-size:12px}.title{margin-top:10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase}" +
@@ -2595,27 +2595,27 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         ".k{color:#666}.v{font-weight:600}table{width:100%;border-collapse:collapse;font-size:13px}.th{color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e8e8e8}" +
         "th,td{padding:9px 10px;border-bottom:1px solid #ededed;text-align:left}td.a{text-align:right}.tot{margin-top:12px;border:1px solid #e8e8e8;border-radius:10px;padding:10px;max-width:360px;margin-left:auto}" +
         ".line{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}.strong{font-weight:700}</style></head><body><div class='page'>" +
-        "<div class='head'><div class='brand'>Maison Bouchra Filali Lahlou</div><div class='meta'>Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com</div><div class='title'>Showroom Receipt</div></div>" +
-        "<div class='grid'><div class='card'><h3>Order</h3>" +
-        "<div class='r'><div class='k'>Number</div><div class='v'>" + escapeHtml(order.name) + "</div></div>" +
+        "<div class='head'><div class='brand'>Maison Bouchra Filali Lahlou</div><div class='meta'>Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com</div><div class='title'>Reçu showroom</div></div>" +
+        "<div class='grid'><div class='card'><h3>Commande</h3>" +
+        "<div class='r'><div class='k'>Numéro</div><div class='v'>" + escapeHtml(order.name) + "</div></div>" +
         "<div class='r'><div class='k'>Date</div><div class='v'>" + dateLabel + " " + dateTimeLabel + "</div></div>" +
-        "<div class='r'><div class='k'>Payment Status</div><div class='v'>" + escapeHtml(financialLabel) + "</div></div>" +
-        "<div class='r'><div class='k'>Payment Method</div><div class='v'>" + paymentGateway + "</div></div>" +
+        "<div class='r'><div class='k'>Statut de paiement</div><div class='v'>" + escapeHtml(financialLabel) + "</div></div>" +
+        "<div class='r'><div class='k'>Mode de paiement</div><div class='v'>" + paymentGateway + "</div></div>" +
         "</div><div class='card'><h3>Client</h3>" +
-        "<div class='r'><div class='k'>Name</div><div class='v'>" + escapeHtml(order.customerLabel || "Client inconnu") + "</div></div>" +
-        "<div class='r'><div class='k'>Phone</div><div class='v'>" + escapeHtml(order.customerPhone || "-") + "</div></div>" +
-        "<div class='r'><div class='k'>Email</div><div class='v'>" + escapeHtml(order.customerEmail || "-") + "</div></div>" +
-        "<div class='r'><div class='k'>Address</div><div class='v'>" + shippingAddress + "</div></div>" +
+        "<div class='r'><div class='k'>Nom</div><div class='v'>" + escapeHtml(order.customerLabel || "Client inconnu") + "</div></div>" +
+        "<div class='r'><div class='k'>Téléphone</div><div class='v'>" + escapeHtml(order.customerPhone || "-") + "</div></div>" +
+        "<div class='r'><div class='k'>E-mail</div><div class='v'>" + escapeHtml(order.customerEmail || "-") + "</div></div>" +
+        "<div class='r'><div class='k'>Adresse</div><div class='v'>" + shippingAddress + "</div></div>" +
         "</div></div>" +
-        "<table><thead><tr class='th'><th style='width:72px'>Qty</th><th>Article</th><th style='width:180px;text-align:right'>Amount</th></tr></thead><tbody>" +
+        "<table><thead><tr class='th'><th style='width:72px'>Qté</th><th>Article</th><th style='width:180px;text-align:right'>Montant</th></tr></thead><tbody>" +
         rows +
         "</tbody></table>" +
         "<div class='tot'>" +
-          "<div class='line'><span>Subtotal</span><span>" + formatMoney(subtotalAmount, order.currency) + "</span></div>" +
+          "<div class='line'><span>Sous-total</span><span>" + formatMoney(subtotalAmount, order.currency) + "</span></div>" +
           compactDiscountLine +
           "<div class='line'><span>Total</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div>" +
-          "<div class='line'><span>Total paid</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
-          (hasOutstanding ? "<div class='line strong'><span>Balance due</span><span>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</span></div>" : "<div class='line strong'><span>Balance due</span><span>-</span></div>") +
+          "<div class='line'><span>Total payé</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
+          (hasOutstanding ? "<div class='line strong'><span>Reste à payer</span><span>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</span></div>" : "<div class='line strong'><span>Reste à payer</span><span>-</span></div>") +
         "</div>" +
         "</div></body></html>"
       );

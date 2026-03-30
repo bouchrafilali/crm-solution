@@ -33,7 +33,7 @@ function formatMoney(value: number, currency: string): string {
 
 function invoiceTitle(template: string): string {
   if (template === "coin") return "Coin de Couture Invoice";
-  if (template === "showroom_receipt") return "Showroom Receipt";
+  if (template === "showroom_receipt") return "Reçu showroom";
   if (template === "international_invoice") return "International Couture Invoice";
   return "Invoice";
 }
@@ -110,7 +110,7 @@ async function drawShowroomReceiptPdf(doc: PDFKit.PDFDocument, order: OrderSnaps
     top + mm(14),
     { width: contentWidth, align: "center" }
   );
-  doc.fillColor("#111111").font("Helvetica").fontSize(14).text("SHOWROOM RECEIPT", left, top + mm(23), {
+  doc.fillColor("#111111").font("Helvetica").fontSize(14).text("RECU SHOWROOM", left, top + mm(23), {
     width: contentWidth,
     align: "center"
   });
@@ -123,27 +123,27 @@ async function drawShowroomReceiptPdf(doc: PDFKit.PDFDocument, order: OrderSnaps
   doc.roundedRect(left, cardY, cardW, cardH, 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
   doc.roundedRect(left + cardW + cardGap, cardY, cardW, cardH, 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
 
-  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11).text("ORDER", left + 12, cardY + 12);
+  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11).text("COMMANDE", left + 12, cardY + 12);
   drawKeyValueRows(doc, left + 12, cardY + 30, cardW - 24, [
-    { key: "Number", value: String(order.name || "-") },
+    { key: "Numero", value: String(order.name || "-") },
     { key: "Date", value: formatReceiptDateTime(order.createdAt) },
-    { key: "Payment Status", value: paymentLabel },
-    { key: "Payment Method", value: paymentGateway }
+    { key: "Statut de paiement", value: paymentLabel },
+    { key: "Mode de paiement", value: paymentGateway }
   ]);
 
   doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11).text("CLIENT", left + cardW + cardGap + 12, cardY + 12);
   drawKeyValueRows(doc, left + cardW + cardGap + 12, cardY + 30, cardW - 24, [
-    { key: "Name", value: String(order.customerLabel || "Client inconnu") },
-    { key: "Phone", value: String(order.customerPhone || "-") },
-    { key: "Email", value: String(order.customerEmail || "-") },
-    { key: "Address", value: shippingAddress }
+    { key: "Nom", value: String(order.customerLabel || "Client inconnu") },
+    { key: "Telephone", value: String(order.customerPhone || "-") },
+    { key: "E-mail", value: String(order.customerEmail || "-") },
+    { key: "Adresse", value: shippingAddress }
   ]);
 
   let y = cardY + cardH + mm(8);
   doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11);
-  doc.text("QTY", left + 10, y);
+  doc.text("QTE", left + 10, y);
   doc.text("ARTICLE", left + 58, y);
-  doc.text("AMOUNT", right - 120, y, { width: 110, align: "right" });
+  doc.text("MONTANT", right - 120, y, { width: 110, align: "right" });
   y += mm(4.5);
   doc.moveTo(left, y).lineTo(right, y).lineWidth(1).strokeColor("#e8e8e8").stroke();
   y += mm(4);
@@ -164,22 +164,22 @@ async function drawShowroomReceiptPdf(doc: PDFKit.PDFDocument, order: OrderSnaps
   let lineY = totalsY + 12;
   doc.roundedRect(totalsX, totalsY, totalsW, discountAmount > 0 ? mm(34) : mm(28), 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
   doc.fillColor("#1f1f1f").font("Helvetica").fontSize(10.5);
-  doc.text("Subtotal", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+  doc.text("Sous-total", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
   doc.text(formatMoney(subtotalAmount, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
   lineY += mm(6.4);
   if (discountAmount > 0) {
-    doc.text("Discount", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+    doc.text("Remise", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
     doc.text(`-${formatMoney(discountAmount, order.currency)}`, totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
     lineY += mm(6.4);
   }
   doc.text("Total", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
   doc.text(formatMoney(order.totalAmount || 0, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
   lineY += mm(6.4);
-  doc.text("Total paid", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+  doc.text("Total paye", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
   doc.text(formatMoney(paidAmount, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
   lineY += mm(6.4);
   doc.font("Helvetica-Bold");
-  doc.text("Balance due", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+  doc.text("Reste a payer", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
   doc.text(
     Number(order.outstandingAmount || 0) > 0 ? formatMoney(order.outstandingAmount || 0, order.currency) : "-",
     totalsX + totalsW - 110,
