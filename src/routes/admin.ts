@@ -13,7 +13,7 @@ import {
 } from "../services/orderSnapshots.js";
 import { fetchOrdersForPeriod } from "../services/shopifyOrdersSync.js";
 import { listWebhookEvents } from "../services/webhookEvents.js";
-import { buildOrderInvoiceHtml, buildOrderInvoicePdf } from "../services/invoicePdf.js";
+import { buildOrderInvoiceHtml, buildOrderInvoicePdf, renderHtmlToPdfBuffer } from "../services/invoicePdf.js";
 import { uploadPdfToShopifyFiles } from "../services/shopifyFiles.js";
 import { computeDashboardInsights, computeDashboardSeries } from "../services/insights.js";
 import { isBigQueryForecastConfigured, runRevenueForecast } from "../services/bigqueryForecast.js";
@@ -15616,6 +15616,37 @@ adminRouter.get("/api/orders/:orderId/invoice-preview-html", (req, res) => {
   const html = buildOrderInvoiceHtml(order, templateChoice);
   if (!html) return res.status(404).send("Aperçu indisponible");
   return res.type("html").send(html);
+});
+
+adminRouter.get("/api/diagnostics/chromium", async (_req, res) => {
+  const html =
+    "<!doctype html><html><head><meta charset='utf-8' />" +
+    "<style>@page{size:A4;margin:18mm}html,body{margin:0;padding:0;background:#fcfaf6;color:#121212;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}" +
+    "body{padding:18mm 20mm 16mm}.brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:34px;letter-spacing:.05em;margin-top:14px}" +
+    ".meta{text-align:center;color:#756e66;font-size:13px;margin-top:10px}.rule{height:1px;background:#ebe5dc;margin:24px 0 28px}" +
+    ".card{margin-top:24px;padding:20px;border:1px solid #ebe5dc}.k{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
+    ".v{margin-top:8px;font-size:22px;font-weight:700}</style></head><body>" +
+    "<div class='brand'>Maison Bouchra Filali Lahlou</div>" +
+    "<div class='meta'>Diagnostic Chromium Railway</div>" +
+    "<div class='rule'></div>" +
+    "<div class='card'><div class='k'>Statut</div><div class='v'>Chromium OK</div></div>" +
+    "</body></html>";
+
+  try {
+    const pdfBuffer = await renderHtmlToPdfBuffer(html);
+    return res.status(200).json({
+      ok: true,
+      chromium: true,
+      pdfBytes: pdfBuffer.length
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Chromium failed";
+    return res.status(500).json({
+      ok: false,
+      chromium: false,
+      error: message
+    });
+  }
 });
 
 adminRouter.put("/api/orders/:orderId", (req, res) => {

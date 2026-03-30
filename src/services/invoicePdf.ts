@@ -580,7 +580,7 @@ function drawShowroomFooter(doc: PDFKit.PDFDocument, tone: DocumentTone, y: numb
   serifTitle(doc, tone.footer, pageLeft(doc), y + mm(6.5), pageWidth(doc), 12.6, "center");
 }
 
-async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
+export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
   const puppeteerModule = await import("puppeteer");
   const puppeteer = puppeteerModule.default;
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
