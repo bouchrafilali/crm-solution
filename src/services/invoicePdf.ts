@@ -882,13 +882,10 @@ async function renderDocument(doc: PDFKit.PDFDocument, order: OrderSnapshot, tem
 export async function buildOrderInvoicePdf(order: OrderSnapshot, templateChoice: string): Promise<Buffer> {
   if (templateChoice === "showroom_receipt") {
     const html = buildOrderInvoiceHtml(order, templateChoice);
-    if (html) {
-      try {
-        return await renderHtmlToPdfBuffer(html);
-      } catch (error) {
-        console.error("[invoice-pdf] html-to-pdf fallback to pdfkit", error);
-      }
+    if (!html) {
+      throw new Error("HTML showroom introuvable.");
     }
+    return await renderHtmlToPdfBuffer(html);
   }
 
   const tone = toneForTemplate(templateChoice);

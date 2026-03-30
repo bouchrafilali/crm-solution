@@ -13,7 +13,7 @@ import {
 } from "../services/orderSnapshots.js";
 import { fetchOrdersForPeriod } from "../services/shopifyOrdersSync.js";
 import { listWebhookEvents } from "../services/webhookEvents.js";
-import { buildOrderInvoicePdf } from "../services/invoicePdf.js";
+import { buildOrderInvoiceHtml, buildOrderInvoicePdf } from "../services/invoicePdf.js";
 import { uploadPdfToShopifyFiles } from "../services/shopifyFiles.js";
 import { computeDashboardInsights, computeDashboardSeries } from "../services/insights.js";
 import { isBigQueryForecastConfigured, runRevenueForecast } from "../services/bigqueryForecast.js";
@@ -2766,14 +2766,21 @@ adminRouter.get(["/", "/orders"], (req, res) => {
 
     function renderBankModalPreview(order, showBankSection) {
       const currentSelection = collectBankModalSelection(showBankSection);
-      const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
       if (invoicePreviewBlobUrl) {
         URL.revokeObjectURL(invoicePreviewBlobUrl);
         invoicePreviewBlobUrl = "";
       }
-      const blob = new Blob([html], { type: "text/html" });
-      invoicePreviewBlobUrl = URL.createObjectURL(blob);
-      bankModalPreviewFrame.src = invoicePreviewBlobUrl;
+      if (currentSelection.templateChoice === "showroom_receipt") {
+        bankModalPreviewFrame.src = "/admin/api/orders/"
+          + encodeURIComponent(order.id)
+          + "/invoice-preview-html?template=showroom_receipt&_="
+          + Date.now();
+      } else {
+        const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
+        const blob = new Blob([html], { type: "text/html" });
+        invoicePreviewBlobUrl = URL.createObjectURL(blob);
+        bankModalPreviewFrame.src = invoicePreviewBlobUrl;
+      }
       bankModalPreviewWrap.classList.remove("hidden");
       syncBankTemplateUi();
       return currentSelection;
@@ -15592,6 +15599,23 @@ adminRouter.get("/api/orders/:orderId", (req, res) => {
   const order = getOrderById(req.params.orderId);
   if (!order) return res.status(404).json({ error: "Commande introuvable" });
   return res.status(200).json(order);
+});
+
+adminRouter.get("/api/orders/:orderId/invoice-preview-html", (req, res) => {
+  const order = getOrderById(req.params.orderId);
+  if (!order) return res.status(404).send("Commande introuvable");
+
+  const templateChoice = invoiceTemplateSchema.safeParse(req.query.template).success
+    ? String(req.query.template)
+    : "classic";
+
+  if (templateChoice !== "showroom_receipt") {
+    return res.status(400).send("Aperçu HTML unifié disponible uniquement pour le reçu showroom.");
+  }
+
+  const html = buildOrderInvoiceHtml(order, templateChoice);
+  if (!html) return res.status(404).send("Aperçu indisponible");
+  return res.type("html").send(html);
 });
 
 adminRouter.put("/api/orders/:orderId", (req, res) => {
