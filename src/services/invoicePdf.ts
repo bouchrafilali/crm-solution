@@ -222,7 +222,7 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     "<!doctype html><html><head><meta charset='utf-8' /><title>" + escapeHtml(view.tone.title + " " + view.reference) + "</title>" +
     "<style>@page{size:A4;margin:0}html,body{margin:0;padding:0;width:210mm;min-height:297mm;background:#fcfaf6 !important;color:#121212;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
     "*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{width:210mm;min-height:297mm;margin:0;padding:12mm 14mm 10mm;background:#fcfaf6 !important;overflow:hidden}.overline{text-align:center;font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
-    ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:31px;letter-spacing:.12em;line-height:1.02;margin-top:8px;color:#b78b49;text-transform:uppercase;font-weight:500}" +
+    ".brand{display:flex;justify-content:center;align-items:center;margin-top:8px}.brand img{display:block;max-width:178mm;width:100%;height:auto}" +
     ".meta{text-align:center;color:#756e66;font-size:11px;margin-top:7px}.rule{height:1px;background:#ebe5dc;margin:16px 0 18px}" +
     ".hero{display:grid;grid-template-columns:1.45fr .85fr;gap:28px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.05;font-weight:500}" +
     ".doc-sub{margin-top:6px;color:#756e66;font-size:12px}.meta-stack{padding-top:1px}.meta-label{font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;margin-top:10px}" +
@@ -237,9 +237,9 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     ".totals-rule{height:1px;background:#ebe5dc;margin:6px 0 7px}.balance{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:end;padding-top:1px}" +
     ".balance-label{font-family:Georgia,'Times New Roman',serif;font-size:18px;line-height:1.05;color:#5f5346}.balance-value{text-align:right;font-size:17px;font-weight:700;color:#5f5346}" +
     ".footer{margin-top:18px;padding-top:10px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#2b2724}" +
-    "@media (max-width: 820px){.page{width:auto;min-height:auto;padding:10mm 10mm 9mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:32px 1fr 120px;gap:8px}.brand{font-size:24px}.doc-title{font-size:22px}.piece{font-size:13px}.balance-label{font-size:17px}.balance-value{font-size:16px}}</style></head><body><div class='page'>" +
+    "@media (max-width: 820px){.page{width:auto;min-height:auto;padding:10mm 10mm 9mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:32px 1fr 120px;gap:8px}.brand img{max-width:100%}.doc-title{font-size:22px}.piece{font-size:13px}.balance-label{font-size:17px}.balance-value{font-size:16px}}</style></head><body><div class='page'>" +
     "<div class='overline'>" + escapeHtml(view.tone.overline) + "</div>" +
-    "<div class='brand'>Bouchra Filali Lahlou</div>" +
+    "<div class='brand'><img src='https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750' alt='Bouchra Filali Lahlou' /></div>" +
     "<div class='meta'>Casablanca · info@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
     "<div class='rule'></div>" +
     "<div class='hero'><div><div class='doc-title'>" + escapeHtml(view.tone.title) + "</div><div class='doc-sub'>Édité le " + escapeHtml(view.dateLabel) + "</div></div><div class='meta-stack'>" +
