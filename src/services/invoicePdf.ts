@@ -2,6 +2,12 @@ import PDFDocument from "pdfkit";
 import type { OrderArticle, OrderSnapshot } from "./orderSnapshots.js";
 
 const PT_PER_MM = 72 / 25.4;
+const RECEIPT_PDF_MARGINS_MM = {
+  top: 18,
+  right: 20,
+  bottom: 16,
+  left: 20
+} as const;
 
 const COLORS = {
   ink: "#121212",
@@ -545,7 +551,12 @@ export async function buildOrderInvoicePdf(order: OrderSnapshot, templateChoice:
   const tone = toneForTemplate(templateChoice);
   const doc = new PDFDocument({
     size: "A4",
-    margins: { top: mm(24), left: mm(22), right: mm(22), bottom: mm(22) },
+    margins: {
+      top: mm(RECEIPT_PDF_MARGINS_MM.top),
+      left: mm(RECEIPT_PDF_MARGINS_MM.left),
+      right: mm(RECEIPT_PDF_MARGINS_MM.right),
+      bottom: mm(RECEIPT_PDF_MARGINS_MM.bottom)
+    },
     bufferPages: true,
     info: {
       Title: `${tone.title} ${textOr(order.name, "")}`.trim(),
