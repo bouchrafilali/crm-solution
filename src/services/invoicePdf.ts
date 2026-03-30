@@ -340,6 +340,295 @@ function drawPageFrame(doc: PDFKit.PDFDocument): void {
   doc.fillColor(COLORS.ink);
 }
 
+function measureShowroomArticleHeight(doc: PDFKit.PDFDocument, title: string, width: number): number {
+  doc.font("Helvetica-Bold").fontSize(13.5);
+  const textHeight = doc.heightOfString(title, {
+    width,
+    lineGap: 0
+  });
+  return Math.max(mm(13), textHeight + mm(5.2));
+}
+
+function buildShowroomArticleChunks(
+  doc: PDFKit.PDFDocument,
+  articles: OrderArticle[],
+  articleWidth: number,
+  firstPageStartY: number,
+  continuedPageStartY: number,
+  pageBottomY: number,
+  summaryReserve: number
+): OrderArticle[][] {
+  const chunks: OrderArticle[][] = [];
+  let index = 0;
+
+  while (index < articles.length) {
+    const startY = chunks.length === 0 ? firstPageStartY : continuedPageStartY;
+    const availableHeight = Math.max(mm(24), pageBottomY - startY);
+    const chunk: OrderArticle[] = [];
+    let usedHeight = 0;
+
+    while (index < articles.length) {
+      const article = articles[index];
+      const rowHeight = measureShowroomArticleHeight(doc, textOr(article.title, "Pièce couture"), articleWidth) + mm(4.6);
+      const reserve = index === articles.length - 1 ? summaryReserve : 0;
+      const wouldOverflow = usedHeight + rowHeight + reserve > availableHeight;
+
+      if (wouldOverflow && chunk.length > 0) break;
+
+      chunk.push(article);
+      usedHeight += rowHeight;
+      index += 1;
+
+      if (wouldOverflow) break;
+    }
+
+    chunks.push(chunk);
+  }
+
+  return chunks;
+}
+
+function drawShowroomPageHeader(
+  doc: PDFKit.PDFDocument,
+  order: OrderSnapshot,
+  tone: DocumentTone,
+  financials: FinancialSummary,
+  continuation: boolean
+): number {
+  drawPageFrame(doc);
+
+  const left = pageLeft(doc);
+  const width = pageWidth(doc);
+  const top = doc.page.margins.top;
+
+  mutedLabel(doc, tone.overline, left, top - mm(1), width, "center");
+  serifTitle(doc, "MAISON BOUCHRA FILALI LAHLOU", left, top + mm(5), width, continuation ? 20.5 : 22.5, "center");
+  softText(
+    doc,
+    "Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com",
+    left,
+    top + mm(12.8),
+    width,
+    "center"
+  );
+  drawHorizontalRule(doc, top + mm(19.8), COLORS.lineSoft);
+
+  if (continuation) {
+    mutedLabel(doc, "Référence", left, top + mm(24.5), width * 0.45);
+    strongText(doc, textOr(order.name, "Non renseignée"), left, top + mm(28.6), width * 0.45, "left", 11);
+    mutedLabel(doc, tone.title, left + width * 0.54, top + mm(24.5), width * 0.46, "right");
+    return top + mm(36.5);
+  }
+
+  const heroTop = top + mm(28.2);
+  const leftWidth = width * 0.57;
+  const gap = mm(8);
+  const rightWidth = width - leftWidth - gap;
+  const rightX = left + leftWidth + gap;
+
+  serifTitle(doc, tone.title, left, heroTop, leftWidth, 16.5);
+  softText(doc, "Édité le " + formatDateTime(order.createdAt), left, heroTop + mm(5.8), leftWidth);
+
+  mutedLabel(doc, "Référence", rightX, heroTop + mm(0.3), rightWidth);
+  strongText(doc, textOr(order.name, "Non renseignée"), rightX, heroTop + mm(4), rightWidth, "left", 10.8);
+  mutedLabel(doc, "Règlement", rightX, heroTop + mm(10.8), rightWidth);
+  softText(doc, paymentStatusLabel(order), rightX, heroTop + mm(14.7), rightWidth);
+  mutedLabel(doc, "Montant de la commande", rightX, heroTop + mm(21.2), rightWidth);
+  strongText(doc, formatMoney(financials.total, order.currency || "MAD"), rightX, heroTop + mm(25.2), rightWidth, "left", 10.9);
+
+  return heroTop + mm(36);
+}
+
+function drawShowroomIdentity(doc: PDFKit.PDFDocument, order: OrderSnapshot, startY: number): number {
+  const left = pageLeft(doc);
+  const width = pageWidth(doc);
+  const gap = mm(12);
+  const colW = (width - gap) / 2;
+  const rightX = left + colW + gap;
+
+  mutedLabel(doc, "À l'attention de", left, startY, colW);
+  strongText(doc, textOr(order.customerLabel, "Cliente non renseignée"), left, startY + mm(3.8), colW, "left", 10.8);
+  softText(doc, textOr(order.customerPhone, "Téléphone non renseigné"), left, startY + mm(9.1), colW);
+  softText(doc, textOr(order.customerEmail, "E-mail non renseigné"), left, startY + mm(14.1), colW);
+
+  mutedLabel(doc, "Coordonnées de commande", rightX, startY, colW);
+  strongText(doc, paymentMethodLabel(order), rightX, startY + mm(3.8), colW, "left", 10.8);
+  softText(doc, textOr(order.shippingAddress, "Adresse de livraison non renseignée"), rightX, startY + mm(9.1), colW);
+
+  return startY + mm(24.5);
+}
+
+function drawShowroomTableHeader(doc: PDFKit.PDFDocument, startY: number): { nextY: number; articleWidth: number; amountW: number; qtyW: number } {
+  const left = pageLeft(doc);
+  const width = pageWidth(doc);
+  const right = pageRight(doc);
+  const qtyW = mm(15);
+  const amountW = mm(48);
+  const articleX = left + qtyW + mm(7);
+  const articleWidth = width - qtyW - amountW - mm(12);
+
+  mutedLabel(doc, "Qté", left, startY, qtyW);
+  mutedLabel(doc, "Pièce", articleX, startY, articleWidth);
+  mutedLabel(doc, "Montant", right - amountW, startY, amountW, "right");
+  drawHorizontalRule(doc, startY + mm(5.8), COLORS.line);
+
+  return { nextY: startY + mm(10.2), articleWidth, amountW, qtyW };
+}
+
+function drawShowroomArticles(
+  doc: PDFKit.PDFDocument,
+  articles: OrderArticle[],
+  startY: number,
+  currency: string
+): number {
+  const left = pageLeft(doc);
+  const right = pageRight(doc);
+  const width = pageWidth(doc);
+  const qtyW = mm(15);
+  const amountW = mm(48);
+  const articleX = left + qtyW + mm(7);
+  const articleWidth = width - qtyW - amountW - mm(12);
+  let y = startY;
+
+  for (const article of articles) {
+    const title = textOr(article.title, "Pièce couture");
+    const rowHeight = measureShowroomArticleHeight(doc, title, articleWidth);
+
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(10.5).text(String(Math.max(0, toNumber(article.quantity))), left, y + mm(0.8), {
+      width: qtyW
+    });
+    doc.fillColor(COLORS.ink).font("Helvetica-Bold").fontSize(13.5).text(title, articleX, y, {
+      width: articleWidth,
+      lineGap: 0
+    });
+    doc.fillColor(COLORS.softInk).font("Helvetica").fontSize(12.8).text(formatMoney(lineTotal(article), currency), right - amountW, y + mm(0.2), {
+      width: amountW,
+      align: "right",
+      lineGap: 0
+    });
+
+    y += rowHeight;
+    drawHorizontalRule(doc, y + mm(0.6), COLORS.lineSoft);
+    y += mm(4);
+  }
+
+  return y;
+}
+
+function drawShowroomSummary(
+  doc: PDFKit.PDFDocument,
+  order: OrderSnapshot,
+  financials: FinancialSummary,
+  startY: number
+): number {
+  const left = pageLeft(doc);
+  const right = pageRight(doc);
+  const width = pageWidth(doc);
+  const copyWidth = width * 0.54;
+  const summaryX = left + width * 0.63;
+  const labelW = mm(38);
+  const amountW = right - summaryX - labelW;
+  let y = startY;
+
+  doc.fillColor(COLORS.muted).font("Helvetica").fontSize(10.6).text(
+    financials.outstanding > 0
+      ? "Le solde restant pourra être réglé selon les modalités convenues avec la Maison."
+      : "Ce document confirme le règlement de votre commande couture.",
+    left,
+    y + mm(0.5),
+    {
+      width: copyWidth,
+      lineGap: 1.5
+    }
+  );
+
+  mutedLabel(doc, "Sous-total", summaryX, y, labelW);
+  strongText(doc, formatMoney(financials.subtotal, order.currency || "MAD"), summaryX + labelW, y - mm(0.4), amountW, "right", 11.2);
+  y += mm(6.4);
+
+  if (financials.discount > 0) {
+    mutedLabel(doc, "Remise", summaryX, y, labelW);
+    softText(doc, formatMoney(-financials.discount, order.currency || "MAD"), summaryX + labelW, y - mm(0.2), amountW, "right");
+    y += mm(6.2);
+  }
+
+  mutedLabel(doc, "Total", summaryX, y, labelW);
+  strongText(doc, formatMoney(financials.total, order.currency || "MAD"), summaryX + labelW, y - mm(0.4), amountW, "right", 11.2);
+  y += mm(6.2);
+
+  mutedLabel(doc, "Réglé à ce jour", summaryX, y, labelW);
+  softText(doc, formatMoney(financials.paid, order.currency || "MAD"), summaryX + labelW, y - mm(0.2), amountW, "right");
+  y += mm(7);
+
+  drawHorizontalRule(doc, y - mm(1), COLORS.lineSoft);
+  doc.fillColor(COLORS.accent).font("Times-Bold").fontSize(16).text("Reste à payer", summaryX, y + mm(1.6), {
+    width: labelW + mm(22)
+  });
+  doc.fillColor(COLORS.accent).font("Helvetica-Bold").fontSize(15.2).text(
+    financials.outstanding > 0 ? formatMoney(financials.outstanding, order.currency || "MAD") : "-",
+    summaryX + labelW,
+    y + mm(1.1),
+    { width: amountW, align: "right" }
+  );
+
+  return y + mm(14);
+}
+
+function drawShowroomFooter(doc: PDFKit.PDFDocument, tone: DocumentTone, y: number): void {
+  drawHorizontalRule(doc, y, COLORS.lineSoft);
+  serifTitle(doc, tone.footer, pageLeft(doc), y + mm(6.5), pageWidth(doc), 12.6, "center");
+}
+
+async function renderShowroomReceiptPdf(doc: PDFKit.PDFDocument, order: OrderSnapshot): Promise<void> {
+  const tone = toneForTemplate("showroom_receipt");
+  const financials = computeFinancialSummary(order);
+  const articles = Array.isArray(order.articles) && order.articles.length > 0
+    ? order.articles
+    : [{ id: "empty", title: "Aucune pièce ajoutée", quantity: 0, unitPrice: 0, status: "pending" as const }];
+
+  const left = pageLeft(doc);
+  const width = pageWidth(doc);
+  const qtyW = mm(15);
+  const amountW = mm(48);
+  const articleWidth = width - qtyW - amountW - mm(12);
+  const pageBottomY = doc.page.height - doc.page.margins.bottom - mm(10);
+  const summaryReserve = mm(50);
+  const top = doc.page.margins.top;
+  const firstPageStartY = top + mm(109.4);
+  const continuedHeaderTopY = top + mm(41.5);
+  const continuedPageStartY = top + mm(51.7);
+
+  const firstHeaderBottom = drawShowroomPageHeader(doc, order, tone, financials, false);
+  const firstIdentityBottom = drawShowroomIdentity(doc, order, firstHeaderBottom + mm(6.5));
+  drawShowroomTableHeader(doc, firstIdentityBottom + mm(4));
+
+  const chunks = buildShowroomArticleChunks(
+    doc,
+    articles,
+    articleWidth,
+    firstPageStartY,
+    continuedPageStartY,
+    pageBottomY,
+    summaryReserve
+  );
+
+  for (let pageIndex = 0; pageIndex < chunks.length; pageIndex += 1) {
+    if (pageIndex > 0) {
+      doc.addPage();
+      drawShowroomPageHeader(doc, order, tone, financials, true);
+      drawShowroomTableHeader(doc, continuedHeaderTopY);
+    }
+
+    const rowStart = pageIndex === 0 ? firstPageStartY : continuedPageStartY;
+    const rowsBottomY = drawShowroomArticles(doc, chunks[pageIndex], rowStart, order.currency || "MAD");
+
+    if (pageIndex === chunks.length - 1) {
+      const summaryBottomY = drawShowroomSummary(doc, order, financials, rowsBottomY + mm(6.5));
+      drawShowroomFooter(doc, tone, Math.max(summaryBottomY + mm(8), doc.page.height - doc.page.margins.bottom - mm(15)));
+    }
+  }
+}
+
 function drawHeader(doc: PDFKit.PDFDocument, order: OrderSnapshot, tone: DocumentTone, financials: FinancialSummary): void {
   drawPageFrame(doc);
 
@@ -535,6 +824,11 @@ function addPageFooters(doc: PDFKit.PDFDocument, templateChoice: string): void {
 }
 
 async function renderDocument(doc: PDFKit.PDFDocument, order: OrderSnapshot, templateChoice: string): Promise<void> {
+  if (templateChoice === "showroom_receipt") {
+    await renderShowroomReceiptPdf(doc, order);
+    return;
+  }
+
   const tone = toneForTemplate(templateChoice);
   const financials = computeFinancialSummary(order);
 
