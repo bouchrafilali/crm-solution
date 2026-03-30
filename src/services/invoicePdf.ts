@@ -61,6 +61,133 @@ function drawCard(
   });
 }
 
+function formatReceiptDateTime(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return String(createdAt || "");
+  const dateLabel = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  const timeLabel = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return `${dateLabel} ${timeLabel}`;
+}
+
+function drawKeyValueRows(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  rows: Array<{ key: string; value: string }>
+): number {
+  let cursorY = y;
+  for (const row of rows) {
+    doc.fillColor("#666666").font("Helvetica").fontSize(9.5).text(row.key, x, cursorY, { width: width * 0.42 });
+    doc.fillColor("#1f1f1f").font("Helvetica-Bold").fontSize(9.5).text(row.value, x + width * 0.44, cursorY, {
+      width: width * 0.56
+    });
+    cursorY += mm(6.4);
+  }
+  return cursorY;
+}
+
+async function drawShowroomReceiptPdf(doc: PDFKit.PDFDocument, order: OrderSnapshot): Promise<void> {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const contentWidth = right - left;
+  const top = doc.page.margins.top;
+  const paidAmount = Math.max(0, Number(order.totalAmount || 0) - Number(order.outstandingAmount || 0));
+  const subtotalAmount = Math.max(0, Number(order.subtotalAmount ?? order.totalAmount ?? 0));
+  const discountAmount = Math.max(0, Number(order.discountAmount || 0));
+  const paymentGateway = String(order.paymentGateway || "Non précisée");
+  const shippingAddress = String(order.shippingAddress || "Aucune adresse de livraison renseignée");
+  const paymentLabel = paymentStatusFr(order);
+
+  doc.fillColor("#111111");
+  doc.font("Times-Bold").fontSize(20).text("MAISON BOUCHRA FILALI LAHLOU", left, top + mm(4), {
+    width: contentWidth,
+    align: "center"
+  });
+  doc.fillColor("#666666").font("Helvetica").fontSize(10.5).text(
+    "Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com",
+    left,
+    top + mm(14),
+    { width: contentWidth, align: "center" }
+  );
+  doc.fillColor("#111111").font("Helvetica").fontSize(14).text("SHOWROOM RECEIPT", left, top + mm(23), {
+    width: contentWidth,
+    align: "center"
+  });
+
+  const cardGap = mm(4);
+  const cardY = top + mm(33);
+  const cardW = (contentWidth - cardGap) / 2;
+  const cardH = mm(44);
+
+  doc.roundedRect(left, cardY, cardW, cardH, 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
+  doc.roundedRect(left + cardW + cardGap, cardY, cardW, cardH, 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
+
+  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11).text("ORDER", left + 12, cardY + 12);
+  drawKeyValueRows(doc, left + 12, cardY + 30, cardW - 24, [
+    { key: "Number", value: String(order.name || "-") },
+    { key: "Date", value: formatReceiptDateTime(order.createdAt) },
+    { key: "Payment Status", value: paymentLabel },
+    { key: "Payment Method", value: paymentGateway }
+  ]);
+
+  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11).text("CLIENT", left + cardW + cardGap + 12, cardY + 12);
+  drawKeyValueRows(doc, left + cardW + cardGap + 12, cardY + 30, cardW - 24, [
+    { key: "Name", value: String(order.customerLabel || "Client inconnu") },
+    { key: "Phone", value: String(order.customerPhone || "-") },
+    { key: "Email", value: String(order.customerEmail || "-") },
+    { key: "Address", value: shippingAddress }
+  ]);
+
+  let y = cardY + cardH + mm(8);
+  doc.fillColor("#666666").font("Helvetica-Bold").fontSize(11);
+  doc.text("QTY", left + 10, y);
+  doc.text("ARTICLE", left + 58, y);
+  doc.text("AMOUNT", right - 120, y, { width: 110, align: "right" });
+  y += mm(4.5);
+  doc.moveTo(left, y).lineTo(right, y).lineWidth(1).strokeColor("#e8e8e8").stroke();
+  y += mm(4);
+
+  for (const article of order.articles) {
+    const amount = Number(article.unitPrice || 0) * Number(article.quantity || 0);
+    doc.fillColor("#1f1f1f").font("Helvetica").fontSize(10.5).text(String(article.quantity || 1), left + 10, y, { width: 36 });
+    doc.font("Helvetica-Bold").text(article.title, left + 58, y, { width: contentWidth - 190 });
+    doc.text(formatMoney(amount, order.currency), right - 120, y, { width: 110, align: "right" });
+    y += mm(6.8);
+    doc.moveTo(left, y).lineTo(right, y).lineWidth(1).strokeColor("#ededed").stroke();
+    y += mm(4.2);
+  }
+
+  const totalsW = mm(68);
+  const totalsX = right - totalsW;
+  const totalsY = y + mm(2);
+  let lineY = totalsY + 12;
+  doc.roundedRect(totalsX, totalsY, totalsW, discountAmount > 0 ? mm(34) : mm(28), 8).lineWidth(1).strokeColor("#e8e8e8").stroke();
+  doc.fillColor("#1f1f1f").font("Helvetica").fontSize(10.5);
+  doc.text("Subtotal", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+  doc.text(formatMoney(subtotalAmount, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
+  lineY += mm(6.4);
+  if (discountAmount > 0) {
+    doc.text("Discount", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+    doc.text(`-${formatMoney(discountAmount, order.currency)}`, totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
+    lineY += mm(6.4);
+  }
+  doc.text("Total", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+  doc.text(formatMoney(order.totalAmount || 0, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
+  lineY += mm(6.4);
+  doc.text("Total paid", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+  doc.text(formatMoney(paidAmount, order.currency), totalsX + totalsW - 110, lineY, { width: 98, align: "right" });
+  lineY += mm(6.4);
+  doc.font("Helvetica-Bold");
+  doc.text("Balance due", totalsX + 12, lineY, { width: totalsW - 24 - 110 });
+  doc.text(
+    Number(order.outstandingAmount || 0) > 0 ? formatMoney(order.outstandingAmount || 0, order.currency) : "-",
+    totalsX + totalsW - 110,
+    lineY,
+    { width: 98, align: "right" }
+  );
+}
+
 async function loadRemoteImageBuffer(url: string): Promise<Buffer | null> {
   try {
     const res = await fetch(url);
@@ -286,6 +413,8 @@ export async function buildOrderInvoicePdf(order: OrderSnapshot, templateChoice:
 
   if (templateChoice === "classic") {
     await drawClassicPdf(doc, order);
+  } else if (templateChoice === "showroom_receipt") {
+    await drawShowroomReceiptPdf(doc, order);
   } else {
     doc.fontSize(20).font("Helvetica-Bold").text(templateChoice === "coin" ? "COIN DE COUTURE" : "MAISON BOUCHRA FILALI LAHLOU");
     doc.moveDown(0.2);
