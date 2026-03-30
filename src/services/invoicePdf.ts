@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { existsSync } from "node:fs";
 import type { OrderArticle, OrderSnapshot } from "./orderSnapshots.js";
 
 const PT_PER_MM = 72 / 25.4;
@@ -579,6 +580,44 @@ function drawShowroomFooter(doc: PDFKit.PDFDocument, tone: DocumentTone, y: numb
   serifTitle(doc, tone.footer, pageLeft(doc), y + mm(6.5), pageWidth(doc), 12.6, "center");
 }
 
+async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
+  const puppeteerModule = await import("puppeteer");
+  const puppeteer = puppeteerModule.default;
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    || [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/usr/bin/google-chrome",
+      "/usr/bin/chromium-browser",
+      "/usr/bin/chromium"
+    ].find((candidate) => existsSync(candidate));
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--font-render-hinting=medium"]
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 1810, deviceScaleFactor: 1 });
+    await page.setContent(html, { waitUntil: "domcontentloaded" });
+    await page.emulateMediaType("screen");
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      margin: {
+        top: "0",
+        right: "0",
+        bottom: "0",
+        left: "0"
+      }
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
+}
+
 async function renderShowroomReceiptPdf(doc: PDFKit.PDFDocument, order: OrderSnapshot): Promise<void> {
   const tone = toneForTemplate("showroom_receipt");
   const financials = computeFinancialSummary(order);
@@ -841,6 +880,17 @@ async function renderDocument(doc: PDFKit.PDFDocument, order: OrderSnapshot, tem
 }
 
 export async function buildOrderInvoicePdf(order: OrderSnapshot, templateChoice: string): Promise<Buffer> {
+  if (templateChoice === "showroom_receipt") {
+    const html = buildOrderInvoiceHtml(order, templateChoice);
+    if (html) {
+      try {
+        return await renderHtmlToPdfBuffer(html);
+      } catch (error) {
+        console.error("[invoice-pdf] html-to-pdf fallback to pdfkit", error);
+      }
+    }
+  }
+
   const tone = toneForTemplate(templateChoice);
   const doc = new PDFDocument({
     size: "A4",
