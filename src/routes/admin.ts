@@ -2408,10 +2408,29 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const date = new Date(order.createdAt);
       const dateLabel = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
       const dateTimeLabel = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-      const paidAmount = Math.max(0, Number(order.totalAmount || 0) - Number(order.outstandingAmount || 0));
-      const subtotalAmount = Math.max(0, Number(order.subtotalAmount ?? order.totalAmount ?? 0));
-      const discountAmount = Math.max(0, Number(order.discountAmount || 0));
-      const isFullyPaid = Number(order.outstandingAmount || 0) <= 0;
+      const linesSubtotal = (order.articles || []).reduce((sum, article) => {
+        const qty = Math.max(0, Number(article.quantity || 0));
+        const unit = Math.max(0, Number(article.unitPrice || 0));
+        return sum + (qty * unit);
+      }, 0);
+      const subtotalAmount = Math.max(0, linesSubtotal);
+      const discountAmount = Math.min(subtotalAmount, Math.max(0, Number(order.discountAmount || 0)));
+      const previewTotalAmount = Math.max(0, subtotalAmount - discountAmount);
+      const paidFromTransactions = (Array.isArray(order.paymentTransactions) ? order.paymentTransactions : []).reduce((sum, entry) => {
+        const sameCurrency = !entry.currency || String(entry.currency).toUpperCase() === String(order.currency || "MAD").toUpperCase();
+        return sameCurrency ? sum + Math.max(0, Number(entry.amount || 0)) : sum;
+      }, 0);
+      const paidAmount = Math.min(
+        previewTotalAmount,
+        Math.max(
+          0,
+          paidFromTransactions > 0
+            ? paidFromTransactions
+            : (previewTotalAmount - Math.max(0, Number(order.outstandingAmount || 0)))
+        )
+      );
+      const previewOutstandingAmount = Math.max(0, previewTotalAmount - paidAmount);
+      const isFullyPaid = previewOutstandingAmount <= 0;
       const isPartial = paidAmount > 0 && !isFullyPaid;
       const financialLabel = paymentLabel(order);
       const paymentGateway = escapeHtml(order.paymentGateway || "Non précisée");
@@ -2504,11 +2523,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "</div>";
       }
 
-      const hasOutstanding = Number(order.outstandingAmount || 0) > 0;
+      const hasOutstanding = previewOutstandingAmount > 0;
       const outstandingRow = hasOutstanding
-        ? "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>Montant impayé</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;color:#b41c18;'><strong>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</strong></td></tr>"
+        ? "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>Montant impayé</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;color:#b41c18;'><strong>" + formatMoney(previewOutstandingAmount, order.currency) + "</strong></td></tr>"
         : "";
-      const coinOutstandingRow = hasOutstanding ? "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;'><strong>Montant impayé</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;color:#b41c18;'><strong>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</strong></td></tr>" : "";
+      const coinOutstandingRow = hasOutstanding ? "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;'><strong>Montant impayé</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;color:#b41c18;'><strong>" + formatMoney(previewOutstandingAmount, order.currency) + "</strong></td></tr>" : "";
       const classicDiscountRow = discountAmount > 0
         ? "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Remise</td><td style='text-align:right;padding:10px 12px;'>-" + formatMoney(discountAmount, order.currency) + "</td></tr>"
         : "";
@@ -2586,37 +2605,54 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "</body></html>"
       );
       const showroomInvoice = (
-        "<!doctype html><html><head><meta charset='utf-8' /><title>Reçu showroom " + escapeHtml(order.name) + "</title>" +
-        "<style>@page{size:A4;margin:12mm}body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#111;background:#fff}" +
-        ".page{padding:8mm 6mm}.head{text-align:center;margin-bottom:16px}.brand{font-family:Georgia,'Times New Roman',serif;letter-spacing:.08em;font-size:20px;text-transform:uppercase;font-weight:600}" +
-        ".meta{margin-top:6px;color:#666;font-size:12px}.title{margin-top:10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase}" +
-        ".grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.card{border:1px solid #e8e8e8;border-radius:10px;padding:12px}" +
-        ".card h3{margin:0 0 8px;color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.07em}.r{display:grid;grid-template-columns:42% 58%;gap:6px;font-size:12.5px;margin-bottom:6px}" +
-        ".k{color:#666}.v{font-weight:600}table{width:100%;border-collapse:collapse;font-size:13px}.th{color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #e8e8e8}" +
-        "th,td{padding:9px 10px;border-bottom:1px solid #ededed;text-align:left}td.a{text-align:right}.tot{margin-top:12px;border:1px solid #e8e8e8;border-radius:10px;padding:10px;max-width:360px;margin-left:auto}" +
-        ".line{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}.strong{font-weight:700}</style></head><body><div class='page'>" +
-        "<div class='head'><div class='brand'>Maison Bouchra Filali Lahlou</div><div class='meta'>Casablanca, Morocco • contact@bouchrafilalilahlou.com • www.bouchrafilalilahlou.com</div><div class='title'>Reçu showroom</div></div>" +
-        "<div class='grid'><div class='card'><h3>Commande</h3>" +
-        "<div class='r'><div class='k'>Numéro</div><div class='v'>" + escapeHtml(order.name) + "</div></div>" +
-        "<div class='r'><div class='k'>Date</div><div class='v'>" + dateLabel + " " + dateTimeLabel + "</div></div>" +
-        "<div class='r'><div class='k'>Statut de paiement</div><div class='v'>" + escapeHtml(financialLabel) + "</div></div>" +
-        "<div class='r'><div class='k'>Mode de paiement</div><div class='v'>" + paymentGateway + "</div></div>" +
-        "</div><div class='card'><h3>Client</h3>" +
-        "<div class='r'><div class='k'>Nom</div><div class='v'>" + escapeHtml(order.customerLabel || "Client inconnu") + "</div></div>" +
-        "<div class='r'><div class='k'>Téléphone</div><div class='v'>" + escapeHtml(order.customerPhone || "-") + "</div></div>" +
-        "<div class='r'><div class='k'>E-mail</div><div class='v'>" + escapeHtml(order.customerEmail || "-") + "</div></div>" +
-        "<div class='r'><div class='k'>Adresse</div><div class='v'>" + shippingAddress + "</div></div>" +
+        "<!doctype html><html><head><meta charset='utf-8' /><title>Reçu de maison " + escapeHtml(order.name) + "</title>" +
+        "<style>@page{size:A4;margin:18mm}html,body{margin:0;padding:0;background:#fcfaf6;color:#121212;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}" +
+        "*{box-sizing:border-box}.page{padding:18mm 20mm 16mm;min-height:100vh}.overline{text-align:center;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
+        ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:34px;letter-spacing:.05em;line-height:1.1;margin-top:14px}" +
+        ".meta{text-align:center;color:#756e66;font-size:13px;margin-top:10px}.rule{height:1px;background:#ebe5dc;margin:24px 0 28px}" +
+        ".hero{display:grid;grid-template-columns:1.45fr .85fr;gap:44px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:33px;line-height:1.08;font-weight:500}" +
+        ".doc-sub{margin-top:10px;color:#756e66;font-size:14px}.meta-stack{padding-top:2px}.meta-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;margin-top:14px}" +
+        ".meta-label:first-child{margin-top:0}.meta-value{margin-top:5px;font-size:16px;line-height:1.35}.meta-value.strong{font-weight:700}" +
+        ".identity{display:grid;grid-template-columns:1fr 1fr;gap:54px;margin-top:34px}.identity-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
+        ".identity-value{margin-top:7px;font-size:17px;font-weight:700}.identity-copy{margin-top:7px;font-size:14px;line-height:1.6;color:#2b2724}" +
+        ".table{margin-top:42px}.table-head,.table-row{display:grid;grid-template-columns:52px 1fr 210px;gap:16px;align-items:start}.table-head{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;padding-bottom:12px}" +
+        ".table-rule{height:1px;background:#ded6cb}.table-row{padding:16px 0 18px;border-bottom:1px solid #ebe5dc}.qty{font-size:13px;color:#756e66}.piece{font-size:18px;line-height:1.35;font-weight:600}" +
+        ".amount{text-align:right;font-size:16px;line-height:1.35;color:#2b2724}.financials{margin-top:34px;display:grid;grid-template-columns:1fr 270px;gap:40px;align-items:end}" +
+        ".financial-copy{font-size:14px;line-height:1.7;color:#756e66;padding-bottom:6px}.totals{padding-top:10px}.totals-row{display:grid;grid-template-columns:1fr auto;gap:18px;padding:6px 0}" +
+        ".totals-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}.totals-value{text-align:right;font-size:15px;color:#2b2724}" +
+        ".totals-rule{height:1px;background:#ebe5dc;margin:8px 0 10px}.balance{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:end;padding-top:2px}" +
+        ".balance-label{font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.1;color:#5f5346}.balance-value{text-align:right;font-size:21px;font-weight:700;color:#5f5346}" +
+        ".footer{margin-top:54px;padding-top:18px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#2b2724}" +
+        "@media (max-width: 820px){.page{padding:12mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:42px 1fr 120px;gap:10px}.brand{font-size:28px}.doc-title{font-size:28px}.piece{font-size:16px}.balance-label{font-size:20px}.balance-value{font-size:18px}}</style></head><body><div class='page'>" +
+        "<div class='overline'>Edition privee</div>" +
+        "<div class='brand'>Maison Bouchra Filali Lahlou</div>" +
+        "<div class='meta'>Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
+        "<div class='rule'></div>" +
+        "<div class='hero'><div><div class='doc-title'>Reçu de maison</div><div class='doc-sub'>Edité le " + dateLabel + " à " + dateTimeLabel + "</div></div><div class='meta-stack'>" +
+        "<div class='meta-label'>Référence</div><div class='meta-value strong'>" + escapeHtml(order.name || "Non renseignée") + "</div>" +
+        "<div class='meta-label'>Règlement</div><div class='meta-value'>" + escapeHtml(financialLabel) + "</div>" +
+        "<div class='meta-label'>Montant de la commande</div><div class='meta-value strong'>" + formatMoney(previewTotalAmount, order.currency) + "</div>" +
         "</div></div>" +
-        "<table><thead><tr class='th'><th style='width:72px'>Qté</th><th>Article</th><th style='width:180px;text-align:right'>Montant</th></tr></thead><tbody>" +
-        rows +
-        "</tbody></table>" +
-        "<div class='tot'>" +
-          "<div class='line'><span>Sous-total</span><span>" + formatMoney(subtotalAmount, order.currency) + "</span></div>" +
-          compactDiscountLine +
-          "<div class='line'><span>Total</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div>" +
-          "<div class='line'><span>Total payé</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
-          (hasOutstanding ? "<div class='line strong'><span>Reste à payer</span><span>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</span></div>" : "<div class='line strong'><span>Reste à payer</span><span>-</span></div>") +
+        "<div class='identity'><div><div class='identity-label'>À l'attention de</div><div class='identity-value'>" + escapeHtml(order.customerLabel || "Cliente non renseignée") + "</div><div class='identity-copy'>" + escapeHtml(order.customerPhone || "Téléphone non renseigné") + "<br/>" + escapeHtml(order.customerEmail || "E-mail non renseigné") + "</div></div>" +
+        "<div><div class='identity-label'>Coordonnées de commande</div><div class='identity-value'>" + paymentGateway + "</div><div class='identity-copy'>" + shippingAddress + "</div></div></div>" +
+        "<div class='table'><div class='table-head'><div>Qté</div><div>Pièce</div><div style='text-align:right'>Montant</div></div><div class='table-rule'></div>" +
+        (order.articles || []).map((article) => {
+          const qty = Math.max(0, Number(article.quantity || 0));
+          const unit = Math.max(0, Number(article.unitPrice || 0));
+          return "<div class='table-row'><div class='qty'>" + qty + "</div><div class='piece'>" + escapeHtml(article.title || "Pièce couture") + "</div><div class='amount'>" + formatMoney(qty * unit, order.currency) + "</div></div>";
+        }).join("") +
         "</div>" +
+        "<div class='financials'><div class='financial-copy'>" + (hasOutstanding
+          ? "Le solde restant pourra être réglé selon les modalités convenues avec la Maison."
+          : "Ce document confirme le règlement de votre commande couture."
+        ) + "</div><div class='totals'>" +
+        "<div class='totals-row'><div class='totals-label'>Sous-total</div><div class='totals-value'>" + formatMoney(subtotalAmount, order.currency) + "</div></div>" +
+        (discountAmount > 0 ? "<div class='totals-row'><div class='totals-label'>Remise</div><div class='totals-value'>" + formatMoney(-discountAmount, order.currency) + "</div></div>" : "") +
+        "<div class='totals-row'><div class='totals-label'>Total</div><div class='totals-value'>" + formatMoney(previewTotalAmount, order.currency) + "</div></div>" +
+        "<div class='totals-row'><div class='totals-label'>Réglé à ce jour</div><div class='totals-value'>" + formatMoney(paidAmount, order.currency) + "</div></div>" +
+        "<div class='totals-rule'></div><div class='balance'><div class='balance-label'>Reste à payer</div><div class='balance-value'>" + (hasOutstanding ? formatMoney(previewOutstandingAmount, order.currency) : "-") + "</div></div>" +
+        "</div></div>" +
+        "<div class='footer'>Avec nos remerciements.</div>" +
         "</div></body></html>"
       );
       const internationalInvoice = (
