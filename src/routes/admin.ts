@@ -13,7 +13,7 @@ import {
 } from "../services/orderSnapshots.js";
 import { fetchOrdersForPeriod } from "../services/shopifyOrdersSync.js";
 import { listWebhookEvents } from "../services/webhookEvents.js";
-import { buildOrderInvoicePdf } from "../services/invoicePdf.js";
+import { buildOrderInvoiceHtml, buildOrderInvoicePdf } from "../services/invoicePdf.js";
 import { uploadPdfToShopifyFiles } from "../services/shopifyFiles.js";
 import { computeDashboardInsights, computeDashboardSeries } from "../services/insights.js";
 import { isBigQueryForecastConfigured, runRevenueForecast } from "../services/bigqueryForecast.js";
@@ -2605,55 +2605,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "</body></html>"
       );
       const showroomInvoice = (
-        "<!doctype html><html><head><meta charset='utf-8' /><title>Reçu de maison " + escapeHtml(order.name) + "</title>" +
-        "<style>@page{size:A4;margin:18mm}html,body{margin:0;padding:0;background:#fcfaf6;color:#121212;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif}" +
-        "*{box-sizing:border-box}.page{padding:18mm 20mm 16mm;min-height:100vh}.overline{text-align:center;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
-        ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:34px;letter-spacing:.05em;line-height:1.1;margin-top:14px}" +
-        ".meta{text-align:center;color:#756e66;font-size:13px;margin-top:10px}.rule{height:1px;background:#ebe5dc;margin:24px 0 28px}" +
-        ".hero{display:grid;grid-template-columns:1.45fr .85fr;gap:44px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:33px;line-height:1.08;font-weight:500}" +
-        ".doc-sub{margin-top:10px;color:#756e66;font-size:14px}.meta-stack{padding-top:2px}.meta-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;margin-top:14px}" +
-        ".meta-label:first-child{margin-top:0}.meta-value{margin-top:5px;font-size:16px;line-height:1.35}.meta-value.strong{font-weight:700}" +
-        ".identity{display:grid;grid-template-columns:1fr 1fr;gap:54px;margin-top:34px}.identity-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
-        ".identity-value{margin-top:7px;font-size:17px;font-weight:700}.identity-copy{margin-top:7px;font-size:14px;line-height:1.6;color:#2b2724}" +
-        ".table{margin-top:42px}.table-head,.table-row{display:grid;grid-template-columns:52px 1fr 210px;gap:16px;align-items:start}.table-head{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;padding-bottom:12px}" +
-        ".table-rule{height:1px;background:#ded6cb}.table-row{padding:16px 0 18px;border-bottom:1px solid #ebe5dc}.qty{font-size:13px;color:#756e66}.piece{font-size:18px;line-height:1.35;font-weight:600}" +
-        ".amount{text-align:right;font-size:16px;line-height:1.35;color:#2b2724}.financials{margin-top:34px;display:grid;grid-template-columns:1fr 270px;gap:40px;align-items:end}" +
-        ".financial-copy{font-size:14px;line-height:1.7;color:#756e66;padding-bottom:6px}.totals{padding-top:10px}.totals-row{display:grid;grid-template-columns:1fr auto;gap:18px;padding:6px 0}" +
-        ".totals-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}.totals-value{text-align:right;font-size:15px;color:#2b2724}" +
-        ".totals-rule{height:1px;background:#ebe5dc;margin:8px 0 10px}.balance{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:end;padding-top:2px}" +
-        ".balance-label{font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.1;color:#5f5346}.balance-value{text-align:right;font-size:21px;font-weight:700;color:#5f5346}" +
-        ".footer{margin-top:54px;padding-top:18px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#2b2724}" +
-        "@media (max-width: 820px){.page{padding:12mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:42px 1fr 120px;gap:10px}.brand{font-size:28px}.doc-title{font-size:28px}.piece{font-size:16px}.balance-label{font-size:20px}.balance-value{font-size:18px}}</style></head><body><div class='page'>" +
-        "<div class='overline'>Edition privee</div>" +
-        "<div class='brand'>Maison Bouchra Filali Lahlou</div>" +
-        "<div class='meta'>Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
-        "<div class='rule'></div>" +
-        "<div class='hero'><div><div class='doc-title'>Reçu de maison</div><div class='doc-sub'>Edité le " + dateLabel + " à " + dateTimeLabel + "</div></div><div class='meta-stack'>" +
-        "<div class='meta-label'>Référence</div><div class='meta-value strong'>" + escapeHtml(order.name || "Non renseignée") + "</div>" +
-        "<div class='meta-label'>Règlement</div><div class='meta-value'>" + escapeHtml(financialLabel) + "</div>" +
-        "<div class='meta-label'>Montant de la commande</div><div class='meta-value strong'>" + formatMoney(previewTotalAmount, order.currency) + "</div>" +
-        "</div></div>" +
-        "<div class='identity'><div><div class='identity-label'>À l'attention de</div><div class='identity-value'>" + escapeHtml(order.customerLabel || "Cliente non renseignée") + "</div><div class='identity-copy'>" + escapeHtml(order.customerPhone || "Téléphone non renseigné") + "<br/>" + escapeHtml(order.customerEmail || "E-mail non renseigné") + "</div></div>" +
-        "<div><div class='identity-label'>Coordonnées de commande</div><div class='identity-value'>" + paymentGateway + "</div><div class='identity-copy'>" + shippingAddress + "</div></div></div>" +
-        "<div class='table'><div class='table-head'><div>Qté</div><div>Pièce</div><div style='text-align:right'>Montant</div></div><div class='table-rule'></div>" +
-        (order.articles || []).map((article) => {
-          const qty = Math.max(0, Number(article.quantity || 0));
-          const unit = Math.max(0, Number(article.unitPrice || 0));
-          return "<div class='table-row'><div class='qty'>" + qty + "</div><div class='piece'>" + escapeHtml(article.title || "Pièce couture") + "</div><div class='amount'>" + formatMoney(qty * unit, order.currency) + "</div></div>";
-        }).join("") +
-        "</div>" +
-        "<div class='financials'><div class='financial-copy'>" + (hasOutstanding
-          ? "Le solde restant pourra être réglé selon les modalités convenues avec la Maison."
-          : "Ce document confirme le règlement de votre commande couture."
-        ) + "</div><div class='totals'>" +
-        "<div class='totals-row'><div class='totals-label'>Sous-total</div><div class='totals-value'>" + formatMoney(subtotalAmount, order.currency) + "</div></div>" +
-        (discountAmount > 0 ? "<div class='totals-row'><div class='totals-label'>Remise</div><div class='totals-value'>" + formatMoney(-discountAmount, order.currency) + "</div></div>" : "") +
-        "<div class='totals-row'><div class='totals-label'>Total</div><div class='totals-value'>" + formatMoney(previewTotalAmount, order.currency) + "</div></div>" +
-        "<div class='totals-row'><div class='totals-label'>Réglé à ce jour</div><div class='totals-value'>" + formatMoney(paidAmount, order.currency) + "</div></div>" +
-        "<div class='totals-rule'></div><div class='balance'><div class='balance-label'>Reste à payer</div><div class='balance-value'>" + (hasOutstanding ? formatMoney(previewOutstandingAmount, order.currency) : "-") + "</div></div>" +
-        "</div></div>" +
-        "<div class='footer'>Avec nos remerciements.</div>" +
-        "</div></body></html>"
+        buildOrderInvoiceHtml(order, "showroom_receipt") || ""
       );
       const internationalInvoice = (
         "<!doctype html><html><head><meta charset='utf-8' /><title>International Invoice " + escapeHtml(order.name) + "</title>" +
