@@ -40,6 +40,8 @@ export type OrderSnapshot = {
   };
   orderLocation: string;
   createdAt: string;
+  subtotalAmount: number;
+  discountAmount: number;
   totalAmount: number;
   outstandingAmount: number;
   currency: string;
@@ -71,7 +73,11 @@ export type ShopifyOrderPayload = {
   id?: string | number;
   name?: string;
   created_at?: string;
+  subtotal_price?: string | number;
   total_price?: string | number;
+  total_discounts?: string | number;
+  current_subtotal_price?: string | number;
+  current_total_discounts?: string | number;
   total_outstanding?: string | number;
   currency?: string;
   financial_status?: string;
@@ -140,6 +146,33 @@ function inferOutstandingAmount(payload: ShopifyOrderPayload, totalAmount: numbe
   if (financialStatus === "partially_paid") return Math.max(0, totalAmount * 0.5);
 
   return existing?.outstandingAmount ?? totalAmount;
+}
+
+function inferSubtotalAmount(payload: ShopifyOrderPayload, totalAmount: number, existing?: OrderSnapshot): number {
+  const preferred = payload.current_subtotal_price ?? payload.subtotal_price;
+  if (preferred !== undefined) {
+    return Math.max(0, toNumber(preferred));
+  }
+  if (existing && Number.isFinite(Number(existing.subtotalAmount))) {
+    return Math.max(0, Number(existing.subtotalAmount));
+  }
+  return Math.max(0, totalAmount);
+}
+
+function inferDiscountAmount(
+  payload: ShopifyOrderPayload,
+  subtotalAmount: number,
+  totalAmount: number,
+  existing?: OrderSnapshot
+): number {
+  const preferred = payload.current_total_discounts ?? payload.total_discounts;
+  if (preferred !== undefined) {
+    return Math.max(0, toNumber(preferred));
+  }
+  if (existing && Number.isFinite(Number(existing.discountAmount))) {
+    return Math.max(0, Number(existing.discountAmount));
+  }
+  return Math.max(0, subtotalAmount - totalAmount);
 }
 
 function inferShippingStatus(payload: ShopifyOrderPayload): ShippingStatus {
@@ -312,6 +345,10 @@ function locationFromPayload(payload: ShopifyOrderPayload, existing?: OrderSnaps
 function upsertOrder(payload: ShopifyOrderPayload): OrderSnapshot {
   const id = payload.id ? String(payload.id) : `unknown-${Date.now()}-${Math.random()}`;
   const existing = ordersById.get(id);
+  const totalAmount = payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0;
+  const subtotalAmount = inferSubtotalAmount(payload, totalAmount, existing);
+  const discountAmount = inferDiscountAmount(payload, subtotalAmount, totalAmount, existing);
+  const outstandingAmount = inferOutstandingAmount(payload, totalAmount, existing);
 
   const next: OrderSnapshot = {
     id,
@@ -324,15 +361,7 @@ function upsertOrder(payload: ShopifyOrderPayload): OrderSnapshot {
     paymentGateway: paymentGatewayFromPayload(payload, existing),
     paymentBreakdown: paymentBreakdownFromPayload(
       payload,
-      Math.max(
-        0,
-        (payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0) -
-          inferOutstandingAmount(
-            payload,
-            payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0,
-            existing
-          )
-      ),
+      Math.max(0, totalAmount - outstandingAmount),
       payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
       existing
     ),
@@ -344,12 +373,10 @@ function upsertOrder(payload: ShopifyOrderPayload): OrderSnapshot {
     bankDetails: existing?.bankDetails,
     orderLocation: locationFromPayload(payload, existing),
     createdAt: payload.created_at ? String(payload.created_at) : existing?.createdAt ?? new Date().toISOString(),
-    totalAmount: payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0,
-    outstandingAmount: inferOutstandingAmount(
-      payload,
-      payload.total_price !== undefined ? toNumber(payload.total_price) : existing?.totalAmount ?? 0,
-      existing
-    ),
+    subtotalAmount,
+    discountAmount,
+    totalAmount,
+    outstandingAmount,
     currency: payload.currency ? String(payload.currency) : existing?.currency ?? "USD",
     financialStatus: payload.financial_status
       ? String(payload.financial_status)

@@ -685,6 +685,8 @@ function buildPublicInvoiceHtml(orderId: string, template: string) {
       </tr>`;
     })
     .join("");
+  const subtotalAmount = Number(order.subtotalAmount ?? order.totalAmount ?? 0);
+  const discountAmount = Math.max(0, Number(order.discountAmount ?? 0));
 
   const headerName = template === "coin" ? "COIN DE COUTURE" : "MAISON BOUCHRA FILALI LAHLOU";
   const footerMeta =
@@ -753,6 +755,8 @@ function buildPublicInvoiceHtml(orderId: string, template: string) {
       </tbody>
     </table>
     <div class="totals">
+      <div class="totals-row"><span>Sous-total</span><span>${escapeInvoiceHtml(formatInvoiceMoney(subtotalAmount, order.currency))}</span></div>
+      ${discountAmount > 0 ? `<div class="totals-row"><span>Remise</span><span>- ${escapeInvoiceHtml(formatInvoiceMoney(discountAmount, order.currency))}</span></div>` : ""}
       <div class="totals-row"><span>Total</span><span>${escapeInvoiceHtml(formatInvoiceMoney(order.totalAmount || 0, order.currency))}</span></div>
       <div class="totals-row"><span>Solde restant</span><span>${escapeInvoiceHtml(order.outstandingAmount > 0 ? formatInvoiceMoney(order.outstandingAmount, order.currency) : "-")}</span></div>
       <div class="totals-row"><strong>À encaisser</strong><strong>${escapeInvoiceHtml(formatInvoiceMoney(order.outstandingAmount || 0, order.currency))}</strong></div>
@@ -2365,6 +2369,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const dateLabel = date.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
       const dateTimeLabel = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
       const paidAmount = Math.max(0, Number(order.totalAmount || 0) - Number(order.outstandingAmount || 0));
+      const subtotalAmount = Math.max(0, Number(order.subtotalAmount ?? order.totalAmount ?? 0));
+      const discountAmount = Math.max(0, Number(order.discountAmount || 0));
       const isFullyPaid = Number(order.outstandingAmount || 0) <= 0;
       const isPartial = paidAmount > 0 && !isFullyPaid;
       const financialLabel = paymentLabel(order);
@@ -2463,6 +2469,15 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         ? "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>Montant impayé</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;color:#b41c18;'><strong>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</strong></td></tr>"
         : "";
       const coinOutstandingRow = hasOutstanding ? "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;'><strong>Montant impayé</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;color:#b41c18;'><strong>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</strong></td></tr>" : "";
+      const classicDiscountRow = discountAmount > 0
+        ? "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Remise</td><td style='text-align:right;padding:10px 12px;'>-" + formatMoney(discountAmount, order.currency) + "</td></tr>"
+        : "";
+      const coinDiscountRow = discountAmount > 0
+        ? "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Remise</td><td style='text-align:right;padding:10px 12px;'>-" + formatMoney(discountAmount, order.currency) + "</td></tr>"
+        : "";
+      const compactDiscountLine = discountAmount > 0
+        ? "<div class='line'><span>Discount</span><span>-" + formatMoney(discountAmount, order.currency) + "</span></div>"
+        : "";
       const classicInvoice = (
         "<!doctype html><html><head><meta charset='utf-8' /><title>Facture " + escapeHtml(order.name) + "</title>" +
         "<style>body{max-width:860px;margin:0 auto;font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.55;color:#222;padding:24px;background:#fff}" +
@@ -2491,7 +2506,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "<hr style='margin:1.25em 0;border:none;border-top:1px solid #eee;' />" +
         "<table><thead><tr><th>Qté</th><th>Article</th><th style='text-align:right;'>Prix</th></tr></thead><tbody>" +
         rows +
-        "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Sous-total</td><td style='text-align:right;padding:10px 12px;'>" + formatMoney(order.totalAmount || 0, order.currency) + "</td></tr>" +
+        "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Sous-total</td><td style='text-align:right;padding:10px 12px;'>" + formatMoney(subtotalAmount, order.currency) + "</td></tr>" +
+        classicDiscountRow +
         "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>Total</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>" + formatMoney(order.totalAmount || 0, order.currency) + "</strong></td></tr>" +
         "<tr><td colspan='2' style='text-align:right;padding:8px 12px;'>Total payé</td><td style='text-align:right;padding:8px 12px;'>" + formatMoney(paidAmount, order.currency) + "</td></tr>" +
         outstandingRow +
@@ -2518,7 +2534,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         coinLegalNotice +
         "<table><thead><tr><th>Qté</th><th>Article</th><th style='text-align:right;'>Prix</th></tr></thead><tbody>" +
         rows +
-        "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Sous-total</td><td style='text-align:right;padding:10px 12px;'>" + formatMoney(order.totalAmount || 0, order.currency) + "</td></tr>" +
+        "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Sous-total</td><td style='text-align:right;padding:10px 12px;'>" + formatMoney(subtotalAmount, order.currency) + "</td></tr>" +
+        coinDiscountRow +
         "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;'><strong>Total</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0e6d5;'><strong>" + formatMoney(order.totalAmount || 0, order.currency) + "</strong></td></tr>" +
         "<tr><td colspan='2' style='text-align:right;padding:8px 12px;'>Total payé</td><td style='text-align:right;padding:8px 12px;'>" + formatMoney(paidAmount, order.currency) + "</td></tr>" +
         coinOutstandingRow +
@@ -2554,7 +2571,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         rows +
         "</tbody></table>" +
         "<div class='tot'>" +
-          "<div class='line'><span>Subtotal</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div>" +
+          "<div class='line'><span>Subtotal</span><span>" + formatMoney(subtotalAmount, order.currency) + "</span></div>" +
+          compactDiscountLine +
+          "<div class='line'><span>Total</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div>" +
           "<div class='line'><span>Total paid</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
           (hasOutstanding ? "<div class='line strong'><span>Balance due</span><span>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</span></div>" : "<div class='line strong'><span>Balance due</span><span>-</span></div>") +
         "</div>" +
@@ -2581,7 +2600,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "<table><thead><tr><th style='width:72px'>Qty</th><th>Description</th><th class='r' style='width:190px'>Amount</th></tr></thead><tbody>" +
         rows +
         "</tbody></table>" +
-        "<div class='totals'><div class='line'><span>Subtotal</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div><div class='line'><span>Paid</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
+        "<div class='totals'><div class='line'><span>Subtotal</span><span>" + formatMoney(subtotalAmount, order.currency) + "</span></div>" +
+        compactDiscountLine +
+        "<div class='line'><span>Total</span><span>" + formatMoney(order.totalAmount || 0, order.currency) + "</span></div><div class='line'><span>Paid</span><span>" + formatMoney(paidAmount, order.currency) + "</span></div>" +
         (hasOutstanding ? "<div class='line'><strong>Balance due</strong><strong>" + formatMoney(order.outstandingAmount || 0, order.currency) + "</strong></div>" : "<div class='line'><strong>Balance due</strong><strong>-</strong></div>") +
         "</div></div></body></html>"
       );
