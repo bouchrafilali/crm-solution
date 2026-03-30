@@ -95,7 +95,7 @@ function pageWidth(doc: PDFKit.PDFDocument): number {
 
 function formatDateTime(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return textOr(value, "Date non renseignee");
+  if (Number.isNaN(date.getTime())) return textOr(value, "Date non renseignée");
   const dateLabel = date.toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "long",
@@ -105,55 +105,52 @@ function formatDateTime(value: string): string {
     hour: "2-digit",
     minute: "2-digit"
   });
-  return `${dateLabel} a ${timeLabel}`;
+  return `${dateLabel} à ${timeLabel}`;
 }
 
 function formatMoney(value: number, currency: string): string {
-  const amount = Math.abs(Number(value || 0));
-  const formatted = new Intl.NumberFormat("fr-FR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount);
-  const code = String(currency || "MAD").trim().toUpperCase() || "MAD";
-  return `${value < 0 ? "-" : ""}${formatted} ${code}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency || "MAD"
+  }).format(Number(value || 0));
 }
 
 function paymentStatusLabel(order: OrderSnapshot): string {
   const status = String(order.financialStatus || "").trim().toLowerCase();
-  if (status === "paid" || Number(order.outstandingAmount || 0) <= 0) return "Reglement integral";
-  if (status === "partially_paid") return "Reglement partiel";
-  return "Reglement en attente";
+  if (status === "paid" || Number(order.outstandingAmount || 0) <= 0) return "Règlement intégral";
+  if (status === "partially_paid") return "Règlement partiel";
+  return "Règlement en attente";
 }
 
 function paymentMethodLabel(order: OrderSnapshot): string {
-  return textOr(order.paymentGateway, "Mode de reglement non renseigne");
+  return textOr(order.paymentGateway, "Mode de règlement non renseigné");
 }
 
 function toneForTemplate(templateChoice: string): DocumentTone {
   if (templateChoice === "showroom_receipt") {
     return {
-      title: "Recu de maison",
-      overline: "Edition privee",
+      title: "Reçu de maison",
+      overline: "Édition privée",
       footer: "Avec nos remerciements."
     };
   }
   if (templateChoice === "international_invoice") {
     return {
       title: "Facture de couture",
-      overline: "Edition atelier",
+      overline: "Édition atelier",
       footer: "Maison Bouchra Filali Lahlou"
     };
   }
   if (templateChoice === "coin") {
     return {
       title: "Facture atelier",
-      overline: "Edition atelier",
+      overline: "Édition atelier",
       footer: "Maison Bouchra Filali Lahlou"
     };
   }
   return {
     title: "Facture de couture",
-    overline: "Edition atelier",
+    overline: "Édition atelier",
     footer: "Maison Bouchra Filali Lahlou"
   };
 }
@@ -190,20 +187,20 @@ function buildReceiptHtmlViewModel(order: OrderSnapshot, templateChoice: string)
   const financials = computeFinancialSummary(order);
   return {
     tone,
-    reference: textOr(order.name, "Non renseignee"),
+    reference: textOr(order.name, "Non renseignée"),
     dateLabel: formatDateTime(order.createdAt),
     financialLabel: paymentStatusLabel(order),
     paymentMethod: paymentMethodLabel(order),
-    customerName: textOr(order.customerLabel, "Cliente non renseignee"),
-    customerPhone: textOr(order.customerPhone, "Telephone non renseigne"),
+    customerName: textOr(order.customerLabel, "Cliente non renseignée"),
+    customerPhone: textOr(order.customerPhone, "Téléphone non renseigné"),
     customerEmail: textOr(order.customerEmail, "E-mail non renseigne"),
-    shippingAddress: textOr(order.shippingAddress, "Adresse de livraison non renseignee"),
+    shippingAddress: textOr(order.shippingAddress, "Adresse de livraison non renseignée"),
     currency: order.currency || "MAD",
     articles: (Array.isArray(order.articles) && order.articles.length > 0
       ? order.articles
       : [{ id: "empty", title: "Aucune piece ajoutee", quantity: 0, unitPrice: 0, status: "pending" as const }]).map((article) => ({
         quantity: Math.max(0, toNumber(article.quantity)),
-        title: textOr(article.title, "Piece couture"),
+        title: textOr(article.title, "Pièce couture"),
         amountLabel: formatMoney(lineTotal(article), order.currency || "MAD")
       })),
     subtotalLabel: formatMoney(financials.subtotal, order.currency || "MAD"),
@@ -362,11 +359,11 @@ function drawHeader(doc: PDFKit.PDFDocument, order: OrderSnapshot, tone: Documen
   const rightX = left + widthLeft + gap;
 
   serifTitle(doc, tone.title, left, metaTop, widthLeft, 19);
-  softText(doc, "Edite le " + formatDateTime(order.createdAt), left, metaTop + mm(7), widthLeft);
+  softText(doc, "Édité le " + formatDateTime(order.createdAt), left, metaTop + mm(7), widthLeft);
 
-  mutedLabel(doc, "Reference", rightX, metaTop, widthRight);
-  strongText(doc, textOr(order.name, "Non renseignee"), rightX, metaTop + mm(4.2), widthRight);
-  mutedLabel(doc, "Reglement", rightX, metaTop + mm(13), widthRight);
+  mutedLabel(doc, "Référence", rightX, metaTop, widthRight);
+  strongText(doc, textOr(order.name, "Non renseignée"), rightX, metaTop + mm(4.2), widthRight);
+  mutedLabel(doc, "Règlement", rightX, metaTop + mm(13), widthRight);
   softText(doc, paymentStatusLabel(order), rightX, metaTop + mm(17.2), widthRight);
   mutedLabel(doc, "Montant de la commande", rightX, metaTop + mm(26), widthRight);
   strongText(doc, formatMoney(financials.total, order.currency || "MAD"), rightX, metaTop + mm(30.2), widthRight, "left", 11.3);
@@ -381,14 +378,14 @@ function drawIdentityColumns(doc: PDFKit.PDFDocument, order: OrderSnapshot): voi
   const colW = (width - gap) / 2;
   const y = doc.y;
 
-  mutedLabel(doc, "A l'attention de", left, y, colW);
-  strongText(doc, textOr(order.customerLabel, "Cliente non renseignee"), left, y + mm(4.2), colW, "left", 11.2);
-  softText(doc, textOr(order.customerPhone, "Telephone non renseigne"), left, y + mm(10), colW);
-  softText(doc, textOr(order.customerEmail, "E-mail non renseigne"), left, y + mm(15.5), colW);
+  mutedLabel(doc, "À l'attention de", left, y, colW);
+  strongText(doc, textOr(order.customerLabel, "Cliente non renseignée"), left, y + mm(4.2), colW, "left", 11.2);
+  softText(doc, textOr(order.customerPhone, "Téléphone non renseigné"), left, y + mm(10), colW);
+  softText(doc, textOr(order.customerEmail, "E-mail non renseigné"), left, y + mm(15.5), colW);
 
-  mutedLabel(doc, "Coordonnees de commande", left + colW + gap, y, colW);
+  mutedLabel(doc, "Coordonnées de commande", left + colW + gap, y, colW);
   strongText(doc, paymentMethodLabel(order), left + colW + gap, y + mm(4.2), colW, "left", 11.2);
-  softText(doc, textOr(order.shippingAddress, "Adresse de livraison non renseignee"), left + colW + gap, y + mm(10), colW);
+  softText(doc, textOr(order.shippingAddress, "Adresse de livraison non renseignée"), left + colW + gap, y + mm(10), colW);
 
   doc.y = y + mm(27);
 }
@@ -403,8 +400,8 @@ function drawTableHeader(doc: PDFKit.PDFDocument): void {
   const articleW = width - qtyW - amountW - mm(10);
   const top = doc.y;
 
-  mutedLabel(doc, "Qte", left, top, qtyW);
-  mutedLabel(doc, "Piece", articleX, top, articleW);
+  mutedLabel(doc, "Qté", left, top, qtyW);
+  mutedLabel(doc, "Pièce", articleX, top, articleW);
   mutedLabel(doc, "Montant", right - amountW, top, amountW, "right");
   doc.y = top + mm(5.2);
   drawHorizontalRule(doc, doc.y, COLORS.line);
@@ -424,7 +421,7 @@ function drawArticleRow(doc: PDFKit.PDFDocument, article: OrderArticle, currency
   const amountW = mm(50);
   const articleX = left + qtyW + mm(6);
   const articleW = width - qtyW - amountW - mm(10);
-  const title = textOr(article.title, "Piece couture");
+  const title = textOr(article.title, "Pièce couture");
   const lineHeight = Math.max(mm(11.5), articleTextHeight(doc, title, articleW) + mm(3));
   const top = doc.y;
 
@@ -449,7 +446,7 @@ function drawArticles(doc: PDFKit.PDFDocument, order: OrderSnapshot, tone: Docum
 
   drawTableHeader(doc);
   for (const article of articles) {
-    const projectedHeight = Math.max(mm(18), articleTextHeight(doc, textOr(article.title, "Piece couture"), pageWidth(doc) - mm(64)) + mm(10));
+    const projectedHeight = Math.max(mm(18), articleTextHeight(doc, textOr(article.title, "Pièce couture"), pageWidth(doc) - mm(64)) + mm(10));
     if (ensureSpace(doc, projectedHeight + mm(34))) {
       drawHeader(doc, order, tone, financials);
       drawTableHeader(doc);
@@ -489,12 +486,12 @@ function drawFinancialSummary(doc: PDFKit.PDFDocument, order: OrderSnapshot, ton
   strongText(doc, formatMoney(financials.total, order.currency || "MAD"), x + labelW, y, amountW, "right", 10.9);
   y += mm(6.5);
 
-  mutedLabel(doc, "Regle a ce jour", x, y, labelW);
+  mutedLabel(doc, "Réglé à ce jour", x, y, labelW);
   softText(doc, formatMoney(financials.paid, order.currency || "MAD"), x + labelW, y, amountW, "right");
   y += mm(7.3);
 
   doc.strokeColor(COLORS.lineSoft).lineWidth(0.6).moveTo(x, y - mm(1.5)).lineTo(right, y - mm(1.5)).stroke();
-  doc.fillColor(COLORS.accent).font("Times-Bold").fontSize(12.8).text("Reste a payer", x, y, {
+  doc.fillColor(COLORS.accent).font("Times-Bold").fontSize(12.8).text("Reste à payer", x, y, {
     width: labelW + mm(20)
   });
   doc.fillColor(COLORS.accent).font("Helvetica-Bold").fontSize(12.2).text(
