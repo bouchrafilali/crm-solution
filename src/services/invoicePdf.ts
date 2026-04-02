@@ -379,44 +379,45 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
 
     return (
       "<!doctype html><html><head><meta charset='utf-8' /><title>Facture " + escapeHtml(order.name) + "</title>" +
-      "<style>body{max-width:860px;margin:0 auto;font-family:'Helvetica Neue',Arial,sans-serif;line-height:1.55;color:#222;padding:24px;background:#fff}" +
-      ".row{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1.25em}.box{background:#fff;padding:16px;border-radius:10px;border:1px solid #f0f0f0;box-sizing:border-box}" +
-      ".muted{color:#555}.title{margin:0;font-size:22px}.cards{display:flex;gap:12px;align-items:stretch;flex-wrap:wrap}.cards .box{flex:1;min-width:180px}" +
-      "table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:14px}thead tr{background:#fafafa}th{font-weight:600;text-align:left;padding:10px 12px}" +
-      "@page{size:A4;margin:12mm}@media print{body{padding:0}}</style></head><body>" +
+      "<style>@page{size:A4;margin:7mm}html,body{margin:0;padding:0;background:#fff;color:#222;font-family:'Helvetica Neue',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+      "body{max-width:none;line-height:1.34;padding:0}*{box-sizing:border-box}.wrap{padding:4mm 5mm 3mm}.row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}" +
+      ".box{background:#fff;padding:10px 11px;border-radius:8px;border:1px solid #f0f0f0;box-sizing:border-box}.muted{color:#555}.title{margin:0;font-size:18px;line-height:1.08}" +
+      ".cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;align-items:stretch}.cards .box{min-width:0;font-size:12px;line-height:1.45}" +
+      "table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px}thead tr{background:#fafafa}th{font-weight:600;text-align:left;padding:7px 9px}" +
+      "td{vertical-align:top}@media print{body{padding:0}.wrap{padding:0}}}</style></head><body>" +
       "<div class='wrap'>" +
       "<div class='row'>" +
-        "<div style='display:flex;align-items:center;gap:16px;'>" +
-          "<img src='https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750' alt='Logo' style='max-width:160px;height:auto;display:block;' />" +
-          "<div style='font-size:14px;color:#555;'><strong style='font-size:16px;display:block;'>Bouchra Filali Lahlou</strong>www.bouchrafilalilahlou.com</div>" +
+        "<div style='display:flex;align-items:center;gap:12px;'>" +
+          "<img src='https://cdn.shopify.com/s/files/1/0551/5558/9305/files/loooogoooo.png?v=1727896750' alt='Logo' style='max-width:126px;height:auto;display:block;' />" +
+          "<div style='font-size:12px;color:#555;line-height:1.35;'><strong style='font-size:14px;display:block;'>Bouchra Filali Lahlou</strong>www.bouchrafilalilahlou.com</div>" +
         "</div>" +
-        "<div style='text-align:right;'><div style='background:#f6f6f8;padding:10px 12px;border-radius:8px;border:1px solid #eee;'><div style='font-size:12px;color:#777;'>Facture</div><div style='font-weight:700;font-size:16px;'>" + escapeHtml(order.name) + "</div></div></div>" +
+        "<div style='text-align:right;'><div style='background:#f6f6f8;padding:8px 10px;border-radius:8px;border:1px solid #eee;'><div style='font-size:11px;color:#777;'>Facture</div><div style='font-weight:700;font-size:14px;'>" + escapeHtml(order.name) + "</div></div></div>" +
       "</div>" +
-      "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75em;'>" +
+      "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:12px;'>" +
         "<h1 class='title'>Facture</h1>" +
-        "<div style='text-align:right;color:#555;font-size:14px;'><div>Statut : " + escapeHtml(financialLabel) + "</div><div>" + escapeHtml(dateLabel) + " " + escapeHtml(dateTimeLabel) + "</div></div>" +
+        "<div style='text-align:right;color:#555;font-size:12px;line-height:1.35;'><div>Statut : " + escapeHtml(financialLabel) + "</div><div>" + escapeHtml(dateLabel) + " " + escapeHtml(dateTimeLabel) + "</div></div>" +
       "</div>" +
-      "<div class='cards' style='margin-top:1.25em;margin-bottom:1em;'>" +
+      "<div class='cards' style='margin-top:8px;margin-bottom:8px;'>" +
         "<div class='box'><strong>De</strong><br/>www.bouchrafilalilahlou.com<br/>19/21 Rond-point des Sports<br/>Casablanca, 20250</div>" +
         "<div class='box'><strong>Client</strong><br/>" + customerBlock + "</div>" +
         "<div class='box'><strong>Adresse de Facturation</strong><br/>" + billingAddress + "</div>" +
         "<div class='box'><strong>Adresse de Livraison</strong><br/>" + shippingAddress + "</div>" +
       "</div>" +
-      "<hr style='margin:1.25em 0;border:none;border-top:1px solid #eee;' />" +
+      "<hr style='margin:10px 0;border:none;border-top:1px solid #eee;' />" +
       "<table><thead><tr><th>Qté</th><th>Article</th><th style='text-align:right;'>Prix</th></tr></thead><tbody>" +
       rows +
-      "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Sous-total</td><td style='text-align:right;padding:10px 12px;'>" + formatMoney(subtotalAmount, order.currency || "MAD") + "</td></tr>" +
-      (discountAmount > 0 ? "<tr><td colspan='2' style='text-align:right;padding:10px 12px;'>Remise</td><td style='text-align:right;padding:10px 12px;'>-" + formatMoney(discountAmount, order.currency || "MAD") + "</td></tr>" : "") +
-      "<tr><td colspan='2' style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>Total</strong></td><td style='text-align:right;padding:12px;border-top:1px solid #f0f0f0;'><strong>" + formatMoney(previewTotalAmount, order.currency || "MAD") + "</strong></td></tr>" +
-      "<tr><td colspan='2' style='text-align:right;padding:8px 12px;'>Total payé</td><td style='text-align:right;padding:8px 12px;'>" + formatMoney(paidAmount, order.currency || "MAD") + "</td></tr>" +
+      "<tr><td colspan='2' style='text-align:right;padding:7px 9px;'>Sous-total</td><td style='text-align:right;padding:7px 9px;'>" + formatMoney(subtotalAmount, order.currency || "MAD") + "</td></tr>" +
+      (discountAmount > 0 ? "<tr><td colspan='2' style='text-align:right;padding:7px 9px;'>Remise</td><td style='text-align:right;padding:7px 9px;'>-" + formatMoney(discountAmount, order.currency || "MAD") + "</td></tr>" : "") +
+      "<tr><td colspan='2' style='text-align:right;padding:8px 9px;border-top:1px solid #f0f0f0;'><strong>Total</strong></td><td style='text-align:right;padding:8px 9px;border-top:1px solid #f0f0f0;'><strong>" + formatMoney(previewTotalAmount, order.currency || "MAD") + "</strong></td></tr>" +
+      "<tr><td colspan='2' style='text-align:right;padding:6px 9px;'>Total payé</td><td style='text-align:right;padding:6px 9px;'>" + formatMoney(paidAmount, order.currency || "MAD") + "</td></tr>" +
       outstandingRow +
       "</tbody></table>" +
       paymentSection +
-      "<div style='margin-top:18px;padding:14px;border-radius:8px;background:#fff;border:1px solid #f0f0f0;font-size:14px;color:#333;'>" +
+      "<div style='margin-top:10px;padding:10px 12px;border-radius:8px;background:#fff;border:1px solid #f0f0f0;font-size:12px;line-height:1.45;color:#333;'>" +
         "<strong>Merci pour votre confiance.</strong>" +
-        "<p style='margin:8px 0 0 0;color:#666;'>Chaque pièce est confectionnée sur mesure avec le plus grand soin. Si vous avez des questions concernant cette facture ou votre commande, n’hésitez pas à nous contacter.</p>" +
+        "<p style='margin:5px 0 0 0;color:#666;'>Chaque pièce est confectionnée sur mesure avec le plus grand soin. Si vous avez des questions concernant cette facture ou votre commande, n’hésitez pas à nous contacter.</p>" +
       "</div>" +
-      "<p style='margin-top:14px;font-size:13px;color:#666;'>Document généré par www.bouchrafilalilahlou.com</p>" +
+      "<p style='margin-top:8px;font-size:11px;color:#666;'>Document généré par www.bouchrafilalilahlou.com</p>" +
       "</div></body></html>"
     );
   }
@@ -429,23 +430,23 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
   ).join("");
   return (
     "<!doctype html><html><head><meta charset='utf-8' /><title>" + escapeHtml(view.tone.title + " " + view.reference) + "</title>" +
-    "<style>@page{size:A4;margin:0}html,body{margin:0;padding:0;width:210mm;min-height:297mm;background:#ede7dc !important;color:#121212;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
-    "*{box-sizing:border-box}.page{padding:18mm 20mm 16mm;min-height:100vh}.overline{text-align:center;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
-    ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:34px;letter-spacing:.05em;line-height:1.1;margin-top:14px}" +
-    ".meta{text-align:center;color:#756e66;font-size:13px;margin-top:10px}.rule{height:1px;background:#ebe5dc;margin:24px 0 28px}" +
-    ".hero{display:grid;grid-template-columns:1.45fr .85fr;gap:44px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:33px;line-height:1.08;font-weight:500}" +
-    ".doc-sub{margin-top:10px;color:#756e66;font-size:14px}.meta-stack{padding-top:2px}.meta-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;margin-top:14px}" +
-    ".meta-label:first-child{margin-top:0}.meta-value{margin-top:5px;font-size:16px;line-height:1.35}.meta-value.strong{font-weight:700}" +
-    ".identity{display:grid;grid-template-columns:1fr 1fr;gap:54px;margin-top:34px}.identity-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}" +
-    ".identity-value{margin-top:7px;font-size:17px;font-weight:700}.identity-copy{margin-top:7px;font-size:14px;line-height:1.6;color:#2b2724}" +
-    ".table{margin-top:42px}.table-head,.table-row{display:grid;grid-template-columns:52px 1fr 210px;gap:16px;align-items:start}.table-head{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66;padding-bottom:12px}" +
-    ".table-rule{height:1px;background:#ded6cb}.table-row{padding:16px 0 18px;border-bottom:1px solid #ebe5dc}.qty{font-size:13px;color:#756e66}.piece{font-size:18px;line-height:1.35;font-weight:600}" +
-    ".amount{text-align:right;font-size:16px;line-height:1.35;color:#2b2724}.financials{margin-top:34px;display:grid;grid-template-columns:1fr 270px;gap:40px;align-items:end}" +
-    ".financial-copy{font-size:14px;line-height:1.7;color:#756e66;padding-bottom:6px}.totals{padding-top:10px}.totals-row{display:grid;grid-template-columns:1fr auto;gap:18px;padding:6px 0}" +
-    ".totals-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#756e66}.totals-value{text-align:right;font-size:15px;color:#2b2724}.totals-rule{height:1px;background:#ebe5dc;margin:8px 0 10px}" +
-    ".balance{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:end;padding-top:2px}.balance-label{font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.1;color:#5f5346}.balance-value{text-align:right;font-size:21px;font-weight:700;color:#5f5346}" +
-    ".footer{margin-top:54px;padding-top:18px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:18px;color:#2b2724}" +
-    "@media (max-width: 820px){.page{padding:12mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:42px 1fr 120px;gap:10px}.brand{font-size:28px}.doc-title{font-size:28px}.piece{font-size:16px}.balance-label{font-size:20px}.balance-value{font-size:18px}}</style></head><body><div class='page'>" +
+    "<style>@page{size:A4;margin:6mm}html,body{margin:0;padding:0;width:210mm;background:#ede7dc !important;color:#121212;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+    "*{box-sizing:border-box}.page{padding:9mm 10mm 8mm;overflow:hidden}.overline{text-align:center;font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}" +
+    ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:24px;letter-spacing:.04em;line-height:1.06;margin-top:7px}" +
+    ".meta{text-align:center;color:#756e66;font-size:10px;margin-top:5px}.rule{height:1px;background:#ebe5dc;margin:12px 0 14px}" +
+    ".hero{display:grid;grid-template-columns:1.35fr .85fr;gap:18px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.04;font-weight:500}" +
+    ".doc-sub{margin-top:4px;color:#756e66;font-size:11px}.meta-stack{padding-top:1px}.meta-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66;margin-top:8px}" +
+    ".meta-label:first-child{margin-top:0}.meta-value{margin-top:2px;font-size:12px;line-height:1.24}.meta-value.strong{font-weight:700}" +
+    ".identity{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:14px}.identity-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}" +
+    ".identity-value{margin-top:4px;font-size:13px;font-weight:700}.identity-copy{margin-top:4px;font-size:11px;line-height:1.38;color:#2b2724}" +
+    ".table{margin-top:16px}.table-head,.table-row{display:grid;grid-template-columns:34px 1fr 122px;gap:10px;align-items:start}.table-head{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66;padding-bottom:6px}" +
+    ".table-rule{height:1px;background:#ded6cb}.table-row{padding:8px 0 9px;border-bottom:1px solid #ebe5dc}.qty{font-size:10px;color:#756e66}.piece{font-size:12px;line-height:1.24;font-weight:600}" +
+    ".amount{text-align:right;font-size:11px;line-height:1.24;color:#2b2724}.financials{margin-top:14px;display:grid;grid-template-columns:1fr 180px;gap:18px;align-items:end}" +
+    ".financial-copy{font-size:10px;line-height:1.45;color:#756e66;padding-bottom:2px}.totals{padding-top:2px}.totals-row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:3px 0}" +
+    ".totals-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}.totals-value{text-align:right;font-size:11px;color:#2b2724}.totals-rule{height:1px;background:#ebe5dc;margin:5px 0 6px}" +
+    ".balance{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;padding-top:1px}.balance-label{font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.05;color:#5f5346}.balance-value{text-align:right;font-size:14px;font-weight:700;color:#5f5346}" +
+    ".footer{margin-top:18px;padding-top:8px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#2b2724}" +
+    "@media (max-width: 820px){.page{padding:8mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:28px 1fr 96px;gap:8px}.brand{font-size:20px}.doc-title{font-size:18px}.piece{font-size:11px}.balance-label{font-size:14px}.balance-value{font-size:13px}}</style></head><body><div class='page'>" +
     "<div class='overline'>" + escapeHtml(view.tone.overline) + "</div>" +
     "<div class='brand'>Maison Bouchra Filali Lahlou</div>" +
     "<div class='meta'>Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
