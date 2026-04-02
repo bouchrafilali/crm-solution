@@ -816,26 +816,12 @@ export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
             const root = document.querySelector(".page") as HTMLElement | null;
             const target = root || document.body;
             const rect = target.getBoundingClientRect();
-            const width = Math.ceil(
-              Math.max(
-                rect.width,
-                target.scrollWidth,
-                document.body.scrollWidth,
-                document.documentElement.scrollWidth
-              )
-            );
-            const height = Math.ceil(
-              Math.max(
-                rect.height,
-                target.scrollHeight,
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight
-              )
-            );
+            const width = Math.ceil(Math.max(rect.width, target.scrollWidth));
+            const height = Math.ceil(Math.max(rect.height, target.scrollHeight));
             return { width, height };
           });
           return page.pdf({
-            width: `${Math.max(720, dimensions.width)}px`,
+            width: `${Math.max(560, dimensions.width)}px`,
             height: `${Math.max(200, dimensions.height)}px`,
             printBackground: true,
             preferCSSPageSize: false,
