@@ -434,33 +434,37 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     "body{display:flex;justify-content:center}*{box-sizing:border-box}.page{width:210mm;padding:8mm 9mm 7mm}.overline{text-align:center;font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}" +
     ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:24px;letter-spacing:.04em;line-height:1.06;margin-top:7px}" +
     ".meta{text-align:center;color:#756e66;font-size:10px;margin-top:5px}.rule{height:1px;background:#ebe5dc;margin:12px 0 14px}" +
-    ".hero{display:grid;grid-template-columns:1.35fr .85fr;gap:18px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.04;font-weight:500}" +
+    ".doc-title{font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.04;font-weight:500}" +
     ".doc-sub{margin-top:4px;color:#756e66;font-size:11px}.meta-stack{padding-top:1px}.meta-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66;margin-top:8px}" +
     ".meta-label:first-child{margin-top:0}.meta-value{margin-top:2px;font-size:12px;line-height:1.24}.meta-value.strong{font-weight:700}" +
-    ".identity{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:14px}.identity-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}" +
+    ".receipt-columns{display:flex;gap:30px;align-items:flex-start;margin-top:10px}.left-stack{flex:0 0 31%;max-width:31%;min-width:0;display:flex;flex-direction:column;gap:14px}" +
+    ".hero-table{flex:1 1 0;min-width:0;padding-top:2px}.hero-table .table{margin-top:0}.hero-table .table-head,.hero-table .table-row{grid-template-columns:30px 1fr 116px;gap:8px}" +
+    ".hero-table .piece{font-size:11px;line-height:1.2}.hero-table .amount{font-size:10.5px}.hero-table .qty{font-size:9.5px}" +
+    ".identity{display:block}.identity-block + .identity-block{margin-top:14px}.identity-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}" +
     ".identity-value{margin-top:4px;font-size:13px;font-weight:700}.identity-copy{margin-top:4px;font-size:11px;line-height:1.38;color:#2b2724}" +
-    ".table{margin-top:16px}.table-head,.table-row{display:grid;grid-template-columns:34px 1fr 122px;gap:10px;align-items:start}.table-head{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66;padding-bottom:6px}" +
+    ".table{margin-top:16px}.table.compact{margin-top:0}.table-head,.table-row{display:grid;grid-template-columns:34px 1fr 122px;gap:10px;align-items:start}.table-head>div,.table-row>div{min-width:0}.table-head{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66;padding-bottom:6px}" +
     ".table-rule{height:1px;background:#ded6cb}.table-row{padding:8px 0 9px;border-bottom:1px solid #ebe5dc}.qty{font-size:10px;color:#756e66}.piece{font-size:12px;line-height:1.24;font-weight:600}" +
     ".amount{text-align:right;font-size:11px;line-height:1.24;color:#2b2724}.financials{margin-top:14px;display:grid;grid-template-columns:1fr 180px;gap:18px;align-items:end}" +
     ".financial-copy{font-size:10px;line-height:1.45;color:#756e66;padding-bottom:2px}.totals{padding-top:2px}.totals-row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:3px 0}" +
     ".totals-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}.totals-value{text-align:right;font-size:11px;color:#2b2724}.totals-rule{height:1px;background:#ebe5dc;margin:5px 0 6px}" +
     ".balance{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;padding-top:1px}.balance-label{font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.05;color:#5f5346}.balance-value{text-align:right;font-size:14px;font-weight:700;color:#5f5346}" +
-    ".footer{margin-top:18px;padding-top:8px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#2b2724}" +
-    "@media (max-width: 820px){body{display:block}.page{width:auto;padding:8mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:28px 1fr 96px;gap:8px}.brand{font-size:20px}.doc-title{font-size:18px}.piece{font-size:11px}.balance-label{font-size:14px}.balance-value{font-size:13px}}</style></head><body data-pdf-size='receipt-auto'><div class='page'>" +
+    ".footer{margin-top:10px;padding-top:8px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#2b2724}.footer-logo{display:block;width:112px;height:auto;margin:0 auto 6px;filter:grayscale(1) brightness(.22) contrast(1.25);opacity:.98}" +
+    "@media (max-width: 820px){body{display:block}.page{width:auto;padding:8mm}.receipt-columns,.financials{grid-template-columns:1fr}.table-head,.table-row,.hero-table .table-head,.hero-table .table-row{grid-template-columns:28px 1fr 96px;gap:8px}.footer-logo{width:92px}.brand{font-size:20px}.doc-title{font-size:18px}.piece,.hero-table .piece{font-size:11px}.balance-label{font-size:14px}.balance-value{font-size:13px}}</style></head><body data-pdf-size='receipt-auto'><div class='page'>" +
     "<div class='overline'>" + escapeHtml(view.tone.overline) + "</div>" +
-    "<div class='brand'>Maison Bouchra Filali Lahlou</div>" +
+    "<div class='brand'>Bouchra Filali Lahlou</div>" +
     "<div class='meta'>Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
     "<div class='rule'></div>" +
-    "<div class='hero'><div><div class='doc-title'>" + escapeHtml(view.tone.title) + "</div><div class='doc-sub'>Edite le " + escapeHtml(view.dateLabel) + "</div></div><div class='meta-stack'>" +
+    "<div class='receipt-columns'><div class='left-stack'><div><div class='doc-title'>" + escapeHtml(view.tone.title) + "</div><div class='doc-sub'>Edite le " + escapeHtml(view.dateLabel) + "</div></div>" +
+    "<div class='meta-stack'>" +
     "<div class='meta-label'>Reference</div><div class='meta-value strong'>" + escapeHtml(view.reference) + "</div>" +
     "<div class='meta-label'>Reglement</div><div class='meta-value'>" + escapeHtml(view.financialLabel) + "</div>" +
     "<div class='meta-label'>Montant de la commande</div><div class='meta-value strong'>" + escapeHtml(view.totalLabel) + "</div>" +
-    "</div></div>" +
-    "<div class='identity'><div><div class='identity-label'>A l'attention de</div><div class='identity-value'>" + escapeHtml(view.customerName) + "</div><div class='identity-copy'>" + escapeHtml(view.customerPhone) + "<br/>" + escapeHtml(view.customerEmail) + "</div></div>" +
-    "<div><div class='identity-label'>Coordonnees de commande</div><div class='identity-value'>" + escapeHtml(view.paymentMethod) + "</div><div class='identity-copy'>" + escapeHtml(view.shippingAddress) + "</div></div></div>" +
-    "<div class='table'><div class='table-head'><div>Qte</div><div>Piece</div><div style='text-align:right'>Montant</div></div><div class='table-rule'></div>" +
-    articleRows +
     "</div>" +
+    "<div class='identity identity-block'><div class='identity-label'>A l'attention de</div><div class='identity-value'>" + escapeHtml(view.customerName) + "</div><div class='identity-copy'>" + escapeHtml(view.customerPhone) + "<br/>" + escapeHtml(view.customerEmail) + "</div></div>" +
+    "<div class='identity identity-block'><div class='identity-label'>Coordonnees de commande</div><div class='identity-value'>" + escapeHtml(view.paymentMethod) + "</div><div class='identity-copy'>" + escapeHtml(view.shippingAddress) + "</div></div>" +
+    "</div><div class='hero-table'><div class='table compact'><div class='table-head'><div>Qte</div><div>Piece</div><div style='text-align:right'>Montant</div></div><div class='table-rule'></div>" +
+    articleRows +
+    "</div></div></div>" +
     "<div class='financials'><div class='financial-copy'>" + escapeHtml(
       view.hasOutstanding
         ? "Le solde restant pourra etre regle selon les modalites convenues avec la Maison."
@@ -472,7 +476,7 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     "<div class='totals-row'><div class='totals-label'>Regle a ce jour</div><div class='totals-value'>" + escapeHtml(view.paidLabel) + "</div></div>" +
     "<div class='totals-rule'></div><div class='balance'><div class='balance-label'>Reste a payer</div><div class='balance-value'>" + escapeHtml(view.outstandingLabel) + "</div></div>" +
     "</div></div>" +
-    "<div class='footer'>" + escapeHtml(view.tone.footer) + "</div>" +
+    "<div class='footer'><img class='footer-logo' src='" + RECEIPT_LOGO_URL + "' alt='Bouchra Filali Lahlou' />" + escapeHtml(view.tone.footer) + "</div>" +
     "</div></body></html>"
   );
 }
@@ -824,7 +828,7 @@ export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
             }, 0);
             const footer = target.querySelector(".footer") as HTMLElement | null;
             const footerBottom = footer ? (footer.getBoundingClientRect().bottom - rect.top) : 0;
-            const height = Math.ceil(Math.max(footerBottom + 16, contentBottom + 16, rect.height));
+            const height = Math.ceil(Math.max(footerBottom + 48, contentBottom + 40, rect.height + 40));
             return { width, height };
           });
           return page.pdf({
