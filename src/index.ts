@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "node:crypto";
 import { env } from "./config/env.js";
 import { connectDbWithRetry, initDb, isDbEnabled } from "./db/db.js";
 import { listPersistedOrderPayloads } from "./db/ordersRepo.js";
@@ -20,7 +21,12 @@ import { startOperatorLearningLoopWorker } from "./services/operatorLearningLoop
 import "./shopify/client.js";
 
 const app = express();
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({
+  limit: "10mb",
+  verify: (req, _res, buf) => {
+    (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use((req, res, next) => {
@@ -49,6 +55,119 @@ function buildAdminNavSuffix(req: express.Request): string {
   if (embedded) params.set("embedded", embedded);
   const query = params.toString();
   return query ? `?${query}` : "";
+}
+
+function isTruthyFlag(value: string | undefined): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function isLocalRequestIp(ip: string | undefined): boolean {
+  const value = String(ip || "").trim().toLowerCase();
+  return value === "127.0.0.1"
+    || value === "::1"
+    || value === "::ffff:127.0.0.1"
+    || value === "localhost";
+}
+
+function isAdminAuthEnabled(): boolean {
+  const configured = String(env.ADMIN_AUTH_ENABLED || "").trim().toLowerCase();
+  if (configured) {
+    return isTruthyFlag(configured);
+  }
+  return String(env.NODE_ENV || "").trim().toLowerCase() === "production";
+}
+
+function shouldBypassAdminAuth(req: express.Request): boolean {
+  if (!isTruthyFlag(env.ADMIN_AUTH_BYPASS_LOCALHOST)) return false;
+  return isLocalRequestIp(req.ip) || isLocalRequestIp(req.socket?.remoteAddress);
+}
+
+function unauthorized(res: express.Response): void {
+  res.setHeader("WWW-Authenticate", 'Basic realm="Admin Area", charset="UTF-8"');
+  res.status(401).send("Authentication required.");
+}
+
+function parseBasicAuth(header: string | undefined): { username: string; password: string } | null {
+  const value = String(header || "").trim();
+  if (!value.startsWith("Basic ")) return null;
+  try {
+    const decoded = Buffer.from(value.slice(6), "base64").toString("utf8");
+    const separator = decoded.indexOf(":");
+    if (separator < 0) return null;
+    return {
+      username: decoded.slice(0, separator),
+      password: decoded.slice(separator + 1)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function enforceAdminBasicAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (!isAdminAuthEnabled()) {
+    next();
+    return;
+  }
+
+  if (shouldBypassAdminAuth(req)) {
+    next();
+    return;
+  }
+
+  const expectedUsername = String(env.ADMIN_AUTH_USERNAME || "");
+  const expectedPassword = String(env.ADMIN_AUTH_PASSWORD || "");
+  if (!expectedUsername || !expectedPassword) {
+    console.error("[auth] admin auth enabled but credentials are not configured");
+    res.status(503).send("Admin authentication is not configured.");
+    return;
+  }
+
+  const provided = parseBasicAuth(req.get("authorization"));
+  if (!provided) {
+    unauthorized(res);
+    return;
+  }
+
+  const safeEquals = (left: string, right: string): boolean => {
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    if (leftBuffer.length !== rightBuffer.length) return false;
+    return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+  };
+
+  const usernameOk = safeEquals(provided.username, expectedUsername);
+  const passwordOk = safeEquals(provided.password, expectedPassword);
+  if (!usernameOk || !passwordOk) {
+    unauthorized(res);
+    return;
+  }
+
+  next();
+}
+
+function adminAccessMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (req.path.startsWith("/public/invoices/")) {
+    next();
+    return;
+  }
+  enforceAdminBasicAuth(req, res, next);
+}
+
+function protectedApiAccessMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const originalPath = req.originalUrl.split("?")[0] || req.originalUrl;
+  const isProtectedPath = originalPath.startsWith("/api/whatsapp")
+    || originalPath.startsWith("/api/ai")
+    || originalPath.startsWith("/api/workflow")
+    || originalPath.startsWith("/api/products/previews")
+    || originalPath.startsWith("/api/leads/");
+
+  if (!isProtectedPath) {
+    next();
+    return;
+  }
+
+  enforceAdminBasicAuth(req, res, next);
 }
 
 function renderAdminControlCenterPage(navSuffix: string): string {
@@ -679,7 +798,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           <a class="home-app module-item" data-app-id="insights" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
             <span class="home-app-icon">◌</span><span class="home-app-label">Insights</span>
           </a>
-          <a class="home-app module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
+          <a class="home-app module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast${navSuffix}">
             <span class="home-app-icon">◍</span><span class="home-app-label">Forecast</span>
           </a>
           <a class="home-app module-item" data-app-id="whatsapp" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
@@ -744,7 +863,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast-v4${navSuffix}">
+          <a class="row module-row module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast${navSuffix}">
             <div class="icon">◍</div>
             <div class="content">
               <p class="title">Forecast</p>
@@ -856,7 +975,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       agent: { label: "Agent", icon: "◎", href: "/agent-control-center-v1/${navSuffix}#/index" },
       mobile: { label: "Mobile", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
       insights: { label: "Insights", icon: "◌", href: "/admin/insights${navSuffix}" },
-      forecast: { label: "Forecast", icon: "◍", href: "/admin/forecast-v4${navSuffix}" },
+      forecast: { label: "Forecast", icon: "◍", href: "/admin/forecast${navSuffix}" },
       whatsapp: { label: "WhatsApp", icon: "◈", href: "/whatsapp-intelligence${navSuffix}" },
       blueprint: { label: "Blueprint", icon: "◇", href: "/blueprint${navSuffix}" },
       invoice: { label: "Facture", icon: "◔", href: "/admin/invoices${navSuffix}" },
@@ -1165,9 +1284,9 @@ app.get(["/spline", "/admin/spline"], (_req, res) => {
   res.status(200).type("html").send(html);
 });
 
-app.use("/admin/orders", adminRouter);
-app.use("/admin", adminRouter);
-app.use(whatsappRouter);
+app.use("/admin/orders", adminAccessMiddleware, adminRouter);
+app.use("/admin", adminAccessMiddleware, adminRouter);
+app.use(protectedApiAccessMiddleware, whatsappRouter);
 app.use(whatsappLabRouter);
 app.use("/health", healthRouter);
 app.use("/webhooks", webhooksRouter);
@@ -1194,13 +1313,8 @@ async function loadRecentOrdersFromDBIntoMemory(): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
-  if (isDbEnabled()) {
-    await connectDbWithRetry(10);
-    await initDb();
-    console.log("Postgres initialized");
-    await loadRecentOrdersFromDBIntoMemory();
-  }
-
+  // Start listening immediately so Railway's health check passes without waiting for DB.
+  // DB init runs in the background — routes that need the DB handle their own unavailability.
   app.listen(env.PORT, () => {
     console.log(`Shopify app listening on port ${env.PORT}`);
     startAppointmentsReminderWorker();
@@ -1211,6 +1325,17 @@ async function bootstrap(): Promise<void> {
       console.error("[webhooks] orders/delete registration failed", error);
     });
   });
+
+  if (isDbEnabled()) {
+    try {
+      await connectDbWithRetry(10);
+      await initDb();
+      console.log("Postgres initialized");
+      await loadRecentOrdersFromDBIntoMemory();
+    } catch (error) {
+      console.error("DB initialization failed — app running without database", error);
+    }
+  }
 }
 
 bootstrap().catch((error) => {

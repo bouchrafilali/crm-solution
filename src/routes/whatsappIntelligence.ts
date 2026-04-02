@@ -688,7 +688,12 @@ function isSharedLead(lead: { channelType?: string | null; channel_type?: string
   return value === "SHARED";
 }
 
+function isProductionEnvironment(): boolean {
+  return String(env.NODE_ENV || "").trim().toLowerCase() === "production";
+}
+
 function isTestDeletionEnabled(): boolean {
+  if (isProductionEnvironment()) return false;
   if (String(env.NODE_ENV || "").toLowerCase() === "development") return true;
   const raw = String(env.ALLOW_TEST_DELETION || "").trim().toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
@@ -1579,6 +1584,7 @@ whatsappRouter.get("/api/whatsapp/leads", async (req, res) => {
 });
 
 whatsappRouter.get("/api/whatsapp/leads/test", async (_req, res) => {
+  if (isProductionEnvironment()) return res.status(404).json({ error: "not_found" });
   if (!isTestDeletionEnabled()) return res.status(403).json({ error: "test_deletion_not_allowed" });
   const db = getDbPool();
   if (!db) return res.status(503).json({ error: "db_unavailable" });
@@ -1616,6 +1622,7 @@ whatsappRouter.get("/api/whatsapp/leads/test", async (_req, res) => {
 });
 
 whatsappRouter.get("/api/whatsapp/leads/test/counts", async (req, res) => {
+  if (isProductionEnvironment()) return res.status(404).json({ error: "not_found" });
   if (!isTestDeletionEnabled()) return res.status(403).json({ error: "test_deletion_not_allowed" });
   const db = getDbPool();
   if (!db) return res.status(503).json({ error: "db_unavailable" });
@@ -1661,6 +1668,7 @@ whatsappRouter.get("/api/whatsapp/leads/test/counts", async (req, res) => {
 });
 
 whatsappRouter.delete("/api/whatsapp/leads/test", async (req, res) => {
+  if (isProductionEnvironment()) return res.status(404).json({ error: "not_found" });
   if (!isTestDeletionEnabled()) return res.status(403).json({ error: "test_deletion_not_allowed" });
   const db = getDbPool();
   if (!db) return res.status(503).json({ error: "db_unavailable" });
@@ -2508,6 +2516,7 @@ whatsappRouter.post("/api/whatsapp/dev/simulate", async (req, res) => {
 });
 
 whatsappRouter.get("/api/whatsapp/leads/:id/debug-proof", async (req, res) => {
+  if (isProductionEnvironment()) return res.status(404).json({ error: "not_found" });
   const leadId = String(req.params.id || "").trim();
   if (!leadId) return res.status(400).json({ error: "invalid_id" });
   try {
@@ -3454,6 +3463,7 @@ whatsappRouter.get("/api/whatsapp/leads/:id/ai-latest", async (req, res) => {
 whatsappRouter.get("/api/whatsapp/leads/:id/dynamic-decision-latest", async (req, res) => {
   const parsedLeadId = leadIdParamSchema.safeParse({ id: req.params.id });
   if (!parsedLeadId.success) return res.status(400).json({ error: "invalid_id" });
+  if (isProductionEnvironment()) return res.status(404).json({ error: "not_found" });
   if (!isDynamicDecisionDebugEnabled()) return res.status(403).json({ error: "debug_disabled" });
   const leadId = parsedLeadId.data.id;
   try {
@@ -5612,7 +5622,6 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/forecast-v2${navSuffix}">Forecast V2</a>
       <a href="/admin/ml${navSuffix}">ML Dashboard</a>
       <a href="/admin/priority${navSuffix}">Priority</a>
       <a href="/blueprint${navSuffix}">Blueprint</a>
@@ -12659,7 +12668,6 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         <a href="/admin/insights${navSuffix}">Insights</a>
         <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
         <a href="/admin/forecast${navSuffix}">Forecast</a>
-        <a href="/admin/forecast-v2${navSuffix}">Forecast V2</a>
         <a href="/admin/ml${navSuffix}">ML Dashboard</a>
       <a href="/admin/priority${navSuffix}">Priority</a>
         <a href="/blueprint${navSuffix}">Blueprint</a>

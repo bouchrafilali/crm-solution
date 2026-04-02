@@ -16,9 +16,9 @@ import { listWebhookEvents } from "../services/webhookEvents.js";
 import { buildOrderInvoiceHtml, buildOrderInvoicePdf, renderHtmlToPdfBuffer } from "../services/invoicePdf.js";
 import { uploadPdfToShopifyFiles } from "../services/shopifyFiles.js";
 import { computeDashboardInsights, computeDashboardSeries } from "../services/insights.js";
-import { isBigQueryForecastConfigured, runRevenueForecast } from "../services/bigqueryForecast.js";
+import { isBigQueryForecastConfigured, runLocalRevenueForecast, runLocalRevenueForecastAsOf, runRevenueForecast } from "../services/bigqueryForecast.js";
 import { computeExternalSignals } from "../services/externalSignals.js";
-import { pruneOrdersMissingInRange, upsertManyFromShopifyPayloads } from "../db/ordersRepo.js";
+import { listOrdersForAnalytics, pruneOrdersMissingInRange, upsertManyFromShopifyPayloads } from "../db/ordersRepo.js";
 import { getLatestForecastRun, saveForecastRun } from "../db/forecastRepo.js";
 import { aggregateMonthly, applySimulation, type BaselineDailyPoint } from "../services/forecastSimulation.js";
 import { runForecastV4FromBaseline } from "../services/forecastV4.js";
@@ -83,6 +83,7 @@ const invoiceTemplateSchema = z.enum(["classic", "coin", "showroom_receipt", "in
 
 const sendInvoiceTemplateSchema = z.object({
   templateChoice: invoiceTemplateSchema.optional(),
+  templateChoices: z.array(invoiceTemplateSchema).min(1).max(4).optional(),
   recipientPhone: z.string().optional()
 });
 
@@ -668,6 +669,13 @@ function invoiceTitleByTemplate(template: string): string {
   return "Facture";
 }
 
+function invoiceDocumentLabel(template: string): string {
+  if (template === "showroom_receipt") return "reçu";
+  if (template === "international_invoice") return "facture internationale";
+  if (template === "coin") return "facture Coin de Couture";
+  return "facture";
+}
+
 function buildPublicInvoiceHtml(orderId: string, template: string) {
   const order = getOrderById(orderId);
   if (!order) return null;
@@ -808,12 +816,6 @@ async function sendZokoTemplate(
     return { ok: false, error: "Configuration API Zoko manquante." };
   }
 
-  const allowInsecureTls = String(env.ZOKO_ALLOW_INSECURE_TLS || "").toLowerCase() === "true";
-  const previousTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-  if (allowInsecureTls) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000);
   try {
@@ -893,21 +895,15 @@ async function sendZokoTemplate(
     const message = error instanceof Error ? error.message : "Erreur réseau API";
     return { ok: false, error: message };
   } finally {
-    if (allowInsecureTls) {
-      if (typeof previousTlsSetting === "string") {
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsSetting;
-      } else {
-        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-      }
-    }
     clearTimeout(timeoutId);
   }
 }
 
 adminRouter.get(["/", "/orders"], (req, res) => {
-  const host = typeof req.query.host === "string" ? req.query.host : "";
-  const shop = typeof req.query.shop === "string" ? req.query.shop : "";
-  const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const host = typeof req.query.host === "string" ? req.query.host : String(req.query.host ?? "");
+  const shop = typeof req.query.shop === "string" ? req.query.shop : String(req.query.shop ?? "");
+  const embedded =
+    typeof req.query.embedded === "string" ? req.query.embedded : String(req.query.embedded ?? "");
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
@@ -1792,7 +1788,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/forecast-v2${navSuffix}">Forecast V2</a>
       <a href="/admin/ml${navSuffix}">ML Dashboard</a>
       <a href="/admin/priority${navSuffix}">Priority</a>
       <a href="/blueprint${navSuffix}">Blueprint</a>
@@ -2104,6 +2099,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     let syncQueued = false;
     let invoicePreviewBlobUrl = "";
     let currentBankTemplateChoice = "classic";
+    let currentBankNeedsDetails = false;
     let chartRangeFrom = "";
     let chartRangeTo = "";
     let orderSearchTerm = "";
@@ -2413,9 +2409,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         const unit = Math.max(0, Number(article.unitPrice || 0));
         return sum + (qty * unit);
       }, 0);
-      const subtotalAmount = Math.max(0, linesSubtotal);
-      const discountAmount = Math.min(subtotalAmount, Math.max(0, Number(order.discountAmount || 0)));
-      const previewTotalAmount = Math.max(0, subtotalAmount - discountAmount);
+      const subtotalAmount = Math.max(0, Number(order.subtotalAmount || 0) > 0 ? Number(order.subtotalAmount || 0) : linesSubtotal);
+      const rawDiscountAmount = Math.max(0, Number(order.discountAmount || 0));
+      const totalAmountFromOrder = Math.max(0, Number(order.totalAmount || 0));
+      const discountAmount = Math.min(subtotalAmount, rawDiscountAmount > 0 ? rawDiscountAmount : Math.max(0, subtotalAmount - totalAmountFromOrder));
+      const previewTotalAmount = Math.max(0, totalAmountFromOrder > 0 ? totalAmountFromOrder : (subtotalAmount - discountAmount));
       const paidFromTransactions = (Array.isArray(order.paymentTransactions) ? order.paymentTransactions : []).reduce((sum, entry) => {
         const sameCurrency = !entry.currency || String(entry.currency).toUpperCase() === String(order.currency || "MAD").toUpperCase();
         return sameCurrency ? sum + Math.max(0, Number(entry.amount || 0)) : sum;
@@ -2424,9 +2422,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         previewTotalAmount,
         Math.max(
           0,
-          paidFromTransactions > 0
-            ? paidFromTransactions
-            : (previewTotalAmount - Math.max(0, Number(order.outstandingAmount || 0)))
+          Math.max(
+            paidFromTransactions,
+            previewTotalAmount - Math.max(0, Number(order.outstandingAmount || 0))
+          )
         )
       );
       const previewOutstandingAmount = Math.max(0, previewTotalAmount - paidAmount);
@@ -2732,10 +2731,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       return templateChoice === "showroom_receipt" ? "reçu" : "facture";
     }
 
+    function shouldShowBankInfo(showBankSection) {
+      return Boolean(showBankSection) && currentBankTemplateChoice !== "showroom_receipt";
+    }
+
     function collectBankModalSelection(showBankSection) {
       return {
         bankDetails:
-          showBankSection
+          shouldShowBankInfo(showBankSection)
             ? {
                 bankName: bankNameInputEl.value.trim() || undefined,
                 swiftBic: swiftInputEl.value.trim() || undefined,
@@ -2753,10 +2756,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     function syncBankTemplateUi() {
       const isReceipt = currentBankTemplateChoice === "showroom_receipt";
       const label = bankTemplateLabel(currentBankTemplateChoice);
+      const showBankInfo = shouldShowBankInfo(currentBankNeedsDetails);
       bankTemplateInvoiceBtn.classList.toggle("active", !isReceipt);
       bankTemplateReceiptBtn.classList.toggle("active", isReceipt);
       bankTemplateInvoiceBtn.setAttribute("aria-pressed", String(!isReceipt));
       bankTemplateReceiptBtn.setAttribute("aria-pressed", String(isReceipt));
+      bankFieldsGroupEl.classList.toggle("hidden", !showBankInfo);
+      bankProfileGroupEl.classList.toggle("hidden", !showBankInfo);
       bankModalPreviewHead.textContent = "Aperçu du " + label;
       bankModalConfirmBtn.textContent = isReceipt ? "Utiliser ce reçu" : "Utiliser cette facture";
       bankModalPreviewBtn.textContent = bankModalPreviewWrap.classList.contains("hidden")
@@ -2764,31 +2770,45 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         : "Actualiser l'aperçu";
     }
 
-    function renderBankModalPreview(order, showBankSection) {
+    async function renderBankModalPreview(order, showBankSection) {
       const currentSelection = collectBankModalSelection(showBankSection);
       if (invoicePreviewBlobUrl) {
         URL.revokeObjectURL(invoicePreviewBlobUrl);
         invoicePreviewBlobUrl = "";
       }
-      if (currentSelection.templateChoice === "showroom_receipt") {
-        bankModalPreviewFrame.src = "/admin/api/orders/"
-          + encodeURIComponent(order.id)
-          + "/invoice-preview-html?template=showroom_receipt&_="
-          + Date.now();
-      } else {
-        const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
-        const blob = new Blob([html], { type: "text/html" });
-        invoicePreviewBlobUrl = URL.createObjectURL(blob);
-        bankModalPreviewFrame.src = invoicePreviewBlobUrl;
-      }
+      bankModalPreviewFrame.removeAttribute("src");
+      bankModalPreviewFrame.srcdoc = "<!doctype html><html><body style='margin:0;font-family:Arial,sans-serif;color:#666;padding:24px;'>Chargement de l'aperçu...</body></html>";
       bankModalPreviewWrap.classList.remove("hidden");
       syncBankTemplateUi();
+      if (currentSelection.templateChoice === "showroom_receipt" || currentSelection.templateChoice === "classic") {
+        try {
+          const previewRes = await fetch(
+            "/admin/api/orders/"
+              + encodeURIComponent(order.id)
+              + "/invoice-preview-html?template="
+              + encodeURIComponent(currentSelection.templateChoice)
+              + "&_="
+              + Date.now()
+          );
+          const previewHtml = await previewRes.text();
+          if (!previewRes.ok) {
+            throw new Error(previewHtml || "Aperçu indisponible");
+          }
+          bankModalPreviewFrame.srcdoc = previewHtml;
+        } catch (_error) {
+          bankModalPreviewFrame.srcdoc = "<!doctype html><html><body style='margin:0;font-family:Arial,sans-serif;color:#8a1f17;padding:24px;'>Impossible de charger l'aperçu du document.</body></html>";
+        }
+      } else {
+        const html = buildInvoiceHtml(order, currentSelection.bankDetails, currentSelection.templateChoice);
+        bankModalPreviewFrame.srcdoc = html;
+      }
       return currentSelection;
     }
 
     function openInvoiceModal(order, showBankSection, initialTemplateChoice = "classic") {
       return new Promise((resolve) => {
         const existing = order.bankDetails || {};
+        currentBankNeedsDetails = Boolean(showBankSection);
         bankProfileTypeEl.value = guessBankProfile(existing);
         currentBankTemplateChoice = initialTemplateChoice === "showroom_receipt" ? "showroom_receipt" : "classic";
         bankBeneficiaryNameEl.value = existing.beneficiaryName || "";
@@ -2799,8 +2819,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         bankAddressInputEl.value = existing.bankAddress || "";
         referenceInputEl.value = existing.paymentReference || order.name || "";
         applyBankProfileUI(bankProfileTypeEl.value);
-        bankFieldsGroupEl.classList.toggle("hidden", !showBankSection);
-        bankProfileGroupEl.classList.toggle("hidden", !showBankSection);
         bankModalPreviewWrap.classList.add("hidden");
         bankModalPreviewFrame.removeAttribute("src");
         syncBankTemplateUi();
@@ -2824,14 +2842,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           currentBankTemplateChoice = "classic";
           syncBankTemplateUi();
           if (!bankModalPreviewWrap.classList.contains("hidden")) {
-            renderBankModalPreview(order, showBankSection);
+            void renderBankModalPreview(order, showBankSection);
           }
         };
         bankTemplateReceiptBtn.onclick = () => {
           currentBankTemplateChoice = "showroom_receipt";
           syncBankTemplateUi();
           if (!bankModalPreviewWrap.classList.contains("hidden")) {
-            renderBankModalPreview(order, showBankSection);
+            void renderBankModalPreview(order, showBankSection);
           }
         };
         bankModalCancelBtn.onclick = () => {
@@ -2840,7 +2858,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           resolve(null);
         };
         bankModalPreviewBtn.onclick = () => {
-          renderBankModalPreview(order, showBankSection);
+          void renderBankModalPreview(order, showBankSection);
         };
         bankModalConfirmBtn.onclick = () => {
           const selected = collectBankModalSelection(showBankSection);
@@ -3831,7 +3849,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const sendMaisonBtn = detail.querySelector("#sendMaisonBtn");
       const printInvoiceBtn = detail.querySelector("#printInvoiceBtn");
       const printReceiptBtn = detail.querySelector("#printReceiptBtn");
-      const maisonPhone = "+212 6 27 37 68 82";
+      const maisonPhone = "+212661981392";
 
       async function fetchFreshOrderSnapshot() {
         const res = await fetch("/admin/api/orders/" + encodeURIComponent(order.id));
@@ -3842,7 +3860,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         return parsed.data;
       }
 
-      async function sendDocument(recipientPhone, initialTemplateChoice) {
+      async function sendDocument(recipientPhone, initialTemplateChoice, options = {}) {
         try {
           const latestOrder = await fetchFreshOrderSnapshot();
           const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
@@ -3854,7 +3872,15 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           }
 
           const templateChoice = modalResult.templateChoice || "classic";
-          const documentLabel = templateChoice === "showroom_receipt" ? "reçu" : "facture";
+          const requestedTemplateChoices = Array.from(new Set(
+            Array.isArray(options.templateChoices) && options.templateChoices.length > 0
+              ? options.templateChoices
+              : (options.sendCompanionReceipt
+                  ? ["classic", "showroom_receipt"]
+                  : [templateChoice])
+          ));
+          const documentLabels = requestedTemplateChoices.map((choice) => choice === "showroom_receipt" ? "reçu" : "facture");
+          const documentLabel = documentLabels.length > 1 ? "facture et reçu" : documentLabels[0];
           const destinationLabel = recipientPhone === maisonPhone
             ? "Bouchra Filali Lahlou"
             : (latestOrder.customerLabel || "le client");
@@ -3874,12 +3900,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             });
           }
 
-          syncStatusEl.textContent = "Envoi API en cours...";
+          syncStatusEl.textContent = requestedTemplateChoices.length > 1 ? "Envoi des PDF en cours..." : "Envoi API en cours...";
           const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id) + "/send-invoice-template", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               templateChoice,
+              templateChoices: requestedTemplateChoices,
               recipientPhone: recipientPhone
             })
           });
@@ -3889,7 +3916,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
             return;
           }
-          syncStatusEl.textContent = documentLabel.charAt(0).toUpperCase() + documentLabel.slice(1) + " envoye via API template.";
+          const sentCount = Array.isArray(parsed.data?.results) ? parsed.data.results.length : requestedTemplateChoices.length;
+          syncStatusEl.textContent = sentCount > 1
+            ? "Facture et reçu envoyés via API template."
+            : documentLabel.charAt(0).toUpperCase() + documentLabel.slice(1) + " envoye via API template.";
         } catch (error) {
           syncStatusEl.textContent =
             "Envoi API échoué: " +
@@ -4137,9 +4167,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
 });
 
 adminRouter.get("/invoices", (req, res) => {
-  const host = typeof req.query.host === "string" ? req.query.host : "";
-  const shop = typeof req.query.shop === "string" ? req.query.shop : "";
-  const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const host: string = typeof req.query.host === "string" ? req.query.host : "";
+  const shop: string = typeof req.query.shop === "string" ? req.query.shop : "";
+  const embedded: string = typeof req.query.embedded === "string" ? req.query.embedded : "";
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
@@ -4209,7 +4239,6 @@ adminRouter.get("/invoices", (req, res) => {
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/forecast-v2${navSuffix}">Forecast V2</a>
       <a href="/admin/ml${navSuffix}">ML Dashboard</a>
       <a href="/admin/priority${navSuffix}">Priority</a>
       <a href="/blueprint${navSuffix}">Blueprint</a>
@@ -4820,9 +4849,10 @@ adminRouter.get("/invoices", (req, res) => {
 });
 
 adminRouter.get("/insights", (req, res) => {
-  const host = typeof req.query.host === "string" ? req.query.host : "";
-  const shop = typeof req.query.shop === "string" ? req.query.shop : "";
-  const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const host = typeof req.query.host === "string" ? req.query.host : String(req.query.host ?? "");
+  const shop = typeof req.query.shop === "string" ? req.query.shop : String(req.query.shop ?? "");
+  const embedded =
+    typeof req.query.embedded === "string" ? req.query.embedded : String(req.query.embedded ?? "");
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
@@ -5156,7 +5186,6 @@ adminRouter.get("/insights", (req, res) => {
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/forecast-v2${navSuffix}">Forecast V2</a>
       <a href="/admin/ml${navSuffix}">ML Dashboard</a>
       <a href="/admin/priority${navSuffix}">Priority</a>
       <a href="/blueprint${navSuffix}">Blueprint</a>
@@ -6257,7 +6286,6 @@ adminRouter.get("/forecast", (req, res) => {
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/forecast-v2${navSuffix}">Forecast V2</a>
       <a href="/admin/ml${navSuffix}">ML Dashboard</a>
       <a href="/admin/priority${navSuffix}">Priority</a>
       <a href="/blueprint${navSuffix}">Blueprint</a>
@@ -7479,9 +7507,24 @@ adminRouter.get("/forecast", (req, res) => {
 });
 
 adminRouter.get("/forecast-v2", (req, res) => {
-  const host = typeof req.query.host === "string" ? req.query.host : "";
-  const shop = typeof req.query.shop === "string" ? req.query.shop : "";
-  const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(req.query || {})) {
+    if (Array.isArray(value)) {
+      value.forEach((v) => {
+        if (typeof v === "string") params.append(key, v);
+      });
+      continue;
+    }
+    if (typeof value === "string") params.set(key, value);
+  }
+  const suffix = params.toString();
+  return res.redirect(302, `/admin/forecast${suffix ? `?${suffix}` : ""}`);
+
+  /*
+  const host = typeof req.query.host === "string" ? req.query.host : String(req.query.host ?? "");
+  const shop = typeof req.query.shop === "string" ? req.query.shop : String(req.query.shop ?? "");
+  const embedded =
+    typeof req.query.embedded === "string" ? req.query.embedded : String(req.query.embedded ?? "");
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
@@ -8421,6 +8464,7 @@ adminRouter.get("/forecast-v2", (req, res) => {
   </script>
 </body>
 </html>`);
+  */
 });
 
 adminRouter.get("/forecast-v3", (req, res) => {
@@ -8434,10 +8478,9 @@ adminRouter.get("/forecast-v3", (req, res) => {
     }
     if (typeof value === "string") params.set(key, value);
   }
-  params.set("v", "2");
   params.delete("version");
   const suffix = params.toString();
-  return res.redirect(302, `/admin/forecast-v2${suffix ? `?${suffix}` : ""}`);
+  return res.redirect(302, `/admin/forecast${suffix ? `?${suffix}` : ""}`);
 });
 
 adminRouter.get("/forecast-v4", (req, res) => {
@@ -8451,10 +8494,9 @@ adminRouter.get("/forecast-v4", (req, res) => {
     }
     if (typeof value === "string") params.set(key, value);
   }
-  params.set("v", "2");
   params.delete("version");
   const suffix = params.toString();
-  return res.redirect(302, `/admin/forecast-v2${suffix ? `?${suffix}` : ""}`);
+  return res.redirect(302, `/admin/forecast${suffix ? `?${suffix}` : ""}`);
 });
 
 adminRouter.get("/priority", (req, res) => {
@@ -8636,7 +8678,7 @@ adminRouter.get("/priority", (req, res) => {
     <nav class="nav">
       <a href="/admin${navSuffix}">Operations</a>
       <a href="/admin/insights${navSuffix}">Insights</a>
-      <a href="/admin/forecast-v2${navSuffix}">Forecast</a>
+      <a href="/admin/forecast${navSuffix}">Forecast</a>
       <a href="/admin/priority${navSuffix}" class="active">Priority</a>
       <a href="/admin/appointments${navSuffix}">Appointments</a>
     </nav>
@@ -15609,12 +15651,8 @@ adminRouter.get("/api/orders/:orderId/invoice-preview-html", (req, res) => {
     ? String(req.query.template)
     : "classic";
 
-  if (templateChoice !== "showroom_receipt") {
-    return res.status(400).send("Aperçu HTML unifié disponible uniquement pour le reçu showroom.");
-  }
-
   const html = buildOrderInvoiceHtml(order, templateChoice);
-  if (!html) return res.status(404).send("Aperçu indisponible");
+  if (!html) return res.status(400).send("Aperçu HTML indisponible pour ce modèle.");
   return res.type("html").send(html);
 });
 
@@ -15761,17 +15799,82 @@ adminRouter.get("/api/forecast/revenue", async (req, res) => {
     }
     return res.status(200).json({ ok: true, forecast });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Échec du forecast BigQuery ML";
-    return res.status(500).json({ ok: false, error: message });
+    console.error("[forecast] primary forecast failed, retrying locally", error);
+    try {
+      const fallback = await runLocalRevenueForecast(horizon, mode);
+      try {
+        const runId = await saveForecastRun(fallback);
+        console.log(`[forecast] Saved local fallback forecast run ${runId ?? "n/a"} (${fallback.mode}, ${fallback.horizon}j).`);
+      } catch (persistError) {
+        console.error("[forecast] Failed to persist local fallback forecast run", persistError);
+      }
+      return res.status(200).json({ ok: true, forecast: fallback });
+    } catch (fallbackError) {
+      const message = fallbackError instanceof Error ? fallbackError.message : "Échec du forecast local";
+      return res.status(500).json({ ok: false, error: message });
+    }
   }
 });
 
 adminRouter.get("/api/forecast/revenue/latest", async (_req, res) => {
   try {
-    const forecast = await getLatestForecastRun();
+    let forecast = await getLatestForecastRun();
+    const from = new Date(Date.now() - 730 * 86400000).toISOString();
+    const to = new Date().toISOString();
+    const analyticsRows = await listOrdersForAnalytics(from, to);
+    const currentHistoryOrders = analyticsRows.length;
+    const storedHistoryOrders = Number(forecast?.dataUsage?.historyOrders || 0);
+    const shouldRefresh =
+      !forecast ||
+      storedHistoryOrders <= 0 ||
+      currentHistoryOrders > storedHistoryOrders + 10 ||
+      currentHistoryOrders > Math.max(25, Math.floor(storedHistoryOrders * 1.2));
+
+    if (shouldRefresh) {
+      const regenerated = await runLocalRevenueForecast(365, "robust");
+      try {
+        await saveForecastRun(regenerated);
+      } catch (persistError) {
+        console.error("[forecast] Failed to persist regenerated latest forecast", persistError);
+      }
+      forecast = regenerated;
+    }
     return res.status(200).json({ ok: true, forecast });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Échec lecture du dernier forecast";
+    return res.status(500).json({ ok: false, error: message });
+  }
+});
+
+adminRouter.get("/api/forecast/reconstruct", async (req, res) => {
+  try {
+    const yearRaw = Number(req.query.year ?? new Date().getUTCFullYear());
+    const year = Number.isFinite(yearRaw) ? Math.max(2020, Math.min(2100, Math.floor(yearRaw))) : new Date().getUTCFullYear();
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+    const lastCompletedMonth = year === currentYear ? now.getUTCMonth() : 11;
+    const monthIndices = Array.from({ length: Math.max(0, lastCompletedMonth) }, (_, index) => index);
+    const results = [];
+
+    for (const monthIndex of monthIndices) {
+      const targetMonth = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+      const asOfDate = new Date(Date.UTC(year, monthIndex, 0, 0, 0, 0, 0));
+      const reconstructed = await runLocalRevenueForecastAsOf(asOfDate.toISOString().slice(0, 10), 365, "robust");
+      const monthly = Array.isArray(reconstructed.monthlyOrdersForecast) ? reconstructed.monthlyOrdersForecast : [];
+      const targetRow = monthly.find((row) => String(row.month || "") === targetMonth) || null;
+      results.push({
+        month: targetMonth,
+        asOf: asOfDate.toISOString().slice(0, 10),
+        forecastRevenueMad: Number(targetRow?.revenueMad || 0),
+        forecastOrders: Number(targetRow?.orders || 0),
+        historyOrdersUsed: Number(reconstructed.dataUsage?.historyOrders || 0),
+        modelName: reconstructed.modelName
+      });
+    }
+
+    return res.status(200).json({ ok: true, year, reconstructedMonths: results });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Échec reconstruction forecast";
     return res.status(500).json({ ok: false, error: message });
   }
 });
@@ -15961,112 +16064,133 @@ adminRouter.post("/api/orders/:orderId/send-invoice-template", async (req, res) 
     return res.status(400).json({ error: "Numéro destinataire invalide pour envoi API." });
   }
 
-  const templateChoice = parsed.data.templateChoice ?? "classic";
-  const expMs = Date.now() + 7 * 24 * 60 * 60 * 1000;
-  const exp = String(expMs);
-  const sig = signInvoiceLink(order.id, exp, templateChoice);
-  const invoicePreviewUrl = `${env.SHOPIFY_APP_URL}/admin/public/invoices/${encodeURIComponent(order.id)}?template=${encodeURIComponent(
-    templateChoice
-  )}&exp=${encodeURIComponent(exp)}&sig=${encodeURIComponent(sig)}`;
+  const requestedTemplates = Array.from(new Set(
+    (Array.isArray(parsed.data.templateChoices) && parsed.data.templateChoices.length > 0
+      ? parsed.data.templateChoices
+      : [parsed.data.templateChoice ?? "classic"]
+    ).filter(Boolean)
+  ));
 
+  const configuredTemplateName = String(env.ZOKO_TEMPLATE_NAME || "invoice_notification").trim();
+  const configuredTemplateLanguage = String(env.ZOKO_TEMPLATE_LANGUAGE || "fr").trim();
   const orderNumberOnly = String(order.name || "0000")
     .replace(/[^0-9]/g, "")
     .trim() || "0000";
   const timestampCode = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-  const randomCode = Math.random().toString(36).slice(2, 10).toUpperCase();
-  const pdfFilename = `BFL-REF-${timestampCode}-${orderNumberOnly}-${randomCode}.pdf`;
-  let invoiceFileUrl = "";
-  try {
-    const pdfBuffer = await buildOrderInvoicePdf(order, templateChoice);
-    invoiceFileUrl = await uploadPdfToShopifyFiles(pdfFilename, pdfBuffer);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "PDF generation/upload failed";
-    return res.status(502).json({ error: `PDF Shopify Files échoué: ${message}` });
-  }
+  const sendResults: Array<Record<string, unknown>> = [];
 
-  const configuredTemplateName = String(env.ZOKO_TEMPLATE_NAME || "invoice_notification").trim();
-  const configuredTemplateLanguage = String(env.ZOKO_TEMPLATE_LANGUAGE || "fr").trim();
+  for (let index = 0; index < requestedTemplates.length; index += 1) {
+    const templateChoice = requestedTemplates[index];
+    const expMs = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const exp = String(expMs);
+    const sig = signInvoiceLink(order.id, exp, templateChoice);
+    const invoicePreviewUrl = `${env.SHOPIFY_APP_URL}/admin/public/invoices/${encodeURIComponent(order.id)}?template=${encodeURIComponent(
+      templateChoice
+    )}&exp=${encodeURIComponent(exp)}&sig=${encodeURIComponent(sig)}`;
 
-  const payloadVars = {
-    phone,
-    channel: env.ZOKO_CHANNEL || "whatsapp",
-    customer_name: order.customerLabel || "",
-    order_name: order.name || "",
-    invoice_url: invoiceFileUrl || invoicePreviewUrl,
-    total_amount: String(order.totalAmount || 0),
-    outstanding_amount: String(order.outstandingAmount || 0),
-    currency: order.currency || "MAD"
-  };
-
-  let payload: unknown;
-  if (env.ZOKO_TEMPLATE_PAYLOAD_JSON) {
+    const randomCode = Math.random().toString(36).slice(2, 10).toUpperCase();
+    const pdfFilename = `BFL-${templateChoice.toUpperCase()}-${timestampCode}-${index + 1}-${orderNumberOnly}-${randomCode}.pdf`;
+    let invoiceFileUrl = "";
     try {
-      const parsedJson = JSON.parse(env.ZOKO_TEMPLATE_PAYLOAD_JSON) as unknown;
-      payload = replaceTemplatePlaceholders(parsedJson, payloadVars) as unknown;
-    } catch {
-      return res.status(400).json({
-        error: "ZOKO_TEMPLATE_PAYLOAD_JSON invalide (JSON incorrect)."
+      const pdfBuffer = await buildOrderInvoicePdf(order, templateChoice);
+      invoiceFileUrl = await uploadPdfToShopifyFiles(pdfFilename, pdfBuffer);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "PDF generation/upload failed";
+      return res.status(502).json({
+        error: `PDF Shopify Files échoué pour ${invoiceDocumentLabel(templateChoice)}: ${message}`,
+        results: sendResults
       });
     }
-  } else {
-    let templateArgs: unknown[] = [payloadVars.invoice_url];
-    if (env.ZOKO_TEMPLATE_ARGS_JSON) {
+
+    const payloadVars = {
+      phone,
+      channel: env.ZOKO_CHANNEL || "whatsapp",
+      customer_name: order.customerLabel || "",
+      order_name: order.name || "",
+      invoice_url: invoiceFileUrl || invoicePreviewUrl,
+      total_amount: String(order.totalAmount || 0),
+      outstanding_amount: String(order.outstandingAmount || 0),
+      currency: order.currency || "MAD"
+    };
+
+    let payload: unknown;
+    if (env.ZOKO_TEMPLATE_PAYLOAD_JSON) {
       try {
-        const parsedArgs = JSON.parse(env.ZOKO_TEMPLATE_ARGS_JSON) as unknown;
-        const replacedArgs = replaceTemplatePlaceholders(parsedArgs, payloadVars);
-        if (Array.isArray(replacedArgs) && replacedArgs.length > 0) {
-          templateArgs = replacedArgs;
-        }
+        const parsedJson = JSON.parse(env.ZOKO_TEMPLATE_PAYLOAD_JSON) as unknown;
+        payload = replaceTemplatePlaceholders(parsedJson, payloadVars) as unknown;
       } catch {
-        // keep default template args
+        return res.status(400).json({
+          error: "ZOKO_TEMPLATE_PAYLOAD_JSON invalide (JSON incorrect)."
+        });
       }
+    } else {
+      let templateArgs: unknown[] = [payloadVars.invoice_url];
+      if (env.ZOKO_TEMPLATE_ARGS_JSON) {
+        try {
+          const parsedArgs = JSON.parse(env.ZOKO_TEMPLATE_ARGS_JSON) as unknown;
+          const replacedArgs = replaceTemplatePlaceholders(parsedArgs, payloadVars);
+          if (Array.isArray(replacedArgs) && replacedArgs.length > 0) {
+            templateArgs = replacedArgs;
+          }
+        } catch {
+          // keep default template args
+        }
+      }
+
+      payload = {
+        channel: payloadVars.channel,
+        recipient: phone,
+        type: env.ZOKO_TEMPLATE_TYPE || "richTemplate",
+        templateId: configuredTemplateName,
+        templateLanguage: configuredTemplateLanguage,
+        templateArgs
+      };
     }
 
-    payload = {
-      channel: payloadVars.channel,
-      recipient: phone,
-      type: env.ZOKO_TEMPLATE_TYPE || "richTemplate",
-      templateId: configuredTemplateName,
-      templateLanguage: configuredTemplateLanguage,
-      templateArgs
-    };
-  }
+    const sendResult = await sendZokoTemplate(payload, configuredTemplateName, configuredTemplateLanguage);
+    if (!sendResult.ok) {
+      console.warn("[orders] zoko invoice template failed", {
+        orderId: order.id,
+        orderName: order.name,
+        templateChoice,
+        configuredTemplateName,
+        configuredTemplateLanguage,
+        recipient: phone,
+        status: sendResult.status || 0,
+        providerResponse: sendResult.providerResponse || null
+      });
+      return res.status(502).json({
+        error: sendResult.error || `Envoi template API échoué pour ${invoiceDocumentLabel(templateChoice)}.`,
+        status: sendResult.status || 0,
+        providerResponse: sendResult.providerResponse || null,
+        attempts: sendResult.attempts || null,
+        results: sendResults
+      });
+    }
 
-  const sendResult = await sendZokoTemplate(payload, configuredTemplateName, configuredTemplateLanguage);
-  if (!sendResult.ok) {
-    console.warn("[orders] zoko invoice template failed", {
+    console.info("[orders] zoko invoice template sent", {
       orderId: order.id,
       orderName: order.name,
       templateChoice,
-      configuredTemplateName,
-      configuredTemplateLanguage,
+      configuredTemplateName: sendResult.usedTemplate || configuredTemplateName,
+      configuredTemplateLanguage: sendResult.usedLanguage || configuredTemplateLanguage,
       recipient: phone,
-      status: sendResult.status || 0,
-      providerResponse: sendResult.providerResponse || null
+      usedType: sendResult.usedType || null
     });
-    return res.status(502).json({
-      error: sendResult.error || "Envoi template API échoué.",
-      status: sendResult.status || 0,
-      providerResponse: sendResult.providerResponse || null,
-      attempts: sendResult.attempts || null
+    sendResults.push({
+      templateChoice,
+      documentLabel: invoiceDocumentLabel(templateChoice),
+      invoiceUrl: payloadVars.invoice_url,
+      providerResponse: sendResult.providerResponse,
+      usedTemplate: sendResult.usedTemplate,
+      usedLanguage: sendResult.usedLanguage,
+      usedType: sendResult.usedType
     });
   }
-  console.info("[orders] zoko invoice template sent", {
-    orderId: order.id,
-    orderName: order.name,
-    templateChoice,
-    configuredTemplateName: sendResult.usedTemplate || configuredTemplateName,
-    configuredTemplateLanguage: sendResult.usedLanguage || configuredTemplateLanguage,
-    recipient: phone,
-    usedType: sendResult.usedType || null
-  });
+
   return res.status(200).json({
     ok: true,
-    providerResponse: sendResult.providerResponse,
-    invoiceUrl: payloadVars.invoice_url,
-    usedTemplate: sendResult.usedTemplate,
-    usedLanguage: sendResult.usedLanguage,
-    usedType: sendResult.usedType
+    results: sendResults
   });
 });
 

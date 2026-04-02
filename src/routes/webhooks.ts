@@ -17,11 +17,19 @@ import {
 
 export const webhooksRouter = Router();
 
-function isValidShopifyWebhook(rawBody: string, hmacHeader?: string): boolean {
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: Buffer;
+    }
+  }
+}
+
+function isValidShopifyWebhook(rawBody: Buffer, hmacHeader?: string): boolean {
   if (!hmacHeader) return false;
   const digest = crypto
     .createHmac("sha256", env.SHOPIFY_API_SECRET)
-    .update(rawBody, "utf8")
+    .update(rawBody)
     .digest("base64");
 
   if (digest.length !== hmacHeader.length) {
@@ -143,10 +151,10 @@ export async function registerOrdersDeleteWebhook(): Promise<void> {
 }
 
 webhooksRouter.post("/orders/create", async (req, res) => {
-  const rawBody = JSON.stringify(req.body);
+  const rawBody = req.rawBody;
   const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
 
-  if (!isValidShopifyWebhook(rawBody, hmacHeader)) {
+  if (!rawBody || !isValidShopifyWebhook(rawBody, hmacHeader)) {
     addWebhookEvent({
       topic: "orders/create",
       orderId: req.body?.id ? String(req.body.id) : undefined,
@@ -246,9 +254,9 @@ webhooksRouter.post("/orders/create", async (req, res) => {
 });
 
 webhooksRouter.post("/orders/updated", async (req, res) => {
-  const rawBody = JSON.stringify(req.body);
+  const rawBody = req.rawBody;
   const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
-  if (!isValidShopifyWebhook(rawBody, hmacHeader)) {
+  if (!rawBody || !isValidShopifyWebhook(rawBody, hmacHeader)) {
     return res.status(401).json({ error: "Invalid webhook signature" });
   }
   try {
@@ -291,12 +299,12 @@ webhooksRouter.post("/orders/updated", async (req, res) => {
 });
 
 webhooksRouter.post("/orders/delete", (req, res) => {
-  const rawBody = JSON.stringify(req.body);
+  const rawBody = req.rawBody;
   const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
   const shop = String(req.get("X-Shopify-Shop-Domain") || "").trim() || undefined;
   const orderId = extractWebhookOrderId(req.body);
 
-  if (!isValidShopifyWebhook(rawBody, hmacHeader)) {
+  if (!rawBody || !isValidShopifyWebhook(rawBody, hmacHeader)) {
     addWebhookEvent({
       topic: "orders/delete",
       orderId: orderId || undefined,
