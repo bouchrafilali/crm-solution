@@ -2,6 +2,7 @@ import { BigQuery } from "@google-cloud/bigquery";
 import { env } from "../config/env.js";
 import { listOrdersForAnalytics } from "../db/ordersRepo.js";
 import { computeExternalSignals, type ExternalSignalsSummary } from "./externalSignals.js";
+import { getInlineGcpCredentials } from "./gcpCredentials.js";
 import { listOrdersForQueue, type OrderSnapshot } from "./orderSnapshots.js";
 
 export type RevenueForecastPoint = {
@@ -118,6 +119,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function avg(values: number[]): number {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length;
+}
+
 function percentageDelta(current: number, previous: number): number {
   if (!Number.isFinite(current) || !Number.isFinite(previous)) return 0;
   if (previous <= 0) return current > 0 ? 100 : 0;
@@ -189,6 +195,92 @@ function snapshotToAnalytics(order: OrderSnapshot): {
   };
 }
 
+function buildLocalForecastPoints(
+  modelSeries: Array<{ date: string; revenueMad: number; ordersCount: number; aovMad: number }>,
+  horizon: number
+): RevenueForecastPoint[] {
+  const historyByDay = new Map<string, number>(modelSeries.map((row) => [row.date, Number(row.revenueMad || 0)]));
+  const recentSlice = modelSeries.slice(-56);
+  const recent28Slice = modelSeries.slice(-28);
+  const prevRecentSlice = modelSeries.slice(-112, -56);
+  const prev28Slice = modelSeries.slice(-56, -28);
+  const recentSum = recentSlice.reduce((sum, row) => sum + Number(row.revenueMad || 0), 0);
+  const prevRecentSum = prevRecentSlice.reduce((sum, row) => sum + Number(row.revenueMad || 0), 0);
+  const trendFactor = prevRecentSum > 0 ? clamp(recentSum / prevRecentSum, 0.85, 1.2) : 1;
+  const recentDailyAvg = avg(recentSlice.map((row) => Number(row.revenueMad || 0)));
+  const recent28Avg = avg(recent28Slice.map((row) => Number(row.revenueMad || 0)));
+  const prev28Avg = avg(prev28Slice.map((row) => Number(row.revenueMad || 0)));
+  const shortTrendFactor = prev28Avg > 0 ? clamp(recent28Avg / prev28Avg, 0.92, 1.08) : 1;
+  const recentByWeekday = new Map<number, number[]>();
+  const monthRevenueByMonthNumber = new Map<number, number[]>();
+  recentSlice.forEach((row) => {
+    const wd = weekdayFromIso(row.date);
+    if (wd < 0) return;
+    const bucket = recentByWeekday.get(wd) || [];
+    bucket.push(Number(row.revenueMad || 0));
+    recentByWeekday.set(wd, bucket);
+  });
+  modelSeries.forEach((row) => {
+    const monthNumber = Number(String(row.date || "").slice(5, 7));
+    if (!Number.isFinite(monthNumber) || monthNumber < 1 || monthNumber > 12) return;
+    const bucket = monthRevenueByMonthNumber.get(monthNumber) || [];
+    bucket.push(Number(row.revenueMad || 0));
+    monthRevenueByMonthNumber.set(monthNumber, bucket);
+  });
+
+  const monthSeasonality = new Map<number, number>();
+  for (let monthNumber = 1; monthNumber <= 12; monthNumber += 1) {
+    const monthValues = monthRevenueByMonthNumber.get(monthNumber) || [];
+    const monthAvg = avg(monthValues);
+    const factor = recentDailyAvg > 0 && monthAvg > 0 ? clamp(monthAvg / recentDailyAvg, 0.8, 1.2) : 1;
+    monthSeasonality.set(monthNumber, factor);
+  }
+
+  const recentStdDev = Math.sqrt(
+    avg(recentSlice.map((row) => {
+      const delta = Number(row.revenueMad || 0) - recentDailyAvg;
+      return delta * delta;
+    }))
+  );
+  const variabilityFactor = recentDailyAvg > 0 ? clamp(recentStdDev / recentDailyAvg, 0.06, 0.18) : 0.12;
+
+  const lastHistoryDate = modelSeries[modelSeries.length - 1]?.date || toIsoDay(new Date());
+  const lastDate = new Date(lastHistoryDate + "T00:00:00Z");
+  const points: RevenueForecastPoint[] = [];
+
+  for (let index = 1; index <= horizon; index += 1) {
+    const cursor = new Date(lastDate.getTime() + index * 86400000);
+    const iso = toIsoDay(cursor);
+    const weekday = weekdayFromIso(iso);
+    const weekdaySeries = recentByWeekday.get(weekday) || [];
+    const weekdayAvg =
+      weekdaySeries.length > 0
+        ? weekdaySeries.reduce((sum, value) => sum + value, 0) / weekdaySeries.length
+        : recentDailyAvg;
+    const lastYearRevenue = Number(historyByDay.get(shiftIsoYear(iso, -1)) || 0);
+    const monthNumber = cursor.getUTCMonth() + 1;
+    const driftFactor = Math.pow(shortTrendFactor, index / 28);
+    const baseLevel = Math.max(0, recentDailyAvg * driftFactor * (monthSeasonality.get(monthNumber) || 1));
+    const weekdayFactor = recentDailyAvg > 0 ? clamp(weekdayAvg / recentDailyAvg, 0.82, 1.18) : 1;
+    const weekdayComponent = baseLevel * weekdayFactor;
+    const yearlyComponent = lastYearRevenue > 0 ? lastYearRevenue * trendFactor : baseLevel;
+    const blended =
+      baseLevel * 0.5 +
+      weekdayComponent * 0.3 +
+      yearlyComponent * 0.2;
+    const value = round2(Math.max(0, blended));
+    const spread = Math.max(value * (0.18 + variabilityFactor), recentDailyAvg * 0.08);
+    points.push({
+      date: iso,
+      value,
+      lower: round2(Math.max(0, value - spread)),
+      upper: round2(Math.max(value, value + spread))
+    });
+  }
+
+  return points;
+}
+
 export function isBigQueryForecastConfigured(): boolean {
   return Boolean(env.GCP_PROJECT_ID && env.BIGQUERY_DATASET && env.BIGQUERY_LOCATION);
 }
@@ -197,8 +289,27 @@ async function loadDailySalesRows(historyDays: number): Promise<{
   series: Array<{ date: string; revenueMad: number; ordersCount: number; aovMad: number }>;
   source: "db" | "queue_fallback";
 }> {
-  const toExclusive = new Date();
-  const from = new Date(Date.now() - historyDays * 24 * 60 * 60 * 1000);
+  return loadDailySalesRowsAsOf(historyDays, new Date());
+}
+
+async function loadDailySalesRowsAsOf(
+  historyDays: number,
+  asOfDate: Date
+): Promise<{
+  series: Array<{ date: string; revenueMad: number; ordersCount: number; aovMad: number }>;
+  source: "db" | "queue_fallback";
+}> {
+  const safeAsOf = Number.isNaN(asOfDate.getTime()) ? new Date() : asOfDate;
+  const toExclusive = new Date(Date.UTC(
+    safeAsOf.getUTCFullYear(),
+    safeAsOf.getUTCMonth(),
+    safeAsOf.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0
+  ));
+  const from = new Date(toExclusive.getTime() - historyDays * 24 * 60 * 60 * 1000);
 
   let rows = await listOrdersForAnalytics(from.toISOString(), toExclusive.toISOString());
   let source: "db" | "queue_fallback" = "db";
@@ -253,18 +364,24 @@ async function loadDailySalesRows(historyDays: number): Promise<{
   return { series: result, source };
 }
 
-export async function runRevenueForecast(horizon = 30, mode: "raw" | "robust" = "robust"): Promise<RevenueForecastResult> {
-  if (!isBigQueryForecastConfigured()) {
+async function runRevenueForecastInternal(
+  horizon = 30,
+  mode: "raw" | "robust" = "robust",
+  forceLocal = false,
+  asOfDate?: Date
+): Promise<RevenueForecastResult> {
+  if (!forceLocal && !isBigQueryForecastConfigured()) {
     throw new Error("BigQuery non configuré (GCP_PROJECT_ID, BIGQUERY_DATASET, BIGQUERY_LOCATION).");
   }
 
   const projectId = env.GCP_PROJECT_ID as string;
   const datasetId = env.BIGQUERY_DATASET as string;
   const location = env.BIGQUERY_LOCATION as string;
-  const modelName = env.BIGQUERY_REVENUE_MODEL_NAME || "revenue_forecast_model";
+  let modelName = env.BIGQUERY_REVENUE_MODEL_NAME || "revenue_forecast_model";
   const tableName = env.BIGQUERY_SALES_TABLE_NAME || "sales_daily";
 
-  const { series, source } = await loadDailySalesRows(730);
+  const referenceDate = asOfDate && !Number.isNaN(asOfDate.getTime()) ? asOfDate : new Date();
+  const { series, source } = await loadDailySalesRowsAsOf(730, referenceDate);
   if (series.length < 14) {
     throw new Error("Pas assez d'historique pour entraîner un forecast (minimum 14 jours).");
   }
@@ -273,85 +390,99 @@ export async function runRevenueForecast(horizon = 30, mode: "raw" | "robust" = 
   const rareMonth = applyRareMonthAdjustment(series, rareMonthCapMad, rareMonthMaxRepeat);
   const modelSeries = rareMonth.adjustedSeries;
 
-  const bigquery = new BigQuery({ projectId });
-  const dataset = bigquery.dataset(datasetId);
-  await dataset.get({ autoCreate: true });
-
-  async function runJob(query: string, params?: Record<string, unknown>) {
-    const [job] = await bigquery.createQueryJob({
-      query,
-      params,
-      location
-    });
-    const [rows] = await job.getQueryResults();
-    return rows as unknown[];
-  }
-
-  const createTableSql = `
-    create table if not exists \`${projectId}.${datasetId}.${tableName}\` (
-      date date,
-      revenue_mad float64,
-      orders_count int64,
-      aov_mad float64
-    )
-  `;
-  await runJob(createTableSql);
-  await runJob(`truncate table \`${projectId}.${datasetId}.${tableName}\``);
-
-  await dataset.table(tableName).insert(
-    modelSeries.map((row) => ({
-      date: row.date,
-      revenue_mad: row.revenueMad,
-      orders_count: row.ordersCount,
-      aov_mad: row.aovMad
-    }))
-  );
-
-  const trainSql = `
-    create or replace model \`${projectId}.${datasetId}.${modelName}\`
-    options(
-      model_type='ARIMA_PLUS',
-      time_series_timestamp_col='date',
-      time_series_data_col='revenue_mad',
-      holiday_region='MA'
-    ) as
-    select date, revenue_mad
-    from \`${projectId}.${datasetId}.${tableName}\`
-    order by 1
-  `;
-  await runJob(trainSql);
-
   const safeHorizon = Math.max(7, Math.min(365, Math.floor(horizon)));
-  const forecastSql = `
-    select
-      cast(forecast_timestamp as string) as date_text,
-      forecast_value,
-      prediction_interval_lower_bound,
-      prediction_interval_upper_bound
-    from ML.FORECAST(
-      model \`${projectId}.${datasetId}.${modelName}\`,
-      struct(${safeHorizon} as horizon, 0.8 as confidence_level)
-    )
-    order by 1
-  `;
-  const rowsRaw = (await runJob(forecastSql)) as Array<{
-    date_text: string;
-    forecast_value: number;
-    prediction_interval_lower_bound: number;
-    prediction_interval_upper_bound: number;
-  }>;
+  let rawPoints: RevenueForecastPoint[];
+  if (forceLocal) {
+    modelName = "local_orders_baseline";
+    rawPoints = buildLocalForecastPoints(modelSeries, safeHorizon);
+  } else try {
+    const inlineCredentials = getInlineGcpCredentials();
+    const bigquery = new BigQuery({
+      projectId,
+      credentials: inlineCredentials
+    });
+    const dataset = bigquery.dataset(datasetId);
+    await dataset.get({ autoCreate: true });
 
-  const rawPoints: RevenueForecastPoint[] = rowsRaw.map((row) => {
-    const value = Math.max(0, Number(row.forecast_value || 0));
-    const lower = Math.max(0, Number(row.prediction_interval_lower_bound || 0));
-    const upper = Math.max(value, Math.max(0, Number(row.prediction_interval_upper_bound || 0)));
-    return {
-      date: toIsoDay(row.date_text),
-      value,
-      lower,
-      upper
-    };
-  });
+    async function runJob(query: string, params?: Record<string, unknown>) {
+      const [job] = await bigquery.createQueryJob({
+        query,
+        params,
+        location
+      });
+      const [rows] = await job.getQueryResults();
+      return rows as unknown[];
+    }
+
+    const createTableSql = `
+      create table if not exists \`${projectId}.${datasetId}.${tableName}\` (
+        date date,
+        revenue_mad float64,
+        orders_count int64,
+        aov_mad float64
+      )
+    `;
+    await runJob(createTableSql);
+    await runJob(`truncate table \`${projectId}.${datasetId}.${tableName}\``);
+
+    await dataset.table(tableName).insert(
+      modelSeries.map((row) => ({
+        date: row.date,
+        revenue_mad: row.revenueMad,
+        orders_count: row.ordersCount,
+        aov_mad: row.aovMad
+      }))
+    );
+
+    const trainSql = `
+      create or replace model \`${projectId}.${datasetId}.${modelName}\`
+      options(
+        model_type='ARIMA_PLUS',
+        time_series_timestamp_col='date',
+        time_series_data_col='revenue_mad',
+        holiday_region='MA'
+      ) as
+      select date, revenue_mad
+      from \`${projectId}.${datasetId}.${tableName}\`
+      order by 1
+    `;
+    await runJob(trainSql);
+
+    const forecastSql = `
+      select
+        cast(forecast_timestamp as string) as date_text,
+        forecast_value,
+        prediction_interval_lower_bound,
+        prediction_interval_upper_bound
+      from ML.FORECAST(
+        model \`${projectId}.${datasetId}.${modelName}\`,
+        struct(${safeHorizon} as horizon, 0.8 as confidence_level)
+      )
+      order by 1
+    `;
+    const rowsRaw = (await runJob(forecastSql)) as Array<{
+      date_text: string;
+      forecast_value: number;
+      prediction_interval_lower_bound: number;
+      prediction_interval_upper_bound: number;
+    }>;
+
+    rawPoints = rowsRaw.map((row) => {
+      const value = Math.max(0, Number(row.forecast_value || 0));
+      const lower = Math.max(0, Number(row.prediction_interval_lower_bound || 0));
+      const upper = Math.max(value, Math.max(0, Number(row.prediction_interval_upper_bound || 0)));
+      return {
+        date: toIsoDay(row.date_text),
+        value,
+        lower,
+        upper
+      };
+    });
+  } catch (error) {
+    console.warn("[forecast] BigQuery unavailable, falling back to local forecast", error);
+    modelName = "local_orders_baseline";
+    rawPoints = buildLocalForecastPoints(modelSeries, safeHorizon);
+  }
 
   const historyByDay = new Map<string, number>(modelSeries.map((row) => [row.date, Number(row.revenueMad || 0)]));
   const recentSlice = modelSeries.slice(-56);
@@ -521,6 +652,17 @@ export async function runRevenueForecast(horizon = 30, mode: "raw" | "robust" = 
   const horizons = Array.from(new Set([...defaultHorizons, safeHorizon])).sort((a, b) => a - b);
   const horizonSummaries = horizons.map((h) => buildHorizonSummary(h));
 
+  const monthlyActualMap = new Map<string, { revenueMad: number; orders: number }>();
+  modelSeries.forEach((row) => {
+    const month = String(row.date || "").slice(0, 7);
+    if (!month) return;
+    const bucket = monthlyActualMap.get(month) || { revenueMad: 0, orders: 0 };
+    bucket.revenueMad += Number(row.revenueMad || 0);
+    bucket.orders += Math.max(0, Number(row.ordersCount || 0));
+    monthlyActualMap.set(month, bucket);
+  });
+
+  const currentMonthIso = toIsoDay(referenceDate).slice(0, 7);
   const monthlyMap = new Map<string, { revenueMad: number; orders: number }>();
   points.forEach((p) => {
     const month = String(p.date || "").slice(0, 7);
@@ -533,11 +675,16 @@ export async function runRevenueForecast(horizon = 30, mode: "raw" | "robust" = 
   });
   const monthlyOrdersForecast = Array.from(monthlyMap.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([month, agg]) => ({
-      month,
-      orders: Math.max(0, Math.round(agg.orders)),
-      revenueMad: round2(agg.revenueMad)
-    }));
+    .map(([month, agg]) => {
+      const actualMonth = month === currentMonthIso ? monthlyActualMap.get(month) : null;
+      const revenueMad = Number(agg.revenueMad || 0) + Number(actualMonth?.revenueMad || 0);
+      const orders = Number(agg.orders || 0) + Number(actualMonth?.orders || 0);
+      return {
+        month,
+        orders: Math.max(0, Math.round(orders)),
+        revenueMad: round2(revenueMad)
+      };
+    });
 
   return {
     horizon: safeHorizon,
@@ -574,7 +721,7 @@ export async function runRevenueForecast(horizon = 30, mode: "raw" | "robust" = 
       historyPoints: modelSeries.length,
       historyOrders,
       modelType: "ARIMA_PLUS",
-      trainingTable: `${projectId}.${datasetId}.${tableName}`,
+      trainingTable: modelName === "local_orders_baseline" ? "local_orders_history" : `${projectId}.${datasetId}.${tableName}`,
       currencyNormalization: "Montants convertis en MAD avec taux internes avant agrégation journalière.",
       features: ["date", "revenue_mad", "orders_count (historical signal)"],
       ordersForecastMethod:
@@ -597,4 +744,27 @@ export async function runRevenueForecast(horizon = 30, mode: "raw" | "robust" = 
           : "Aucun mois rare > " + Math.round(rareMonthCapMad).toLocaleString("fr-FR") + " MAD (hors mois 03-08)."
     }
   };
+}
+
+export async function runRevenueForecast(horizon = 30, mode: "raw" | "robust" = "robust"): Promise<RevenueForecastResult> {
+  return runRevenueForecastInternal(horizon, mode, false);
+}
+
+export async function runLocalRevenueForecast(
+  horizon = 30,
+  mode: "raw" | "robust" = "robust"
+): Promise<RevenueForecastResult> {
+  return runRevenueForecastInternal(horizon, mode, true);
+}
+
+export async function runLocalRevenueForecastAsOf(
+  asOfIsoDay: string,
+  horizon = 365,
+  mode: "raw" | "robust" = "robust"
+): Promise<RevenueForecastResult> {
+  const parsed = new Date(`${String(asOfIsoDay || "").slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Date de reconstruction forecast invalide.");
+  }
+  return runRevenueForecastInternal(horizon, mode, true, parsed);
 }

@@ -15861,7 +15861,9 @@ adminRouter.get("/api/forecast/reconstruct", async (req, res) => {
       const asOfDate = new Date(Date.UTC(year, monthIndex, 0, 0, 0, 0, 0));
       const reconstructed = await runLocalRevenueForecastAsOf(asOfDate.toISOString().slice(0, 10), 365, "robust");
       const monthly = Array.isArray(reconstructed.monthlyOrdersForecast) ? reconstructed.monthlyOrdersForecast : [];
-      const targetRow = monthly.find((row) => String(row.month || "") === targetMonth) || null;
+      const targetRow = monthly.find((row: { month?: string; revenueMad?: number; orders?: number }) =>
+        String(row.month || "") === targetMonth
+      ) || null;
       results.push({
         month: targetMonth,
         asOf: asOfDate.toISOString().slice(0, 10),
