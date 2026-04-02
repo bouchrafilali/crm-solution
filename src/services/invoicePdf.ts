@@ -430,8 +430,8 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
   ).join("");
   return (
     "<!doctype html><html><head><meta charset='utf-8' /><title>" + escapeHtml(view.tone.title + " " + view.reference) + "</title>" +
-    "<style>@page{size:A4;margin:6mm}html,body{margin:0;padding:0;width:210mm;background:#ede7dc !important;color:#121212;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
-    "*{box-sizing:border-box}.page{padding:9mm 10mm 8mm;overflow:hidden}.overline{text-align:center;font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}" +
+    "<style>html,body{margin:0;padding:0;background:#ede7dc !important;color:#121212;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+    "*{box-sizing:border-box}.page{width:198mm;padding:9mm 10mm 8mm}.overline{text-align:center;font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}" +
     ".brand{text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:24px;letter-spacing:.04em;line-height:1.06;margin-top:7px}" +
     ".meta{text-align:center;color:#756e66;font-size:10px;margin-top:5px}.rule{height:1px;background:#ebe5dc;margin:12px 0 14px}" +
     ".hero{display:grid;grid-template-columns:1.35fr .85fr;gap:18px;align-items:start}.doc-title{font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.04;font-weight:500}" +
@@ -446,7 +446,7 @@ export function buildOrderInvoiceHtml(order: OrderSnapshot, templateChoice: stri
     ".totals-label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#756e66}.totals-value{text-align:right;font-size:11px;color:#2b2724}.totals-rule{height:1px;background:#ebe5dc;margin:5px 0 6px}" +
     ".balance{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;padding-top:1px}.balance-label{font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.05;color:#5f5346}.balance-value{text-align:right;font-size:14px;font-weight:700;color:#5f5346}" +
     ".footer{margin-top:18px;padding-top:8px;border-top:1px solid #ebe5dc;text-align:center;font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#2b2724}" +
-    "@media (max-width: 820px){.page{padding:8mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:28px 1fr 96px;gap:8px}.brand{font-size:20px}.doc-title{font-size:18px}.piece{font-size:11px}.balance-label{font-size:14px}.balance-value{font-size:13px}}</style></head><body><div class='page'>" +
+    "@media (max-width: 820px){.page{width:auto;padding:8mm}.hero,.identity,.financials{grid-template-columns:1fr}.table-head,.table-row{grid-template-columns:28px 1fr 96px;gap:8px}.brand{font-size:20px}.doc-title{font-size:18px}.piece{font-size:11px}.balance-label{font-size:14px}.balance-value{font-size:13px}}</style></head><body data-pdf-size='receipt-auto'><div class='page'>" +
     "<div class='overline'>" + escapeHtml(view.tone.overline) + "</div>" +
     "<div class='brand'>Maison Bouchra Filali Lahlou</div>" +
     "<div class='meta'>Casablanca · contact@bouchrafilalilahlou.com · www.bouchrafilalilahlou.com</div>" +
@@ -809,17 +809,55 @@ export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
     await page.setViewport({ width: 1280, height: 1810, deviceScaleFactor: 1 });
     await page.setContent(printableHtml, { waitUntil: "domcontentloaded" });
     await page.emulateMediaType("screen");
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: {
-        top: "0",
-        right: "0",
-        bottom: "0",
-        left: "0"
-      }
-    });
+    const isAutoSizedReceipt = printableHtml.includes("data-pdf-size='receipt-auto'");
+    const pdf = isAutoSizedReceipt
+      ? await (async () => {
+          const dimensions = await page.evaluate(() => {
+            const root = document.querySelector(".page") as HTMLElement | null;
+            const target = root || document.body;
+            const rect = target.getBoundingClientRect();
+            const width = Math.ceil(
+              Math.max(
+                rect.width,
+                target.scrollWidth,
+                document.body.scrollWidth,
+                document.documentElement.scrollWidth
+              )
+            );
+            const height = Math.ceil(
+              Math.max(
+                rect.height,
+                target.scrollHeight,
+                document.body.scrollHeight,
+                document.documentElement.scrollHeight
+              )
+            );
+            return { width, height };
+          });
+          return page.pdf({
+            width: `${Math.max(720, dimensions.width)}px`,
+            height: `${Math.max(200, dimensions.height)}px`,
+            printBackground: true,
+            preferCSSPageSize: false,
+            margin: {
+              top: "0",
+              right: "0",
+              bottom: "0",
+              left: "0"
+            }
+          });
+        })()
+      : await page.pdf({
+          format: "A4",
+          printBackground: true,
+          preferCSSPageSize: true,
+          margin: {
+            top: "0",
+            right: "0",
+            bottom: "0",
+            left: "0"
+          }
+        });
     return Buffer.from(pdf);
   } finally {
     await browser.close();
