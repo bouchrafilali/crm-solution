@@ -817,7 +817,14 @@ export async function renderHtmlToPdfBuffer(html: string): Promise<Buffer> {
             const target = root || document.body;
             const rect = target.getBoundingClientRect();
             const width = Math.ceil(Math.max(rect.width, target.scrollWidth));
-            const height = Math.ceil(Math.max(rect.height, target.scrollHeight));
+            const height = Math.ceil(
+              Math.max(
+                rect.height,
+                target.scrollHeight,
+                document.body.scrollHeight,
+                document.documentElement.scrollHeight
+              )
+            );
             return { width, height };
           });
           return page.pdf({
