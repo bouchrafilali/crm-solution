@@ -8714,17 +8714,17 @@ adminRouter.get("/forecast-v2", (req, res) => {
     </section>
 
     <section class="card">
-      <div class="kicker" style="margin-bottom:10px;">Strategic Insights</div>
+      <div class="kicker" style="margin-bottom:10px;">Insights stratégiques</div>
       <div id="insightsGrid" class="insights-grid"></div>
     </section>
 
     <section class="card">
-      <div class="kicker" style="margin-bottom:10px;">Forecast Lab</div>
+      <div class="kicker" style="margin-bottom:10px;">Laboratoire Forecast</div>
       <div class="lab-toolbar">
         <button id="runForecastV2Btn" class="btn" type="button">Actualiser forecast (payant)</button>
         <span id="v2Status" class="kicker" style="margin-left:4px;">Chargement du dernier forecast sauvegardé...</span>
         <button id="metricRevenueBtn" class="toggle active" type="button">CA</button>
-        <button id="metricOrdersBtn" class="toggle" type="button">Orders</button>
+        <button id="metricOrdersBtn" class="toggle" type="button">Commandes</button>
         <button id="scenarioRealBtn" class="toggle active" type="button">Réaliste</button>
         <button id="scenarioPessBtn" class="toggle" type="button">Pessimiste</button>
         <button id="scenarioOptBtn" class="toggle" type="button">Optimiste</button>

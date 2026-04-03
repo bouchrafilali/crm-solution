@@ -20575,10 +20575,10 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
     <div class="sub">Validation managériale des prix et progression contrôlée des étapes.</div>
 
     <section class="kpis">
-      <article class="kpi"><div class="label">Quote requests (7d) <span class="live">Live</span></div><div class="value" id="kpiQuoteReq">0</div></article>
-      <article class="kpi"><div class="label">Pending manager <span class="live">Live</span></div><div class="value" id="kpiPending">0</div></article>
-      <article class="kpi"><div class="label">Ready to send <span class="live">Live</span></div><div class="value" id="kpiReady">0</div></article>
-      <article class="kpi"><div class="label">Sent today <span class="live">Live</span></div><div class="value" id="kpiSentToday">0</div></article>
+      <article class="kpi"><div class="label">Demandes de devis (7j) <span class="live">Live</span></div><div class="value" id="kpiQuoteReq">0</div></article>
+      <article class="kpi"><div class="label">En attente manager <span class="live">Live</span></div><div class="value" id="kpiPending">0</div></article>
+      <article class="kpi"><div class="label">Prêt à envoyer <span class="live">Live</span></div><div class="value" id="kpiReady">0</div></article>
+      <article class="kpi"><div class="label">Envoyés aujourd’hui <span class="live">Live</span></div><div class="value" id="kpiSentToday">0</div></article>
     </section>
 
     <section class="main">
@@ -20588,27 +20588,27 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
           <div class="flow-row" id="flowRow"></div>
         </div>
         <div class="guarantees">
-          <div class="g">No client price auto-send.</div>
-          <div class="g">Sur mesure default unless READY_PIECE.</div>
-          <div class="g">Idempotency blocks duplicate send in 2 minutes.</div>
+          <div class="g">Aucun prix n’est envoyé automatiquement au client.</div>
+          <div class="g">Le mode sur mesure reste le défaut sauf en cas de READY_PIECE.</div>
+          <div class="g">L’idempotence bloque les doublons d’envoi pendant 2 minutes.</div>
         </div>
       </section>
 
       <aside class="panel inspector">
-        <h3 id="inspTitle">Step</h3>
-        <div class="meta" id="inspMeta">Select a node to inspect details.</div>
-        <div class="kv"><div class="k">Trigger</div><div class="v" id="inspTrigger"></div></div>
-        <div class="kv"><div class="k">DB writes</div><div class="v" id="inspDb"></div></div>
-        <div class="kv"><div class="k">Stage impact</div><div class="v" id="inspStage"></div></div>
-        <div class="kv"><div class="k">Relevant code</div><div class="v" id="inspCode"></div></div>
-        <div class="kv" id="inspButtonsWrap" style="display:none"><div class="k">Buttons</div><div class="v" id="inspButtons"></div></div>
+        <h3 id="inspTitle">Étape</h3>
+        <div class="meta" id="inspMeta">Sélectionnez un nœud pour inspecter ses détails.</div>
+        <div class="kv"><div class="k">Déclencheur</div><div class="v" id="inspTrigger"></div></div>
+        <div class="kv"><div class="k">Écritures DB</div><div class="v" id="inspDb"></div></div>
+        <div class="kv"><div class="k">Impact étape</div><div class="v" id="inspStage"></div></div>
+        <div class="kv"><div class="k">Code concerné</div><div class="v" id="inspCode"></div></div>
+        <div class="kv" id="inspButtonsWrap" style="display:none"><div class="k">Boutons</div><div class="v" id="inspButtons"></div></div>
 
         <div class="tabs">
-          <button class="tab active" data-tab="details">Details</button>
-          <button class="tab" data-tab="stages">Stage Mapping</button>
+          <button class="tab active" data-tab="details">Détails</button>
+          <button class="tab" data-tab="stages">Carte des étapes</button>
         </div>
         <div class="tab-body" id="tabDetails">
-          <div class="meta">Automation vs manager gates reflected directly in node badges and stage strip highlight.</div>
+          <div class="meta">Les étapes automatiques et managériales sont visibles directement dans les badges et le surlignage de parcours.</div>
         </div>
         <div class="tab-body" id="tabStages" style="display:none">
           <div class="stage-map">
@@ -21251,7 +21251,7 @@ whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
     <div class="cards-grid" id="cardsGrid">
       <div class="loading-state">
         <div class="spinner"></div>
-        <p style="color: var(--text-tertiary); font-size: 14px;">Loading priority inbox...</p>
+        <p style="color: var(--text-tertiary); font-size: 14px;">Chargement de la boîte prioritaire...</p>
       </div>
     </div>
   </div>
@@ -21265,7 +21265,7 @@ whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
     async function fetchPriorityInbox() {
       try {
         const response = await fetch('/api/whatsapp/priority-inbox');
-        if (!response.ok) throw new Error('Failed to fetch');
+        if (!response.ok) throw new Error('fetch_failed');
         const data = await response.json();
         allCards = data.cards || [];
         applyFiltersAndRender();
@@ -21309,8 +21309,8 @@ whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
         grid.innerHTML = \`
           <div class="empty-state">
             <div class="empty-icon">✨</div>
-            <h2 class="empty-title">All caught up!</h2>
-            <p class="empty-subtitle">No urgent messages waiting for your reply right now.</p>
+            <h2 class="empty-title">Tout est à jour</h2>
+            <p class="empty-subtitle">Aucun message urgent n’attend votre réponse pour le moment.</p>
           </div>
         \`;
         return;
@@ -21326,7 +21326,7 @@ whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
         const timeLeft = card.sessionTimeLeft ? formatTimeLeft(card.sessionTimeLeft) : null;
         const isUrgent = card.sessionTimeLeft && card.sessionTimeLeft < 120;
         const readyBadge = card.readyToSend ? '<span class="badge stage" style="background:rgba(52,199,89,0.16);color:#7ff0a6;border-color:rgba(52,199,89,0.36);">Prêt à envoyer</span>' : '';
-        const primaryLabel = card.readyToSend ? 'Envoyer au client' : 'Confirm & Send';
+        const primaryLabel = card.readyToSend ? 'Envoyer au client' : 'Confirmer et envoyer';
         const primaryHandler = card.readyToSend
           ? \`sendApprovedQuote('\${card.leadId}', '\${(card.approvedQuote && card.approvedQuote.quoteRequestId) ? card.approvedQuote.quoteRequestId : ''}')\`
           : \`confirmAndSend('\${card.leadId}', '\${card.suggestion.id}')\`;
@@ -21361,7 +21361,7 @@ whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
                 \${primaryLabel}
               </button>
               <button class="btn btn-secondary" onclick="editSuggestion('\${card.leadId}', '\${card.suggestion.id}')">
-                Edit
+                Modifier
               </button>
               <button class="btn btn-tertiary" onclick="openContext('\${card.leadId}')">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -21379,26 +21379,26 @@ whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
       grid.innerHTML = \`
         <div class="empty-state">
           <div class="empty-icon">⚠️</div>
-          <h2 class="empty-title">Unable to load</h2>
-          <p class="empty-subtitle">Please try refreshing the page.</p>
+          <h2 class="empty-title">Impossible de charger</h2>
+          <p class="empty-subtitle">Veuillez réessayer en actualisant la page.</p>
         </div>
       \`;
     }
 
     function formatTimeSince(minutes) {
-      if (!minutes) return 'Just now';
-      if (minutes < 60) return \`\${minutes}m ago\`;
+      if (!minutes) return 'À l’instant';
+      if (minutes < 60) return \`\${minutes} min\`;
       const hours = Math.floor(minutes / 60);
-      if (hours < 24) return \`\${hours}h ago\`;
+      if (hours < 24) return \`\${hours} h\`;
       const days = Math.floor(hours / 24);
-      return \`\${days}d ago\`;
+      return \`\${days} j\`;
     }
 
     function formatTimeLeft(minutes) {
-      if (minutes < 0) return 'Expired';
-      if (minutes < 60) return \`\${minutes}m left\`;
+      if (minutes < 0) return 'Expiré';
+      if (minutes < 60) return \`\${minutes} min restantes\`;
       const hours = Math.floor(minutes / 60);
-      return \`\${hours}h left\`;
+      return \`\${hours} h restantes\`;
     }
 
     function escapeHtml(text) {
@@ -21408,14 +21408,14 @@ whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
     }
 
     async function confirmAndSend(leadId, suggestionId) {
-      if (!confirm('Send this message now?')) return;
+      if (!confirm('Envoyer ce message maintenant ?')) return;
       
       try {
         // Navigate to conversation page with action
         window.location.href = \`/whatsapp?lead=\${leadId}&action=send&suggestion=\${suggestionId}\`;
       } catch (error) {
         console.error('Error:', error);
-        alert('Failed to send message');
+        alert('Impossible d’envoyer le message');
       }
     }
 
