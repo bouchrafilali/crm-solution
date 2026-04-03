@@ -12677,6 +12677,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
       <nav class="nav subnav">
         <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
         <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
+        <a href="/whatsapp-intelligence/client-flows${navSuffix}">Flows clients</a>
         <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
         <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
         <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
@@ -20468,6 +20469,208 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
 </html>`);
 });
 
+whatsappRouter.get("/admin/whatsapp-intelligence/client-flows", (req, res) => {
+  const query = new URLSearchParams(req.query as Record<string, string>);
+  const queryString = query.toString();
+  res.redirect(`/whatsapp-intelligence/client-flows${queryString ? `?${queryString}` : ""}`);
+});
+
+whatsappRouter.get("/whatsapp-intelligence/client-flows", (req, res) => {
+  const q = new URLSearchParams();
+  const shop = String(req.query.shop || "").trim();
+  const host = String(req.query.host || "").trim();
+  if (shop) q.set("shop", shop);
+  if (host) q.set("host", host);
+  const navSuffix = q.toString() ? `?${q.toString()}` : "";
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp – Flows clients</title>
+  <style>
+    :root{
+      --bg:#f6f6f7;
+      --panel:#ffffff;
+      --line:#e1e3e5;
+      --text:#202223;
+      --muted:#6d7175;
+      --subtle:#8c9196;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      color:var(--text);
+      background:var(--bg);
+    }
+    .wrap{max-width:1240px;margin:0 auto;padding:24px 18px 48px}
+    .nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+    .nav a{
+      text-decoration:none;
+      color:#4a4f54;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:8px 12px;
+      background:#fff;
+      font-size:12px;
+      font-weight:600;
+    }
+    .nav a.current{
+      color:#111213;
+      border-color:#c9cccf;
+      box-shadow:0 1px 0 rgba(0,0,0,.03);
+    }
+    .hero{
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:var(--panel);
+      padding:22px;
+    }
+    .kicker{
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      color:var(--subtle);
+    }
+    h1{
+      margin:8px 0 6px;
+      font-size:32px;
+      line-height:1.05;
+      letter-spacing:-.03em;
+    }
+    .sub{
+      margin:0;
+      color:var(--muted);
+      font-size:15px;
+      line-height:1.5;
+      max-width:760px;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:16px;
+      margin-top:18px;
+    }
+    .flow-card{
+      min-height:320px;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:linear-gradient(180deg,#fff,#fcfcfd);
+      padding:18px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .flow-card-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .flow-card h2{
+      margin:0;
+      font-size:24px;
+      letter-spacing:-.03em;
+    }
+    .flow-chip{
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:11px;
+      font-weight:700;
+      color:var(--muted);
+      background:#f6f6f7;
+      white-space:nowrap;
+    }
+    .flow-placeholder{
+      flex:1;
+      border:1px dashed #d2d5d8;
+      border-radius:14px;
+      background:#fafbfb;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      padding:18px;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.5;
+    }
+    .flow-footer{
+      font-size:12px;
+      color:var(--subtle);
+    }
+    @media (max-width: 980px){
+      .grid{grid-template-columns:1fr}
+      h1{font-size:28px}
+      .flow-card{min-height:240px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="nav">
+      <a href="/admin/orders${navSuffix}">Commandes</a>
+      <a href="/admin/invoices${navSuffix}">Factures</a>
+      <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
+      <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
+    </nav>
+    <nav class="nav">
+      <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
+      <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
+      <a class="current" href="/whatsapp-intelligence/client-flows${navSuffix}">Flows clients</a>
+      <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
+      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
+      <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
+      <a href="/whatsapp-logic-diagram${navSuffix}">Schéma logique</a>
+      <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
+    </nav>
+
+    <section class="hero">
+      <div class="kicker">WhatsApp</div>
+      <h1>Flows clients</h1>
+      <p class="sub">Page préparatoire pour les séquences WhatsApp client. Les contenus ne sont pas encore configurés, mais la structure est prête pour accueillir les messages et réglages plus tard.</p>
+
+      <div class="grid">
+        <article class="flow-card">
+          <div class="flow-card-head">
+            <h2>J+3</h2>
+            <span class="flow-chip">À préparer</span>
+          </div>
+          <div class="flow-placeholder">Espace réservé au flow WhatsApp J+3.</div>
+          <div class="flow-footer">Message, déclencheurs et logique à définir plus tard.</div>
+        </article>
+
+        <article class="flow-card">
+          <div class="flow-card-head">
+            <h2>J+15</h2>
+            <span class="flow-chip">À préparer</span>
+          </div>
+          <div class="flow-placeholder">Espace réservé au flow WhatsApp J+15.</div>
+          <div class="flow-footer">Message, déclencheurs et logique à définir plus tard.</div>
+        </article>
+
+        <article class="flow-card">
+          <div class="flow-card-head">
+            <h2>Saison</h2>
+            <span class="flow-chip">À préparer</span>
+          </div>
+          <div class="flow-placeholder">Espace réservé au flow WhatsApp saisonnier.</div>
+          <div class="flow-footer">Message, déclencheurs et logique à définir plus tard.</div>
+        </article>
+      </div>
+    </section>
+  </div>
+</body>
+</html>`);
+});
+
 whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
   const q = new URLSearchParams();
   const shop = String(req.query.shop || "").trim();
@@ -20565,6 +20768,7 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
     <nav class="nav">
       <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
       <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
+      <a href="/whatsapp-intelligence/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
       <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
       <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
