@@ -53,10 +53,12 @@ function buildAdminNavSuffix(req: express.Request): string {
   const host = typeof req.query.host === "string" ? req.query.host : "";
   const shop = typeof req.query.shop === "string" ? req.query.shop : "";
   const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const embeddedAccess = typeof req.query[SHOPIFY_EMBEDDED_ACCESS_QUERY] === "string" ? req.query[SHOPIFY_EMBEDDED_ACCESS_QUERY] : "";
   const params = new URLSearchParams();
   if (host) params.set("host", host);
   if (shop) params.set("shop", shop);
   if (embedded) params.set("embedded", embedded);
+  if (embeddedAccess) params.set(SHOPIFY_EMBEDDED_ACCESS_QUERY, embeddedAccess);
   const query = params.toString();
   return query ? `?${query}` : "";
 }

@@ -904,10 +904,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
   const shop = typeof req.query.shop === "string" ? req.query.shop : String(req.query.shop ?? "");
   const embedded =
     typeof req.query.embedded === "string" ? req.query.embedded : String(req.query.embedded ?? "");
+  const embeddedAccess =
+    typeof req.query.ea === "string" ? req.query.ea : String(req.query.ea ?? "");
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
+  if (embeddedAccess) navParams.set("ea", embeddedAccess);
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
 
   res.type("html").send(`<!doctype html>
@@ -4931,10 +4934,12 @@ adminRouter.get("/invoices", (req, res) => {
   const host: string = typeof req.query.host === "string" ? req.query.host : "";
   const shop: string = typeof req.query.shop === "string" ? req.query.shop : "";
   const embedded: string = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const embeddedAccess: string = typeof req.query.ea === "string" ? req.query.ea : "";
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
+  if (embeddedAccess) navParams.set("ea", embeddedAccess);
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
 
   res.type("html").send(`<!doctype html>
@@ -5614,10 +5619,13 @@ adminRouter.get("/insights", (req, res) => {
   const shop = typeof req.query.shop === "string" ? req.query.shop : String(req.query.shop ?? "");
   const embedded =
     typeof req.query.embedded === "string" ? req.query.embedded : String(req.query.embedded ?? "");
+  const embeddedAccess =
+    typeof req.query.ea === "string" ? req.query.ea : String(req.query.ea ?? "");
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
+  if (embeddedAccess) navParams.set("ea", embeddedAccess);
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
 
   res.type("html").send(`<!doctype html>
@@ -6606,10 +6614,12 @@ adminRouter.get("/forecast", (req, res) => {
   const host = typeof req.query.host === "string" ? req.query.host : "";
   const shop = typeof req.query.shop === "string" ? req.query.shop : "";
   const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const embeddedAccess = typeof req.query.ea === "string" ? req.query.ea : "";
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
+  if (embeddedAccess) navParams.set("ea", embeddedAccess);
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
 
   res.type("html").send(`<!doctype html>
@@ -9264,10 +9274,12 @@ adminRouter.get("/priority", (req, res) => {
   const host = typeof req.query.host === "string" ? req.query.host : "";
   const shop = typeof req.query.shop === "string" ? req.query.shop : "";
   const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const embeddedAccess = typeof req.query.ea === "string" ? req.query.ea : "";
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
+  if (embeddedAccess) navParams.set("ea", embeddedAccess);
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
 
   res.type("html").send(`<!doctype html>
@@ -9613,11 +9625,13 @@ adminRouter.get("/appointments", (req, res) => {
   const host = typeof req.query.host === "string" ? req.query.host : "";
   const shop = typeof req.query.shop === "string" ? req.query.shop : "";
   const embedded = typeof req.query.embedded === "string" ? req.query.embedded : "";
+  const embeddedAccess = typeof req.query.ea === "string" ? req.query.ea : "";
   const isV2 = String(req.query.v || "").trim() === "2";
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
+  if (embeddedAccess) navParams.set("ea", embeddedAccess);
   if (isV2) navParams.set("v", "2");
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
   const defaultShop = shop || env.SHOPIFY_SHOP || "";
