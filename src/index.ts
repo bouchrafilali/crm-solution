@@ -151,20 +151,10 @@ function decodeShopifyHostParam(value: string | undefined): string {
   }
 }
 
-function hasTrustedShopifySource(req: express.Request): boolean {
+function hasTrustedShopifyLaunchParams(req: express.Request): boolean {
   const decodedHost = decodeShopifyHostParam(typeof req.query.host === "string" ? req.query.host : "");
   const requestShop = normalizeShopDomain(typeof req.query.shop === "string" ? req.query.shop : "");
-  if (!requestShop || !isTrustedShopifyHostname(decodedHost)) {
-    return false;
-  }
-
-  if (isTrustedShopifyHostname(req.get("origin")) || isTrustedShopifyHostname(req.get("referer"))) {
-    return true;
-  }
-
-  const fetchSite = String(req.get("sec-fetch-site") || "").trim().toLowerCase();
-  const fetchDest = String(req.get("sec-fetch-dest") || "").trim().toLowerCase();
-  return fetchSite === "cross-site" && (fetchDest === "document" || fetchDest === "iframe");
+  return !!requestShop && isTrustedShopifyHostname(decodedHost);
 }
 
 function isEmbeddedShopifyHtmlRequest(req: express.Request): boolean {
@@ -175,7 +165,7 @@ function isEmbeddedShopifyHtmlRequest(req: express.Request): boolean {
   const fetchDest = String(req.get("sec-fetch-dest") || "").trim().toLowerCase();
   const wantsHtml = accept.includes("text/html") || fetchDest === "document" || fetchDest === "iframe";
   if (!wantsHtml) return false;
-  return hasTrustedShopifySource(req);
+  return hasTrustedShopifyLaunchParams(req);
 }
 
 function isShopifyHtmlLaunchRequest(req: express.Request): boolean {
