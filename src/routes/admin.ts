@@ -906,12 +906,32 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     typeof req.query.embedded === "string" ? req.query.embedded : String(req.query.embedded ?? "");
   const embeddedAccess =
     typeof req.query.ea === "string" ? req.query.ea : String(req.query.ea ?? "");
+  const orderViewMode = req.query.view === "detail" ? "detail" : "list";
+  const initialSelectedOrderId =
+    typeof req.query.orderId === "string" ? req.query.orderId.trim() : "";
+  const initialOrderSearchTerm =
+    typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const initialActiveOrderTab =
+    typeof req.query.tab === "string" && ["all", "unpaid", "open", "shipped", "paid"].includes(req.query.tab)
+      ? req.query.tab
+      : "all";
+  const initialPresetRange =
+    typeof req.query.preset === "string" && req.query.preset.trim() ? req.query.preset.trim() : "year";
+  const initialSyncFrom = typeof req.query.from === "string" ? req.query.from.trim() : "";
+  const initialSyncTo = typeof req.query.to === "string" ? req.query.to.trim() : "";
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
   if (embeddedAccess) navParams.set("ea", embeddedAccess);
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
+  const detailBackParams = new URLSearchParams(navParams);
+  if (initialOrderSearchTerm) detailBackParams.set("q", initialOrderSearchTerm);
+  if (initialActiveOrderTab && initialActiveOrderTab !== "all") detailBackParams.set("tab", initialActiveOrderTab);
+  if (initialPresetRange && initialPresetRange !== "year") detailBackParams.set("preset", initialPresetRange);
+  if (initialSyncFrom) detailBackParams.set("from", initialSyncFrom);
+  if (initialSyncTo) detailBackParams.set("to", initialSyncTo);
+  const detailBackHref = `/admin/orders${detailBackParams.toString() ? `?${detailBackParams.toString()}` : ""}`;
 
   res.type("html").send(`<!doctype html>
 <html lang="en">
@@ -951,6 +971,44 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .orders-page {
       max-width: 1680px;
+    }
+    .orders-detail-mode .orders-primary-card {
+      padding: 16px;
+    }
+    .orders-detail-mode .orders-page-head {
+      margin-bottom: 12px;
+    }
+    .orders-detail-mode .orders-page-head-copy {
+      gap: 6px;
+    }
+    .orders-detail-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #005bd3;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .orders-detail-back:hover {
+      text-decoration: underline;
+    }
+    .orders-detail-mode .orders-toolbar,
+    .orders-detail-mode .shopify-period-horizon,
+    .orders-detail-mode .orders-status-tabs,
+    .orders-detail-mode .orders-list-header,
+    .orders-detail-mode .orders-advanced-disclosure,
+    .orders-detail-mode .orders-main-column {
+      display: none;
+    }
+    .orders-detail-mode .orders-main-surface {
+      display: block;
+      padding: 0;
+      background: transparent;
+    }
+    .orders-detail-mode .detail-box {
+      position: static;
+      min-height: auto;
     }
     .orders-page-head {
       display: flex;
@@ -2514,8 +2572,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
   </style>
 </head>
-<body>
-  <div class="wrap orders-page">
+<body class="${orderViewMode === "detail" ? "orders-detail-mode" : ""}">
+  <div class="wrap orders-page ${orderViewMode === "detail" ? "orders-detail-mode" : ""}">
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
@@ -2528,8 +2586,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     <div class="orders-page-head">
       <div class="orders-page-head-copy">
         <div class="orders-page-kicker">Commandes</div>
-        <h1>Orders</h1>
-        <p class="intro">Gérez et suivez les commandes sur une surface proche de Shopify Admin.</p>
+        <h1>${orderViewMode === "detail" ? "Détail de commande" : "Orders"}</h1>
+        <p class="intro">${orderViewMode === "detail" ? "Fiche indépendante, reliée à votre liste de commandes." : "Gérez et suivez les commandes sur une surface proche de Shopify Admin."}</p>
+        ${orderViewMode === "detail" ? `<a class="orders-detail-back" href="${detailBackHref}">← Retour à Commandes</a>` : ""}
       </div>
       <div class="orders-page-head-actions">
         <span class="orders-head-note">Mode direct via synchronisation de vos commandes</span>
@@ -2922,6 +2981,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     let showRevenueCurve = true;
     let showScoreCurve = true;
     let mobileDetailOpen = false;
+    const orderViewMode = ${JSON.stringify(orderViewMode)};
+    const initialSelectedOrderId = ${JSON.stringify(initialSelectedOrderId)};
+    const initialOrderSearch = ${JSON.stringify(initialOrderSearchTerm)};
+    const initialOrderTab = ${JSON.stringify(initialActiveOrderTab)};
+    const initialPresetRange = ${JSON.stringify(initialPresetRange)};
+    const initialRangeFrom = ${JSON.stringify(initialSyncFrom)};
+    const initialRangeTo = ${JSON.stringify(initialSyncTo)};
     const defaultLocationOptions = [
       "Showroom Massira - Casablanca, Maroc",
       "Showroom Triangle D'or - Casablanca, Maroc"
@@ -4122,6 +4188,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       });
     }
 
+    function buildOrderDetailUrl(orderId) {
+      const url = new URL("/admin/orders", window.location.origin);
+      const current = new URL(window.location.href);
+      ["host", "shop", "embedded", "ea"].forEach((key) => {
+        const value = current.searchParams.get(key);
+        if (value) url.searchParams.set(key, value);
+      });
+      if (orderSearchTerm) url.searchParams.set("q", orderSearchTerm);
+      if (activeOrderTab && activeOrderTab !== "all") url.searchParams.set("tab", activeOrderTab);
+      if (presetRangeEl && presetRangeEl.value) url.searchParams.set("preset", presetRangeEl.value);
+      if (syncFromEl && syncFromEl.value) url.searchParams.set("from", syncFromEl.value);
+      if (syncToEl && syncToEl.value) url.searchParams.set("to", syncToEl.value);
+      url.searchParams.set("view", "detail");
+      url.searchParams.set("orderId", orderId);
+      return url.toString();
+    }
+
     function updateKpis(data) {
       const unpaidCount = data.filter((order) => Number(order.outstandingAmount || 0) > 0).length;
       const shippedCount = data.filter((order) => String(order.shippingStatus) === "shipped").length;
@@ -4914,6 +4997,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
 
     function handleOrderSelection(order) {
+      if (orderViewMode !== "detail") {
+        window.location.href = buildOrderDetailUrl(order.id);
+        return;
+      }
       selectedOrderId = order.id;
       if (isOrdersMobileView()) {
         mobileDetailOpen = true;
@@ -5053,18 +5140,20 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
 
     function renderOrdersView() {
-      const visibleOrders = getVisibleOrders();
+      const visibleOrders = orderViewMode === "detail" ? orders : getVisibleOrders();
       if (syncStatusEl && orders.length && !syncInFlight) {
-        syncStatusEl.textContent = visibleOrders.length + " commande(s) affichée(s)";
+        syncStatusEl.textContent = orderViewMode === "detail"
+          ? "Commande liée à votre base synchronisée"
+          : visibleOrders.length + " commande(s) affichée(s)";
       }
 
       if (visibleOrders.length === 0) {
         closeMobileOrderDetail();
         ordersListEl.classList.remove("mobile-stack");
-        ordersListEl.innerHTML = "<div class='status'>Aucune commande pour ce filtre.</div>";
+        ordersListEl.innerHTML = "<div class='status'>" + (orderViewMode === "detail" ? "Commande introuvable." : "Aucune commande pour ce filtre.") + "</div>";
         deliveryQueueListEl.classList.remove("mobile-stack");
-        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison pour ce filtre.</div>";
-        orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
+        deliveryQueueListEl.innerHTML = "<div class='status'>" + (orderViewMode === "detail" ? "Aucune livraison à afficher." : "Aucune livraison pour ce filtre.") + "</div>";
+        orderDetailEl.innerHTML = "<div class='detail-empty'>" + (orderViewMode === "detail" ? "Commande introuvable." : "Aucune commande sélectionnée.") + "</div>";
         return;
       }
 
@@ -5072,13 +5161,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         selectedOrderId = visibleOrders[0].id;
       }
 
-      if (isOrdersMobileView()) {
+      if (orderViewMode !== "detail" && isOrdersMobileView()) {
         renderOrdersListMobile(visibleOrders);
-      } else {
+      } else if (orderViewMode !== "detail") {
         renderOrdersListDesktop(visibleOrders);
       }
 
-      renderDeliveryQueue(visibleOrders);
+      renderDeliveryQueue(orderViewMode === "detail" ? [visibleOrders.find((order) => order.id === selectedOrderId)].filter(Boolean) : visibleOrders);
 
       const selected = visibleOrders.find((order) => order.id === selectedOrderId);
       if (!selected) {
@@ -5333,8 +5422,21 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     });
     syncCurveToggleUi();
 
-    presetRangeEl.value = "year";
-    applyPreset("year");
+    selectedOrderId = initialSelectedOrderId || null;
+    orderSearchTerm = initialOrderSearch || "";
+    activeOrderTab = initialOrderTab || "all";
+    if (orderSearchEl && initialOrderSearch) {
+      orderSearchEl.value = initialOrderSearch;
+    }
+    if (initialRangeFrom && initialRangeTo) {
+      presetRangeEl.value = initialPresetRange || "custom";
+      syncFromEl.value = initialRangeFrom;
+      syncToEl.value = initialRangeTo;
+      syncPeriodHorizonUi(presetRangeEl.value === "custom" ? "custom" : presetRangeEl.value);
+    } else {
+      presetRangeEl.value = initialPresetRange || "year";
+      applyPreset(presetRangeEl.value);
+    }
     syncOrders();
   </script>
 </body>
