@@ -3211,7 +3211,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       </div>
     </section>`}
 
-    ${orderViewMode === "detail" ? "" : `
     <div id="ordersPeriodPopover" class="orders-period-popover hidden">
       <div class="orders-period-popover-grid">
         <div>
@@ -3243,7 +3242,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       <div class="orders-period-popover-actions">
         <button id="ordersTopPeriodCloseBtn" type="button" class="orders-period-popover-close">Fermer</button>
       </div>
-    </div>`}
+    </div>
 
     <section class="card orders-primary-card">
       <div class="orders-toolbar">
