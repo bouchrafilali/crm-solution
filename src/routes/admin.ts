@@ -1813,7 +1813,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
-      min-width: 1000px;
+      min-width: 1280px;
     }
     .orders-table thead th {
       text-align: left;
@@ -1841,6 +1841,81 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .orders-table tr.active-row td {
       background: #f2f2f2;
+    }
+    .orders-table-action-cell {
+      width: 170px;
+      white-space: nowrap;
+    }
+    .orders-table-action {
+      display: flex;
+      align-items: center;
+    }
+    .orders-row-action-menu {
+      position: relative;
+    }
+    .orders-row-action-menu summary {
+      list-style: none;
+    }
+    .orders-row-action-menu summary::-webkit-details-marker {
+      display: none;
+    }
+    .orders-row-action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      box-shadow: none;
+      transform: none;
+      white-space: nowrap;
+      margin-top: 0;
+    }
+    .orders-row-action-btn.orders-row-action-btn-primary {
+      border-color: #1f2328;
+      background: #1f2328;
+      color: #fff;
+    }
+    .orders-row-action-btn.orders-row-action-btn-secondary {
+      border: 1px solid #d2d5d8;
+      background: #fff;
+      color: #202223;
+    }
+    .orders-row-action-btn.orders-row-action-btn-secondary:hover,
+    .orders-row-action-btn.orders-row-action-btn-secondary:active,
+    .orders-row-action-btn.orders-row-action-btn-primary:hover,
+    .orders-row-action-btn.orders-row-action-btn-primary:active {
+      transform: none;
+      box-shadow: none;
+    }
+    .orders-row-action-toggle::after {
+      content: "▾";
+      margin-left: 4px;
+      font-size: 11px;
+      opacity: 0.78;
+    }
+    .orders-row-action-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: 220px;
+      display: grid;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid #dfe3e8;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
+      z-index: 8;
+    }
+    .orders-row-action-dropdown .orders-row-action-btn {
+      width: 100%;
+      justify-content: flex-start;
+      padding: 0 12px;
     }
     .customer-main {
       font-weight: 600;
@@ -5203,6 +5278,138 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       return form;
     }
 
+    const maisonPhone = "+212661981392";
+
+    async function fetchFreshOrderSnapshot(orderId) {
+      const res = await fetch("/admin/api/orders/" + encodeURIComponent(orderId));
+      const parsed = await readJsonSafe(res);
+      if (!parsed.ok || !parsed.data) {
+        throw new Error(parsed.ok ? "Commande introuvable" : "Impossible de recharger la commande.");
+      }
+      return parsed.data;
+    }
+
+    function closeParentDetails(el) {
+      const detailsEl = el ? el.closest("details") : null;
+      if (detailsEl) {
+        detailsEl.removeAttribute("open");
+      }
+    }
+
+    async function sendOrderDocument(order, recipientPhone, initialTemplateChoice, options = {}) {
+      try {
+        const latestOrder = await fetchFreshOrderSnapshot(order.id);
+        const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
+        const resolvedPhone = recipientPhone || latestOrder.customerPhone || order.customerPhone || "";
+        syncStatusEl.textContent = "Préparation du document...";
+        const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails, initialTemplateChoice);
+        if (!modalResult) {
+          syncStatusEl.textContent = "Envoi annulé.";
+          return;
+        }
+
+        const templateChoice = modalResult.templateChoice || "classic";
+        const requestedTemplateChoices = Array.from(new Set(
+          Array.isArray(options.templateChoices) && options.templateChoices.length > 0
+            ? options.templateChoices
+            : (options.sendCompanionReceipt
+                ? ["classic", "showroom_receipt"]
+                : [templateChoice])
+        ));
+        const documentLabels = requestedTemplateChoices.map((choice) => choice === "showroom_receipt" ? "reçu" : "facture");
+        const documentLabel = documentLabels.length > 1 ? "facture et reçu" : documentLabels[0];
+        const destinationLabel = resolvedPhone === maisonPhone
+          ? "Bouchra Filali Lahlou"
+          : (latestOrder.customerLabel || "le client");
+        const confirmed = window.confirm(
+          "Confirmer l'envoi du " + documentLabel + " pour " + latestOrder.name + " a " + destinationLabel + " ?"
+        );
+        if (!confirmed) {
+          syncStatusEl.textContent = "Envoi annulé.";
+          return;
+        }
+
+        if (modalResult.bankDetails) {
+          await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bankDetails: modalResult.bankDetails })
+          });
+        }
+
+        syncStatusEl.textContent = requestedTemplateChoices.length > 1 ? "Envoi des PDF en cours..." : "Envoi API en cours...";
+        const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id) + "/send-invoice-template", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            templateChoice,
+            templateChoices: requestedTemplateChoices,
+            recipientPhone: resolvedPhone
+          })
+        });
+        const parsed = await readJsonSafe(sendRes);
+        if (!sendRes.ok) {
+          const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
+          syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
+          return;
+        }
+        const sentCount = Array.isArray(parsed.data?.results) ? parsed.data.results.length : requestedTemplateChoices.length;
+        syncStatusEl.textContent = sentCount > 1
+          ? "Facture et reçu envoyés via API template."
+          : documentLabel.charAt(0).toUpperCase() + documentLabel.slice(1) + " envoye via API template.";
+      } catch (error) {
+        syncStatusEl.textContent =
+          "Envoi API échoué: " +
+          (error instanceof Error ? error.message : "Erreur inattendue");
+      }
+    }
+
+    async function sendOrderReview(order) {
+      try {
+        syncStatusEl.textContent = "Envoi demande avis Google...";
+        const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(order.id) + "/send-review-template", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        const parsed = await readJsonSafe(sendRes);
+        if (!sendRes.ok) {
+          const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
+          syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
+          return;
+        }
+        syncStatusEl.textContent = "Demande d'avis Google envoyée via WhatsApp.";
+      } catch (error) {
+        syncStatusEl.textContent =
+          "Envoi API échoué: " +
+          (error instanceof Error ? error.message : "Erreur inattendue");
+      }
+    }
+
+    async function printOrderDocument(order, initialTemplateChoice) {
+      const latestOrder = await fetchFreshOrderSnapshot(order.id);
+      const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
+      const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails, initialTemplateChoice);
+      if (!modalResult) return;
+      if (modalResult.bankDetails) {
+        await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bankDetails: modalResult.bankDetails })
+        });
+      }
+      const html = buildInvoiceHtml(latestOrder, modalResult.bankDetails, modalResult.templateChoice);
+      const popup = window.open("", "_blank");
+      if (!popup) {
+        syncStatusEl.textContent = "Autorisez les popups pour imprimer la facture.";
+        return;
+      }
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+      popup.focus();
+      popup.print();
+    }
+
     function attachOrderDetailInteractions(container, order, needsBankDetails) {
       const quickContainer = container.querySelector("#quickOrderForm");
       if (quickContainer) {
@@ -5219,184 +5426,58 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const sendMaisonReceiptBtn = container.querySelector("#sendMaisonReceiptBtn");
       const printInvoiceBtn = container.querySelector("#printInvoiceBtn");
       const printReceiptBtn = container.querySelector("#printReceiptBtn");
-      const maisonPhone = "+212661981392";
-
-      async function fetchFreshOrderSnapshot() {
-        const res = await fetch("/admin/api/orders/" + encodeURIComponent(order.id));
-        const parsed = await readJsonSafe(res);
-        if (!parsed.ok || !parsed.data) {
-          throw new Error(parsed.ok ? "Commande introuvable" : "Impossible de recharger la commande.");
-        }
-        return parsed.data;
-      }
-
-      async function sendDocument(recipientPhone, initialTemplateChoice, options = {}) {
-        try {
-          const latestOrder = await fetchFreshOrderSnapshot();
-          const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
-          syncStatusEl.textContent = "Préparation du document...";
-          const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails, initialTemplateChoice);
-          if (!modalResult) {
-            syncStatusEl.textContent = "Envoi annulé.";
-            return;
-          }
-
-          const templateChoice = modalResult.templateChoice || "classic";
-          const requestedTemplateChoices = Array.from(new Set(
-            Array.isArray(options.templateChoices) && options.templateChoices.length > 0
-              ? options.templateChoices
-              : (options.sendCompanionReceipt
-                  ? ["classic", "showroom_receipt"]
-                  : [templateChoice])
-          ));
-          const documentLabels = requestedTemplateChoices.map((choice) => choice === "showroom_receipt" ? "reçu" : "facture");
-          const documentLabel = documentLabels.length > 1 ? "facture et reçu" : documentLabels[0];
-          const destinationLabel = recipientPhone === maisonPhone
-            ? "Bouchra Filali Lahlou"
-            : (latestOrder.customerLabel || "le client");
-          const confirmed = window.confirm(
-            "Confirmer l'envoi du " + documentLabel + " pour " + latestOrder.name + " a " + destinationLabel + " ?"
-          );
-          if (!confirmed) {
-            syncStatusEl.textContent = "Envoi annulé.";
-            return;
-          }
-
-          if (modalResult.bankDetails) {
-            await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id), {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ bankDetails: modalResult.bankDetails })
-            });
-          }
-
-          syncStatusEl.textContent = requestedTemplateChoices.length > 1 ? "Envoi des PDF en cours..." : "Envoi API en cours...";
-          const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id) + "/send-invoice-template", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              templateChoice,
-              templateChoices: requestedTemplateChoices,
-              recipientPhone: recipientPhone
-            })
-          });
-          const parsed = await readJsonSafe(sendRes);
-          if (!sendRes.ok) {
-            const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
-            syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
-            return;
-          }
-          const sentCount = Array.isArray(parsed.data?.results) ? parsed.data.results.length : requestedTemplateChoices.length;
-          syncStatusEl.textContent = sentCount > 1
-            ? "Facture et reçu envoyés via API template."
-            : documentLabel.charAt(0).toUpperCase() + documentLabel.slice(1) + " envoye via API template.";
-        } catch (error) {
-          syncStatusEl.textContent =
-            "Envoi API échoué: " +
-            (error instanceof Error ? error.message : "Erreur inattendue");
-        }
-      }
-
-      async function printDocument(initialTemplateChoice) {
-        const latestOrder = await fetchFreshOrderSnapshot();
-        const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
-        const modalResult = await openInvoiceModal(latestOrder, latestNeedsBankDetails, initialTemplateChoice);
-        if (!modalResult) return;
-        if (modalResult.bankDetails) {
-          await fetch("/admin/api/orders/" + encodeURIComponent(latestOrder.id), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bankDetails: modalResult.bankDetails })
-          });
-        }
-        const html = buildInvoiceHtml(latestOrder, modalResult.bankDetails, modalResult.templateChoice);
-        const popup = window.open("", "_blank");
-        if (!popup) {
-          syncStatusEl.textContent = "Autorisez les popups pour imprimer la facture.";
-          return;
-        }
-        popup.document.open();
-        popup.document.write(html);
-        popup.document.close();
-        popup.focus();
-        popup.print();
-      }
-
-      function closeParentDetails(el) {
-        const detailsEl = el ? el.closest("details") : null;
-        if (detailsEl) {
-          detailsEl.removeAttribute("open");
-        }
-      }
 
       if (sendClientBtn) {
         sendClientBtn.addEventListener("click", async () => {
-          await sendDocument(order.customerPhone || "", "classic");
+          await sendOrderDocument(order, order.customerPhone || "", "classic");
         });
       }
       if (sendMaisonBtn) {
         sendMaisonBtn.addEventListener("click", async () => {
-          await sendDocument(maisonPhone, "classic");
+          await sendOrderDocument(order, maisonPhone, "classic");
         });
       }
       if (sendClientInvoiceBtn) {
         sendClientInvoiceBtn.addEventListener("click", async () => {
           closeParentDetails(sendClientInvoiceBtn);
-          await sendDocument(order.customerPhone || "", "classic");
+          await sendOrderDocument(order, order.customerPhone || "", "classic");
         });
       }
       if (sendClientReceiptBtn) {
         sendClientReceiptBtn.addEventListener("click", async () => {
           closeParentDetails(sendClientReceiptBtn);
-          await sendDocument(order.customerPhone || "", "showroom_receipt");
+          await sendOrderDocument(order, order.customerPhone || "", "showroom_receipt");
         });
       }
       if (sendMaisonInvoiceBtn) {
         sendMaisonInvoiceBtn.addEventListener("click", async () => {
           closeParentDetails(sendMaisonInvoiceBtn);
-          await sendDocument(maisonPhone, "classic");
+          await sendOrderDocument(order, maisonPhone, "classic");
         });
       }
       if (sendMaisonReceiptBtn) {
         sendMaisonReceiptBtn.addEventListener("click", async () => {
           closeParentDetails(sendMaisonReceiptBtn);
-          await sendDocument(maisonPhone, "showroom_receipt");
+          await sendOrderDocument(order, maisonPhone, "showroom_receipt");
         });
       }
       if (reviewBtn) {
         reviewBtn.addEventListener("click", async () => {
-          try {
-            syncStatusEl.textContent = "Envoi demande avis Google...";
-            const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(order.id) + "/send-review-template", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" }
-            });
-            const parsed = await readJsonSafe(sendRes);
-            if (!sendRes.ok) {
-              const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
-              syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
-              return;
-            }
-            syncStatusEl.textContent = "Demande d'avis Google envoyée via WhatsApp.";
-          } catch (error) {
-            syncStatusEl.textContent =
-              "Envoi API échoué: " +
-              (error instanceof Error ? error.message : "Erreur inattendue");
-          }
+          await sendOrderReview(order);
         });
       }
       if (printInvoiceBtn) {
         printInvoiceBtn.addEventListener("click", async () => {
           const printMenu = printInvoiceBtn.closest("details");
           if (printMenu) printMenu.removeAttribute("open");
-          await printDocument("classic");
+          await printOrderDocument(order, "classic");
         });
       }
       if (printReceiptBtn) {
         printReceiptBtn.addEventListener("click", async () => {
           const printMenu = printReceiptBtn.closest("details");
           if (printMenu) printMenu.removeAttribute("open");
-          await printDocument("showroom_receipt");
+          await printOrderDocument(order, "showroom_receipt");
         });
       }
     }
@@ -5601,6 +5682,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "<th>Paiement</th>" +
         "<th>Livraison</th>" +
         "<th>Total</th>" +
+        "<th>Document</th>" +
+        "<th>Avis Google</th>" +
         "</tr></thead><tbody></tbody></table>";
 
       const tbody = ordersListEl.querySelector("tbody");
@@ -5635,7 +5718,64 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "</span></td>" +
           "<td><strong>" +
           formatMoney(order.totalAmount || 0, order.currency) +
-          "</strong></td>";
+          "</strong></td>" +
+          "<td class='orders-table-action-cell'>" +
+          "<div class='orders-table-action'>" +
+            "<details class='orders-row-action-menu'>" +
+              "<summary class='orders-row-action-btn orders-row-action-btn-primary orders-row-action-toggle'>🧾 Envoyer</summary>" +
+              "<div class='orders-row-action-dropdown'>" +
+                "<button type='button' class='orders-row-action-btn orders-row-action-btn-secondary' data-row-action='client-invoice'>Facture au client</button>" +
+                "<button type='button' class='orders-row-action-btn orders-row-action-btn-secondary' data-row-action='client-receipt'>Reçu au client</button>" +
+                "<button type='button' class='orders-row-action-btn orders-row-action-btn-secondary' data-row-action='maison-invoice'>Facture à Bouchra</button>" +
+                "<button type='button' class='orders-row-action-btn orders-row-action-btn-secondary' data-row-action='maison-receipt'>Reçu à Bouchra</button>" +
+              "</div>" +
+            "</details>" +
+          "</div>" +
+          "</td>" +
+          "<td class='orders-table-action-cell'>" +
+          "<div class='orders-table-action'>" +
+            "<button type='button' class='orders-row-action-btn orders-row-action-btn-secondary' data-row-review-btn='true'>⭐ Avis Google</button>" +
+          "</div>" +
+          "</td>";
+        row.querySelectorAll("details, summary, .orders-row-action-dropdown, .orders-row-action-btn").forEach((el) => {
+          el.addEventListener("click", (event) => {
+            event.stopPropagation();
+          });
+        });
+        const sendClientInvoiceBtn = row.querySelector("[data-row-action='client-invoice']");
+        const sendClientReceiptBtn = row.querySelector("[data-row-action='client-receipt']");
+        const sendMaisonInvoiceBtn = row.querySelector("[data-row-action='maison-invoice']");
+        const sendMaisonReceiptBtn = row.querySelector("[data-row-action='maison-receipt']");
+        const reviewBtn = row.querySelector("[data-row-review-btn='true']");
+        if (sendClientInvoiceBtn) {
+          sendClientInvoiceBtn.addEventListener("click", async () => {
+            closeParentDetails(sendClientInvoiceBtn);
+            await sendOrderDocument(order, order.customerPhone || "", "classic");
+          });
+        }
+        if (sendClientReceiptBtn) {
+          sendClientReceiptBtn.addEventListener("click", async () => {
+            closeParentDetails(sendClientReceiptBtn);
+            await sendOrderDocument(order, order.customerPhone || "", "showroom_receipt");
+          });
+        }
+        if (sendMaisonInvoiceBtn) {
+          sendMaisonInvoiceBtn.addEventListener("click", async () => {
+            closeParentDetails(sendMaisonInvoiceBtn);
+            await sendOrderDocument(order, maisonPhone, "classic");
+          });
+        }
+        if (sendMaisonReceiptBtn) {
+          sendMaisonReceiptBtn.addEventListener("click", async () => {
+            closeParentDetails(sendMaisonReceiptBtn);
+            await sendOrderDocument(order, maisonPhone, "showroom_receipt");
+          });
+        }
+        if (reviewBtn) {
+          reviewBtn.addEventListener("click", async () => {
+            await sendOrderReview(order);
+          });
+        }
         row.addEventListener("click", () => {
           handleOrderSelection(order);
         });
