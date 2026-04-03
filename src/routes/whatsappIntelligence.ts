@@ -12677,7 +12677,6 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
       <nav class="nav subnav">
         <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
         <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
-        <a href="/whatsapp-intelligence/client-flows${navSuffix}">Flows clients</a>
         <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
         <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
         <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
@@ -20472,10 +20471,16 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
 whatsappRouter.get("/admin/whatsapp-intelligence/client-flows", (req, res) => {
   const query = new URLSearchParams(req.query as Record<string, string>);
   const queryString = query.toString();
-  res.redirect(`/whatsapp-intelligence/client-flows${queryString ? `?${queryString}` : ""}`);
+  res.redirect(`/admin/client-flows${queryString ? `?${queryString}` : ""}`);
 });
 
 whatsappRouter.get("/whatsapp-intelligence/client-flows", (req, res) => {
+  const query = new URLSearchParams(req.query as Record<string, string>);
+  const queryString = query.toString();
+  res.redirect(`/admin/client-flows${queryString ? `?${queryString}` : ""}`);
+});
+
+whatsappRouter.get("/admin/client-flows", (req, res) => {
   const q = new URLSearchParams();
   const shop = String(req.query.shop || "").trim();
   const host = String(req.query.host || "").trim();
@@ -20600,6 +20605,58 @@ whatsappRouter.get("/whatsapp-intelligence/client-flows", (req, res) => {
       font-size:14px;
       line-height:1.5;
     }
+    .flow-placeholder.rich{
+      align-items:flex-start;
+      justify-content:flex-start;
+      text-align:left;
+      background:#fff;
+      border-style:solid;
+      padding:16px;
+    }
+    .season-map{
+      width:100%;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .season-block{
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fafbfb;
+      padding:12px 14px;
+    }
+    .season-title{
+      margin:0 0 8px;
+      font-size:13px;
+      font-weight:800;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      color:#202223;
+    }
+    .season-list{
+      margin:0;
+      padding:0;
+      list-style:none;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .season-list li{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      font-size:14px;
+      color:#202223;
+    }
+    .season-timing{
+      font-weight:700;
+      white-space:nowrap;
+    }
+    .season-stage{
+      color:var(--muted);
+      text-align:right;
+    }
     .flow-footer{
       font-size:12px;
       color:var(--subtle);
@@ -20618,24 +20675,15 @@ whatsappRouter.get("/whatsapp-intelligence/client-flows", (req, res) => {
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a class="current" href="/admin/client-flows${navSuffix}">Flows clients</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
-    </nav>
-    <nav class="nav">
-      <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
-      <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
-      <a class="current" href="/whatsapp-intelligence/client-flows${navSuffix}">Flows clients</a>
-      <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
-      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
-      <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
-      <a href="/whatsapp-logic-diagram${navSuffix}">Schéma logique</a>
-      <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
     </nav>
 
     <section class="hero">
-      <div class="kicker">WhatsApp</div>
+      <div class="kicker">Flows clients</div>
       <h1>Flows clients</h1>
-      <p class="sub">Page préparatoire pour les séquences WhatsApp client. Les contenus ne sont pas encore configurés, mais la structure est prête pour accueillir les messages et réglages plus tard.</p>
+      <p class="sub">Page préparatoire indépendante pour les séquences client. Les contenus ne sont pas encore configurés, mais la structure est prête pour accueillir les messages et réglages plus tard.</p>
 
       <div class="grid">
         <article class="flow-card">
@@ -20661,8 +20709,34 @@ whatsappRouter.get("/whatsapp-intelligence/client-flows", (req, res) => {
             <h2>Saison</h2>
             <span class="flow-chip">À préparer</span>
           </div>
-          <div class="flow-placeholder">Espace réservé au flow WhatsApp saisonnier.</div>
-          <div class="flow-footer">Message, déclencheurs et logique à définir plus tard.</div>
+          <div class="flow-placeholder rich">
+            <div class="season-map">
+              <section class="season-block">
+                <h3 class="season-title">Ramadan</h3>
+                <ul class="season-list">
+                  <li><span class="season-timing">T-45 jours</span><span class="season-stage">teaser</span></li>
+                  <li><span class="season-timing">T-20 jours</span><span class="season-stage">vente</span></li>
+                  <li><span class="season-timing">T-7 jours</span><span class="season-stage">urgence</span></li>
+                </ul>
+              </section>
+              <section class="season-block">
+                <h3 class="season-title">Hiver</h3>
+                <ul class="season-list">
+                  <li><span class="season-timing">T-30 jours</span><span class="season-stage">nouveautés</span></li>
+                  <li><span class="season-timing">T-10 jours</span><span class="season-stage">push léger</span></li>
+                </ul>
+              </section>
+              <section class="season-block">
+                <h3 class="season-title">Mariage</h3>
+                <ul class="season-list">
+                  <li><span class="season-timing">T-60 jours</span><span class="season-stage">inspiration</span></li>
+                  <li><span class="season-timing">T-30 jours</span><span class="season-stage">conversion</span></li>
+                  <li><span class="season-timing">T-10 jours</span><span class="season-stage">express</span></li>
+                </ul>
+              </section>
+            </div>
+          </div>
+          <div class="flow-footer">Mapping saisonnier préparé pour la prochaine configuration des messages.</div>
         </article>
       </div>
     </section>
@@ -20768,7 +20842,6 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
     <nav class="nav">
       <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
       <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
-      <a href="/whatsapp-intelligence/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
       <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
       <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>

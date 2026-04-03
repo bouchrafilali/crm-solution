@@ -3156,6 +3156,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a href="/admin/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
@@ -6555,6 +6556,7 @@ adminRouter.get("/invoices", (req, res) => {
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a href="/admin/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
@@ -7501,6 +7503,7 @@ adminRouter.get("/insights", (req, res) => {
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a href="/admin/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
@@ -8599,6 +8602,7 @@ adminRouter.get("/forecast", (req, res) => {
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a href="/admin/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
@@ -10099,6 +10103,7 @@ adminRouter.get("/forecast-v2", (req, res) => {
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a href="/admin/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
@@ -10987,6 +10992,7 @@ adminRouter.get("/priority", (req, res) => {
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a href="/admin/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils" class="active">Outils</a>
     </nav>

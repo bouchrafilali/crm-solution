@@ -980,7 +980,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
   <main class="wrap">
     <section class="orientation">
       <article class="tile"><div class="k">Page principale</div><div class="v">Centre de contrôle</div><div class="d">Hub d’orientation de l’app pour choisir rapidement le bon module sans doublon.</div></article>
-      <article class="tile"><div class="k">Modules quotidiens</div><div class="v">5 modules canoniques</div><div class="d">Commandes, Factures, Rendez-vous, Forecast et WhatsApp concentrent la navigation principale.</div></article>
+      <article class="tile"><div class="k">Modules quotidiens</div><div class="v">6 modules canoniques</div><div class="d">Commandes, Factures, Rendez-vous, Forecast, Flows clients et WhatsApp concentrent la navigation principale.</div></article>
       <article class="tile"><div class="k">Zone secondaire</div><div class="v">Outils</div><div class="d">Architecture, IA, mobile et workflows avancés restent accessibles, mais hors navigation quotidienne.</div></article>
     </section>
 
@@ -1011,6 +1011,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           </a>
           <a class="home-app module-item" data-app-id="forecast" data-search="forecast previsions revenue demande scenarios planification" href="/admin/forecast${navSuffix}">
             <span class="home-app-icon">◍</span><span class="home-app-label">Forecast</span>
+          </a>
+          <a class="home-app module-item" data-app-id="client-flows" data-search="flows clients whatsapp j+3 j+15 saison messages sequences relances" href="/admin/client-flows${navSuffix}">
+            <span class="home-app-icon">◐</span><span class="home-app-label">Flows clients</span>
           </a>
           <a class="home-app module-item" data-app-id="whatsapp" data-search="whatsapp conversations priorites intelligence flux conversion" href="/admin/whatsapp-intelligence${navSuffix}">
             <span class="home-app-icon">◈</span><span class="home-app-label">WhatsApp</span>
@@ -1085,6 +1088,15 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <div class="content">
               <p class="title">Forecast</p>
               <p class="subtitle">Pilotage des projections de revenu, du rythme commercial et des scénarios</p>
+            </div>
+            <span class="status active">Actif</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row module-item" data-app-id="client-flows" data-search="flows clients whatsapp j+3 j+15 saison messages sequences relances" href="/admin/client-flows${navSuffix}">
+            <div class="icon">◐</div>
+            <div class="content">
+              <p class="title">Flows clients</p>
+              <p class="subtitle">Préparation des séquences WhatsApp client J+3, J+15 et saisonnières</p>
             </div>
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
