@@ -1947,6 +1947,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       font-size: 14px;
       min-width: 1280px;
       color: #303030;
+      table-layout: fixed;
     }
     .orders-table thead th {
       text-align: left;
@@ -1954,21 +1955,30 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       font-size: 13px;
       font-weight: 500;
       line-height: 20px;
-      padding: 12px 16px;
+      padding: 11px 16px;
       border-bottom: 1px solid #e1e3e5;
       background: #ffffff;
       position: sticky;
       top: 0;
       z-index: 1;
+      white-space: nowrap;
     }
     .orders-table td {
-      padding: 10px 16px;
+      padding: 9px 16px;
       border-bottom: 1px solid #e1e3e5;
       vertical-align: middle;
       background: #fff;
       color: #303030;
       font-size: 14px;
       line-height: 20px;
+    }
+    .orders-table thead th:first-child,
+    .orders-table td:first-child {
+      padding-left: 20px;
+    }
+    .orders-table thead th:last-child,
+    .orders-table td:last-child {
+      padding-right: 20px;
     }
     .orders-table tr {
       cursor: pointer;
@@ -5967,6 +5977,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       ordersListEl.classList.remove("mobile-stack");
       ordersListEl.innerHTML =
         "<table class='orders-table'>" +
+        "<colgroup>" +
+        "<col style='width:12%'>" +
+        "<col style='width:8%'>" +
+        "<col style='width:14%'>" +
+        "<col style='width:15%'>" +
+        "<col style='width:16%'>" +
+        "<col style='width:11%'>" +
+        "<col style='width:12%'>" +
+        "<col style='width:12%'>" +
+        "</colgroup>" +
         "<thead><tr>" +
         "<th>Commande</th>" +
         "<th>Date</th>" +
