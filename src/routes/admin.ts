@@ -1708,9 +1708,52 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .shopify-detail-summary {
       margin-top: 12px;
     }
+    .order-detail-layout {
+      display: grid;
+      gap: 12px;
+    }
+    .order-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .order-summary-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px 14px;
+    }
+    .order-summary-label {
+      color: #6d7175;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .order-summary-value {
+      margin-top: 6px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #202223;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+    .order-actions-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fff;
+      padding: 14px;
+    }
+    .order-actions-card h4 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #202223;
+    }
     .order-shell {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
     }
     .order-card {
@@ -2488,6 +2531,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       .modal-grid { grid-template-columns: 1fr; }
       .article-row { grid-template-columns: 1fr; }
       .detail-box { position: static; min-height: 280px; }
+      .order-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .order-shell { grid-template-columns: 1fr; }
     }
     @media (max-width: 860px) {
@@ -2547,6 +2591,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       }
       .deliveries-box {
         margin-top: 0;
+      }
+      .order-summary-grid {
+        grid-template-columns: 1fr;
       }
       .modal-backdrop {
         padding: 0;
@@ -2651,12 +2698,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       </div>
 
       <div class="queue-grid orders-main-surface">
-        <div class="orders-main-column">
+        ${orderViewMode === "detail"
+          ? `<aside class="detail-box shopify-detail-box">
+          <div id="orderDetail" class="detail-empty">Chargement de la commande…</div>
+        </aside>`
+          : `<div class="orders-main-column">
           <div id="ordersList" class="orders-list shopify-orders-list"></div>
-        </div>
-        <aside class="detail-box shopify-detail-box">
-          <div id="orderDetail" class="detail-empty">Sélectionnez une commande pour afficher sa fiche.</div>
-        </aside>
+        </div>`}
       </div>
 
       <details id="ordersAdvancedDisclosure" class="orders-advanced-disclosure">
@@ -4940,55 +4988,60 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       orderDetailEl.innerHTML = "";
       const detail = document.createElement("div");
       detail.innerHTML =
-        "<div class='line detail-title-row'><strong>" +
-        escapeHtml(order.name) +
-        "</strong><span class='customer-sub'>Commande #" +
-        escapeHtml(order.id) +
-        "</span></div>" +
-        "<div class='order-meta-row'>" +
-        paymentBadgeHtml(order) +
-        treatmentBadgeHtml(order) +
-        vm.gatewayTag +
-        "</div>" +
-        "<div class='info-list shopify-detail-box shopify-detail-summary'>" +
-          "<div class='info-item'><div class='info-label'>Créée</div><div class='info-value'>" + escapeHtml(vm.createdDateLabel + " à " + vm.createdTimeLabel) + "</div></div>" +
-          "<div class='info-item'><div class='info-label'>Canal</div><div class='info-value'>" + escapeHtml(order.orderLocation || "Non renseigné") + "</div></div>" +
-          "<div class='info-item'><div class='info-label'>Total</div><div class='info-value'>" + vm.totalLabel + "</div></div>" +
-          "<div class='info-item'><div class='info-label'>Reste à payer</div><div class='info-value'>" + vm.remainingLabel + "</div></div>" +
-        "</div>" +
-        "<div class='order-shell'>" +
-          "<div class='order-card'>" +
-            "<h4>Client et actions</h4>" +
+        "<div class='order-detail-layout'>" +
+          "<div class='line detail-title-row'><strong>" +
+          escapeHtml(order.name) +
+          "</strong><span class='customer-sub'>Commande #" +
+          escapeHtml(order.id) +
+          "</span></div>" +
+          "<div class='order-meta-row'>" +
+          paymentBadgeHtml(order) +
+          treatmentBadgeHtml(order) +
+          vm.gatewayTag +
+          "</div>" +
+          "<div class='order-summary-grid'>" +
+            "<div class='order-summary-card'><div class='order-summary-label'>Créée</div><div class='order-summary-value'>" + escapeHtml(vm.createdDateLabel + " à " + vm.createdTimeLabel) + "</div></div>" +
+            "<div class='order-summary-card'><div class='order-summary-label'>Canal</div><div class='order-summary-value'>" + escapeHtml(order.orderLocation || "Non renseigné") + "</div></div>" +
+            "<div class='order-summary-card'><div class='order-summary-label'>Total</div><div class='order-summary-value'>" + vm.totalLabel + "</div></div>" +
+            "<div class='order-summary-card'><div class='order-summary-label'>Reste à payer</div><div class='order-summary-value'>" + vm.remainingLabel + "</div></div>" +
+          "</div>" +
+          "<div class='order-actions-card'>" +
+            "<h4>Actions</h4>" +
             "<div class='order-action-block'>" +
-              "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer le document à Bouchra</button>" +
+              "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer à Bouchra</button>" +
               "<div class='order-action-utility-row'>" +
-                "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary'>Envoyer le document au client</button>" +
+                "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary'>Envoyer au client</button>" +
                 "<div class='order-action-print'>" +
                   "<details>" +
-                    "<summary class='save-order-btn order-action-print-toggle'>Imprimer un document</summary>" +
+                    "<summary class='save-order-btn order-action-print-toggle'>Imprimer</summary>" +
                     "<div class='order-action-print-menu'>" +
                       "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer la facture</button>" +
                       "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer le reçu</button>" +
                     "</div>" +
                   "</details>" +
                 "</div>" +
-                "<button type='button' id='reviewBtn' class='save-order-btn action-secondary'>Envoyer la demande d'avis Google</button>" +
+                "<button type='button' id='reviewBtn' class='save-order-btn action-secondary'>Envoyer l'avis Google</button>" +
               "</div>" +
             "</div>" +
-            "<div class='info-list'>" +
-            vm.clientInfoRows.join("") +
-            "</div>" +
           "</div>" +
-          "<div class='order-card'>" +
-            "<h4>Paiement</h4>" +
-            "<div class='info-list'>" +
-            vm.paymentInfoRows.join("") +
+          "<div class='order-shell'>" +
+            "<div class='order-card'>" +
+              "<h4>Client</h4>" +
+              "<div class='info-list'>" +
+              vm.clientInfoRows.join("") +
+              "</div>" +
             "</div>" +
-          "</div>" +
-          "<div class='order-card'>" +
-            "<h4>Traitement</h4>" +
-            "<div class='status'>Statut de livraison, date planifiée et emplacement de suivi.</div>" +
-            "<div id='quickOrderForm'></div>" +
+            "<div class='order-card'>" +
+              "<h4>Paiement</h4>" +
+              "<div class='info-list'>" +
+              vm.paymentInfoRows.join("") +
+              "</div>" +
+            "</div>" +
+            "<div class='order-card'>" +
+              "<h4>Traitement</h4>" +
+              "<div class='status'>Statut de livraison, date planifiée et emplacement de suivi.</div>" +
+              "<div id='quickOrderForm'></div>" +
+            "</div>" +
           "</div>" +
         "</div>";
 
@@ -5024,10 +5077,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const tbody = ordersListEl.querySelector("tbody");
       visibleOrders.forEach((order) => {
         const row = document.createElement("tr");
-        if (order.id === selectedOrderId) {
-          row.className = "active-row";
-        }
-
         const shippingClass = order.shippingStatus === "shipped" ? "pill shipped" : "pill";
         row.innerHTML =
           "<td><strong>" +
@@ -5040,23 +5089,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "</td>" +
           "<td><div class='customer-main'>" +
           escapeHtml(order.customerLabel || "Client inconnu") +
-          "</div><div class='customer-sub'>" +
-          "Tél: " +
-          escapeHtml(customerPhoneLabel(order)) +
-          " · " +
-          orderItemsCount(order) +
-          " pièce(s)</div></td>" +
+          "</div></td>" +
           "<td>" +
           paymentBadgeHtml(order) +
-          "<div class='customer-sub'>" +
-          escapeHtml(remainingAmountLabel(order)) +
           "</div></td>" +
           "<td><span class='" +
           shippingClass +
           "'>" +
           escapeHtml(statusLabel(order.shippingStatus)) +
-          "</span><div class='customer-sub'>" +
-          escapeHtml(order.shippingDate ? String(order.shippingDate).slice(0, 10) : "Date non planifiée") +
           "</div></td>" +
           "<td><strong>" +
           formatMoney(order.totalAmount || 0, order.currency) +
@@ -5161,10 +5201,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         selectedOrderId = visibleOrders[0].id;
       }
 
-      if (orderViewMode !== "detail" && isOrdersMobileView()) {
-        renderOrdersListMobile(visibleOrders);
-      } else if (orderViewMode !== "detail") {
-        renderOrdersListDesktop(visibleOrders);
+      if (orderViewMode !== "detail") {
+        if (isOrdersMobileView()) {
+          renderOrdersListMobile(visibleOrders);
+        } else {
+          renderOrdersListDesktop(visibleOrders);
+        }
       }
 
       renderDeliveryQueue(orderViewMode === "detail" ? [visibleOrders.find((order) => order.id === selectedOrderId)].filter(Boolean) : visibleOrders);
@@ -5173,6 +5215,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       if (!selected) {
         closeMobileOrderDetail();
         orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
+        return;
+      }
+
+      if (orderViewMode === "detail") {
+        closeMobileOrderDetail();
+        renderDesktopOrderDetail(selected);
         return;
       }
 
