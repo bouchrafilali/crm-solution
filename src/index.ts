@@ -1034,16 +1034,16 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="home-app-icon">⬡</span><span class="home-app-label">Spline</span>
           </a>
           <a class="home-app module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
-            <span class="home-app-icon">◉</span><span class="home-app-label">Mobile App</span>
+            <span class="home-app-icon">◉</span><span class="home-app-label">App mobile</span>
           </a>
           <a class="home-app module-item" data-app-id="whatsapp-lab" data-search="whatsapp lab experimentation tests outils" href="/whatsapp-lab${navSuffix}">
             <span class="home-app-icon">◫</span><span class="home-app-label">WhatsApp Lab</span>
           </a>
           <a class="home-app module-item" data-app-id="logic" data-search="logic diagram schema logique whatsapp systeme" href="/whatsapp-logic-diagram${navSuffix}">
-            <span class="home-app-icon">⌘</span><span class="home-app-label">Logic Diagram</span>
+            <span class="home-app-icon">⌘</span><span class="home-app-label">Schéma logique</span>
           </a>
           <a class="home-app module-item" data-app-id="workflow" data-search="manager approval flow validation manager whatsapp" href="/whatsapp-intelligence/workflow${navSuffix}">
-            <span class="home-app-icon">⇄</span><span class="home-app-label">Manager Flow</span>
+            <span class="home-app-icon">⇄</span><span class="home-app-label">Flux manager</span>
           </a>
         </div>
       </section>
@@ -1143,7 +1143,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           <a class="row module-row module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
             <div class="icon">◉</div>
             <div class="content">
-              <p class="title">Mobile App</p>
+              <p class="title">App mobile</p>
               <p class="subtitle">Vue opérateur mobile pour exécution rapide, validations et actions terrain</p>
             </div>
             <span class="status progress">Secondaire</span>
@@ -1152,7 +1152,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           <a class="row module-row module-item" data-app-id="whatsapp-lab" data-search="whatsapp lab experimentation tests outils" href="/whatsapp-lab${navSuffix}">
             <div class="icon">◫</div>
             <div class="content">
-              <p class="title">WhatsApp Lab</p>
+              <p class="title">Laboratoire WhatsApp</p>
               <p class="subtitle">Zone d’expérimentation et de tests pour les interfaces et composants WhatsApp</p>
             </div>
             <span class="status progress">Secondaire</span>
@@ -1161,7 +1161,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           <a class="row module-row module-item" data-app-id="logic" data-search="logic diagram schema logique whatsapp systeme" href="/whatsapp-logic-diagram${navSuffix}">
             <div class="icon">⌘</div>
             <div class="content">
-              <p class="title">Logic Diagram</p>
+              <p class="title">Schéma logique</p>
               <p class="subtitle">Schéma logique et lecture des enchaînements internes de l’écosystème WhatsApp</p>
             </div>
             <span class="status progress">Secondaire</span>
@@ -1170,7 +1170,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
           <a class="row module-row module-item" data-app-id="workflow" data-search="manager approval flow validation manager whatsapp" href="/whatsapp-intelligence/workflow${navSuffix}">
             <div class="icon">⇄</div>
             <div class="content">
-              <p class="title">Manager Approval Flow</p>
+              <p class="title">Flux manager</p>
               <p class="subtitle">Workflow de validation managériale pour les devis et décisions sensibles</p>
             </div>
             <span class="status progress">Secondaire</span>
@@ -1226,7 +1226,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     const sections = Array.from(document.querySelectorAll(".section-block"));
     const appCatalog = {
       agent: { label: "Agent Control", icon: "◎", href: "/agent-control-center-v1/${navSuffix}#/index" },
-      mobile: { label: "Mobile App", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
+      mobile: { label: "App mobile", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
       forecast: { label: "Forecast", icon: "◍", href: "/admin/forecast${navSuffix}" },
       whatsapp: { label: "WhatsApp", icon: "◈", href: "/admin/whatsapp-intelligence${navSuffix}" },
       blueprint: { label: "Blueprint", icon: "◇", href: "/blueprint${navSuffix}" },
@@ -1235,9 +1235,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       invoice: { label: "Factures", icon: "◔", href: "/admin/invoices${navSuffix}" },
       orders: { label: "Commandes", icon: "◐", href: "/admin/orders${navSuffix}" },
       appointments: { label: "Rendez-vous", icon: "◒", href: "/admin/appointments${navSuffix}" },
-      "whatsapp-lab": { label: "WhatsApp Lab", icon: "◫", href: "/whatsapp-lab${navSuffix}" },
-      logic: { label: "Logic Diagram", icon: "⌘", href: "/whatsapp-logic-diagram${navSuffix}" },
-      workflow: { label: "Manager Flow", icon: "⇄", href: "/whatsapp-intelligence/workflow${navSuffix}" }
+      "whatsapp-lab": { label: "Laboratoire WhatsApp", icon: "◫", href: "/whatsapp-lab${navSuffix}" },
+      logic: { label: "Schéma logique", icon: "⌘", href: "/whatsapp-logic-diagram${navSuffix}" },
+      workflow: { label: "Flux manager", icon: "⇄", href: "/whatsapp-intelligence/workflow${navSuffix}" }
     };
     const defaultRecentApps = ["orders", "invoice", "forecast", "whatsapp"];
 

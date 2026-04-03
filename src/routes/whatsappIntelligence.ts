@@ -5581,7 +5581,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Réglages WhatsApp Intelligence</title>
+  <title>Réglages WhatsApp</title>
   <style>
     :root { --line:#1d2b44; --txt:#e8eef9; --muted:#9aa9c4; --card:#0b1321; --bg:#060b14; }
     * { box-sizing:border-box; }
@@ -5630,13 +5630,13 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
       <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
       <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
       <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
-      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
-      <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
-      <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
-      <a class="current" href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages WhatsApp Intelligence</a>
+      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
+      <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
+      <a href="/whatsapp-logic-diagram${navSuffix}">Schéma logique</a>
+      <a class="current" href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages WhatsApp</a>
     </nav>
     <section class="card">
-      <h1 style="margin:0 0 4px;">Réglages WhatsApp Intelligence</h1>
+      <h1 style="margin:0 0 4px;">Réglages WhatsApp</h1>
       <p class="muted">Pilotage règles de classification, templates de réponse et politiques par pays.</p>
       <div class="tabs" id="tabs">
         <button class="tab active" data-tab="countries">Pays</button>
@@ -5953,7 +5953,7 @@ whatsappRouter.get("/whatsapp-intelligence/mobile-lab", (req, res) => {
         <div class="chips">
           <span class="chip" id="modeChip"></span>
           <span class="chip good">System healthy</span>
-          <a class="chip" href="/whatsapp-intelligence${navSuffix}">Back to WhatsApp Intelligence</a>
+          <a class="chip" href="/admin/whatsapp-intelligence${navSuffix}">Retour à WhatsApp</a>
         </div>
       </header>
       <section class="card">
@@ -12678,9 +12678,9 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
         <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
         <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
         <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
-        <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
-        <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
-        <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
+        <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
+        <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
+        <a href="/whatsapp-logic-diagram${navSuffix}">Schéma logique</a>
         <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
       </nav>
       <h1>Intelligence WhatsApp</h1>
@@ -20482,7 +20482,7 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WhatsApp Intelligence – Manager Approval Flow</title>
+  <title>WhatsApp – Flux manager</title>
   <style>
     :root{
       --bg:#05070b; --panel:#0f172a; --line:rgba(148,163,184,.18); --muted:#94a3b8; --text:#e2e8f0;
@@ -20566,13 +20566,13 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
       <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
       <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
       <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
-      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
-      <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
-      <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
+      <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">App mobile</a>
+      <a href="/whatsapp-lab${navSuffix}">Laboratoire WhatsApp</a>
+      <a href="/whatsapp-logic-diagram${navSuffix}">Schéma logique</a>
       <a class="current" href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
     </nav>
-    <div class="title">WhatsApp Intelligence – Manager Approval Flow</div>
-    <div class="sub">Manager-in-the-loop pricing validation and controlled stage progression</div>
+    <div class="title">WhatsApp – Flux manager</div>
+    <div class="sub">Validation managériale des prix et progression contrôlée des étapes.</div>
 
     <section class="kpis">
       <article class="kpi"><div class="label">Quote requests (7d) <span class="live">Live</span></div><div class="value" id="kpiQuoteReq">0</div></article>
@@ -20625,8 +20625,8 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
           </div>
         </div>
         <div class="links">
-          <a href="/admin/whatsapp-intelligence${navSuffix}">Open WA Intelligence</a>
-          <a href="/whatsapp/priority-inbox${navSuffix}">Open Priority Inbox</a>
+          <a href="/admin/whatsapp-intelligence${navSuffix}">Ouvrir WhatsApp</a>
+          <a href="/whatsapp/priority-inbox${navSuffix}">Ouvrir la boîte prioritaire</a>
         </div>
       </aside>
     </section>
@@ -20721,14 +20721,21 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
 </html>`);
 });
 
-whatsappRouter.get("/whatsapp/priority-inbox", (_req, res) => {
+whatsappRouter.get("/whatsapp/priority-inbox", (req, res) => {
+  const q = new URLSearchParams();
+  const shop = String(req.query.shop || "").trim();
+  const host = String(req.query.host || "").trim();
+  if (shop) q.set("shop", shop);
+  if (host) q.set("host", host);
+  const navSuffix = q.toString() ? `?${q.toString()}` : "";
+
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Priority Inbox – WhatsApp Intelligence</title>
+  <title>Boîte prioritaire – WhatsApp</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     :root {
@@ -21210,14 +21217,14 @@ whatsappRouter.get("/whatsapp/priority-inbox", (_req, res) => {
     <div class="container">
       <div class="header-inner">
         <div class="header-left">
-          <a href="/whatsapp" class="back-btn">
+          <a href="/admin/whatsapp-intelligence${navSuffix}" class="back-btn">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </a>
           <div class="title-group">
-            <h1 class="page-title">Priority Inbox</h1>
-            <p class="page-subtitle">Ready-to-send suggestions</p>
+            <h1 class="page-title">Boîte prioritaire</h1>
+            <p class="page-subtitle">Suggestions prêtes à traiter</p>
           </div>
           <div class="count-badge" id="cardCount">0</div>
         </div>
@@ -21226,16 +21233,16 @@ whatsappRouter.get("/whatsapp/priority-inbox", (_req, res) => {
             <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
             <path d="M12.5 12.5L16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          <input type="text" class="search-input" id="searchInput" placeholder="Search leads...">
+          <input type="text" class="search-input" id="searchInput" placeholder="Rechercher un lead...">
         </div>
       </div>
       <div class="filters-bar" id="filtersBar">
-        <button class="filter-chip active" data-filter="all">All</button>
-        <button class="filter-chip" data-filter="p0">P0 Critical</button>
-        <button class="filter-chip" data-filter="p1">P1 High</button>
-        <button class="filter-chip" data-filter="p2">P2 Medium</button>
-        <button class="filter-chip" data-filter="expiring">Expiring Soon</button>
-        <button class="filter-chip" data-filter="review">Needs Review</button>
+        <button class="filter-chip active" data-filter="all">Tout</button>
+        <button class="filter-chip" data-filter="p0">P0 critique</button>
+        <button class="filter-chip" data-filter="p1">P1 élevé</button>
+        <button class="filter-chip" data-filter="p2">P2 moyen</button>
+        <button class="filter-chip" data-filter="expiring">Expire bientôt</button>
+        <button class="filter-chip" data-filter="review">À revoir</button>
       </div>
     </div>
   </div>
