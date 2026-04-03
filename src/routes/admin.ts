@@ -1778,6 +1778,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .order-action-secondary {
       width: 100%;
     }
+    .order-action-utility-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: start;
+    }
+    .order-action-utility-row .save-order-btn,
+    .order-action-utility-row .order-action-print-toggle {
+      margin-top: 0;
+    }
     .order-action-print {
       position: relative;
     }
@@ -4565,14 +4575,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "</div>" +
         "</div>" +
         "<div class='order-mobile-primary-actions'>" +
-          "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer à Bouchra</button>" +
-          "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary action-secondary order-action-secondary'>Envoyer au client</button>" +
+          "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer le document à Bouchra</button>" +
+          "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary action-secondary order-action-secondary'>Envoyer le document au client</button>" +
           "<div class='order-action-print action-tertiary'>" +
             "<details>" +
-              "<summary class='save-order-btn order-action-print-toggle'>Impression</summary>" +
+              "<summary class='save-order-btn order-action-print-toggle'>Imprimer un document</summary>" +
               "<div class='order-action-print-menu'>" +
-                "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer facture</button>" +
-                "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer reçu</button>" +
+                "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer la facture</button>" +
+                "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer le reçu</button>" +
               "</div>" +
             "</details>" +
           "</div>" +
@@ -4581,7 +4591,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "<summary>Autres actions</summary>" +
           "<div class='order-mobile-secondary-body'>" +
             "<div class='order-mobile-secondary-actions'>" +
-              "<button type='button' id='reviewBtn' class='save-order-btn action-secondary'>Envoyer demande avis Google</button>" +
+              "<button type='button' id='reviewBtn' class='save-order-btn action-secondary'>Envoyer la demande d'avis Google</button>" +
             "</div>" +
           "</div>" +
         "</details>" +
@@ -4621,11 +4631,24 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "<div class='order-shell'>" +
           "<div class='order-card'>" +
             "<h4>Client</h4>" +
+            "<div class='order-action-block'>" +
+              "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer le document à Bouchra</button>" +
+              "<div class='order-action-utility-row'>" +
+                "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary'>Envoyer le document au client</button>" +
+                "<div class='order-action-print'>" +
+                  "<details>" +
+                    "<summary class='save-order-btn order-action-print-toggle'>Imprimer un document</summary>" +
+                    "<div class='order-action-print-menu'>" +
+                      "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer la facture</button>" +
+                      "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer le reçu</button>" +
+                    "</div>" +
+                  "</details>" +
+                "</div>" +
+                "<button type='button' id='reviewBtn' class='save-order-btn action-secondary'>Envoyer la demande d'avis Google</button>" +
+              "</div>" +
+            "</div>" +
             "<div class='info-list'>" +
             vm.clientInfoRows.join("") +
-            "</div>" +
-            "<div class='line' style='margin-top:10px; gap:8px;'>" +
-              "<button type='button' id='reviewBtn' class='save-order-btn action-secondary' style='margin-top:0;'>Envoyer demande avis Google</button>" +
             "</div>" +
           "</div>" +
           "<div class='order-card'>" +
@@ -4637,21 +4660,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             "<h4>Paiement</h4>" +
             "<div class='info-list'>" +
             vm.paymentInfoRows.join("") +
-            "</div>" +
-            "<div class='order-action-block'>" +
-              "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer à Bouchra</button>" +
-              "<div class='order-action-secondary-row'>" +
-                "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary order-action-secondary'>Envoyer au client</button>" +
-                "<div class='order-action-print'>" +
-                  "<details>" +
-                    "<summary class='save-order-btn order-action-print-toggle'>Impression</summary>" +
-                    "<div class='order-action-print-menu'>" +
-                      "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer facture</button>" +
-                      "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer reçu</button>" +
-                    "</div>" +
-                  "</details>" +
-                "</div>" +
-              "</div>" +
             "</div>" +
           "</div>" +
         "</div>";
