@@ -178,6 +178,15 @@ function isEmbeddedShopifyHtmlRequest(req: express.Request): boolean {
   return hasTrustedShopifySource(req);
 }
 
+function isShopifyHtmlLaunchRequest(req: express.Request): boolean {
+  if (!isShopifyLaunch(req)) return false;
+  const method = String(req.method || "").trim().toUpperCase();
+  if (method !== "GET" && method !== "HEAD") return false;
+  const accept = String(req.get("accept") || "").toLowerCase();
+  const fetchDest = String(req.get("sec-fetch-dest") || "").trim().toLowerCase();
+  return accept.includes("text/html") || fetchDest === "document" || fetchDest === "iframe";
+}
+
 function normalizeShopDomain(value: string | undefined): string {
   const raw = String(value || "").trim().toLowerCase();
   return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(raw) ? raw : "";
@@ -243,6 +252,11 @@ function readEmbeddedAccessTokenFromRequest(req: express.Request): string {
   return readCookie(req, SHOPIFY_EMBEDDED_ACCESS_COOKIE);
 }
 
+function hasDirectEmbeddedAccessQuery(req: express.Request): boolean {
+  return typeof req.query[SHOPIFY_EMBEDDED_ACCESS_QUERY] === "string"
+    && req.query[SHOPIFY_EMBEDDED_ACCESS_QUERY].trim().length > 0;
+}
+
 function hasValidEmbeddedAccessToken(req: express.Request): boolean {
   const raw = readEmbeddedAccessTokenFromRequest(req);
   if (!raw) return false;
@@ -304,6 +318,21 @@ function parseBasicAuth(header: string | undefined): { username: string; passwor
   }
 }
 
+function areValidAdminCredentials(username: string, password: string): boolean {
+  const expectedUsername = String(env.ADMIN_AUTH_USERNAME || "");
+  const expectedPassword = String(env.ADMIN_AUTH_PASSWORD || "");
+  if (!expectedUsername || !expectedPassword) return false;
+
+  const safeEquals = (left: string, right: string): boolean => {
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    if (leftBuffer.length !== rightBuffer.length) return false;
+    return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+  };
+
+  return safeEquals(username, expectedUsername) && safeEquals(password, expectedPassword);
+}
+
 function enforceAdminBasicAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
   if (!isAdminAuthEnabled()) {
     next();
@@ -333,17 +362,7 @@ function enforceAdminBasicAuth(req: express.Request, res: express.Response, next
     unauthorized(res);
     return;
   }
-
-  const safeEquals = (left: string, right: string): boolean => {
-    const leftBuffer = Buffer.from(left);
-    const rightBuffer = Buffer.from(right);
-    if (leftBuffer.length !== rightBuffer.length) return false;
-    return crypto.timingSafeEqual(leftBuffer, rightBuffer);
-  };
-
-  const usernameOk = safeEquals(provided.username, expectedUsername);
-  const passwordOk = safeEquals(provided.password, expectedPassword);
-  if (!usernameOk || !passwordOk) {
+  if (!areValidAdminCredentials(provided.username, provided.password)) {
     unauthorized(res);
     return;
   }
@@ -357,15 +376,34 @@ function adminAccessMiddleware(req: express.Request, res: express.Response, next
     return;
   }
 
-  if (isEmbeddedShopifyHtmlRequest(req)) {
-    const tokenValue = createEmbeddedAccessValue(req);
-    issueEmbeddedAccessCookie(req, res, tokenValue);
-    if (!hasValidEmbeddedAccessToken(req)) {
+  if (isShopifyHtmlLaunchRequest(req)) {
+    const existingToken = readEmbeddedAccessTokenFromRequest(req);
+    const hasValidToken = hasValidEmbeddedAccessToken(req);
+
+    if (hasValidToken && existingToken) {
+      issueEmbeddedAccessCookie(req, res, existingToken);
+      if (!hasDirectEmbeddedAccessQuery(req)) {
+        res.redirect(302, withEmbeddedAccessQuery(req, existingToken));
+        return;
+      }
+      next();
+      return;
+    }
+
+    if (isEmbeddedShopifyHtmlRequest(req)) {
+      const tokenValue = createEmbeddedAccessValue(req);
+      issueEmbeddedAccessCookie(req, res, tokenValue);
       res.redirect(302, withEmbeddedAccessQuery(req, tokenValue));
       return;
     }
-    next();
-    return;
+
+    const provided = parseBasicAuth(req.get("authorization"));
+    if (provided && areValidAdminCredentials(provided.username, provided.password)) {
+      const tokenValue = createEmbeddedAccessValue(req);
+      issueEmbeddedAccessCookie(req, res, tokenValue);
+      res.redirect(302, withEmbeddedAccessQuery(req, tokenValue));
+      return;
+    }
   }
 
   enforceAdminBasicAuth(req, res, next);
