@@ -45,6 +45,9 @@ function isShopifyLaunch(req: express.Request): boolean {
   return hasHost || hasShop || embedded === "1" || embedded === "true";
 }
 
+const SHOPIFY_EMBEDDED_ACCESS_COOKIE = "__shopify_embedded_access";
+const SHOPIFY_EMBEDDED_ACCESS_TTL_SECONDS = 12 * 60 * 60;
+
 function buildAdminNavSuffix(req: express.Request): string {
   const host = typeof req.query.host === "string" ? req.query.host : "";
   const shop = typeof req.query.shop === "string" ? req.query.shop : "";
@@ -88,6 +91,167 @@ function unauthorized(res: express.Response): void {
   res.status(401).send("Authentication required.");
 }
 
+function base64UrlEncode(value: Buffer): string {
+  return value.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value: string): Buffer {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const paddingLength = normalized.length % 4 === 0 ? 0 : 4 - (normalized.length % 4);
+  return Buffer.from(normalized + "=".repeat(paddingLength), "base64");
+}
+
+function parseCookieHeader(header: string | undefined): Map<string, string> {
+  const values = new Map<string, string>();
+  const source = String(header || "");
+  if (!source) return values;
+  for (const chunk of source.split(";")) {
+    const separator = chunk.indexOf("=");
+    if (separator <= 0) continue;
+    const key = chunk.slice(0, separator).trim();
+    const value = chunk.slice(separator + 1).trim();
+    if (key) values.set(key, value);
+  }
+  return values;
+}
+
+function readCookie(req: express.Request, name: string): string {
+  return parseCookieHeader(req.get("cookie")).get(name) || "";
+}
+
+function extractHostname(value: string | undefined): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? new URL(raw) : new URL(`https://${raw}`);
+    return url.hostname.trim().toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isTrustedShopifyHostname(value: string | undefined): boolean {
+  const hostname = extractHostname(value).replace(/:\d+$/g, "");
+  return hostname === "admin.shopify.com"
+    || hostname.endsWith(".shopify.com")
+    || hostname.endsWith(".myshopify.com")
+    || hostname.endsWith(".shopifyapps.com");
+}
+
+function decodeShopifyHostParam(value: string | undefined): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return base64UrlDecode(raw).toString("utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function hasTrustedShopifySource(req: express.Request): boolean {
+  const decodedHost = decodeShopifyHostParam(typeof req.query.host === "string" ? req.query.host : "");
+  const requestShop = normalizeShopDomain(typeof req.query.shop === "string" ? req.query.shop : "");
+  if (!requestShop || !isTrustedShopifyHostname(decodedHost)) {
+    return false;
+  }
+
+  if (isTrustedShopifyHostname(req.get("origin")) || isTrustedShopifyHostname(req.get("referer"))) {
+    return true;
+  }
+
+  const fetchSite = String(req.get("sec-fetch-site") || "").trim().toLowerCase();
+  const fetchDest = String(req.get("sec-fetch-dest") || "").trim().toLowerCase();
+  return fetchSite === "cross-site" && (fetchDest === "document" || fetchDest === "iframe");
+}
+
+function isEmbeddedShopifyHtmlRequest(req: express.Request): boolean {
+  if (!isShopifyLaunch(req)) return false;
+  const method = String(req.method || "").trim().toUpperCase();
+  if (method !== "GET" && method !== "HEAD") return false;
+  const accept = String(req.get("accept") || "").toLowerCase();
+  const fetchDest = String(req.get("sec-fetch-dest") || "").trim().toLowerCase();
+  const wantsHtml = accept.includes("text/html") || fetchDest === "document" || fetchDest === "iframe";
+  if (!wantsHtml) return false;
+  return hasTrustedShopifySource(req);
+}
+
+function normalizeShopDomain(value: string | undefined): string {
+  const raw = String(value || "").trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(raw) ? raw : "";
+}
+
+function hashUserAgent(req: express.Request): string {
+  return crypto.createHash("sha256").update(String(req.get("user-agent") || "")).digest("hex");
+}
+
+function signEmbeddedAccessPayload(encodedPayload: string): string {
+  return base64UrlEncode(
+    crypto.createHmac("sha256", env.SHOPIFY_API_SECRET)
+      .update("shopify-embedded-access:")
+      .update(encodedPayload)
+      .digest()
+  );
+}
+
+function issueEmbeddedAccessCookie(req: express.Request, res: express.Response): void {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    shop: normalizeShopDomain(typeof req.query.shop === "string" ? req.query.shop : ""),
+    ua: hashUserAgent(req),
+    iat: now,
+    exp: now + SHOPIFY_EMBEDDED_ACCESS_TTL_SECONDS
+  };
+  const encodedPayload = base64UrlEncode(Buffer.from(JSON.stringify(payload), "utf8"));
+  const signature = signEmbeddedAccessPayload(encodedPayload);
+  const isProduction = String(env.NODE_ENV || "").trim().toLowerCase() === "production";
+
+  res.cookie(SHOPIFY_EMBEDDED_ACCESS_COOKIE, `${encodedPayload}.${signature}`, {
+    httpOnly: true,
+    path: "/",
+    maxAge: SHOPIFY_EMBEDDED_ACCESS_TTL_SECONDS * 1000,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax"
+  });
+}
+
+function hasValidEmbeddedAccessCookie(req: express.Request): boolean {
+  const raw = readCookie(req, SHOPIFY_EMBEDDED_ACCESS_COOKIE);
+  if (!raw) return false;
+  const separator = raw.lastIndexOf(".");
+  if (separator <= 0) return false;
+  const encodedPayload = raw.slice(0, separator);
+  const signature = raw.slice(separator + 1);
+  const expectedSignature = signEmbeddedAccessPayload(encodedPayload);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (providedBuffer.length !== expectedBuffer.length) return false;
+  if (!crypto.timingSafeEqual(providedBuffer, expectedBuffer)) return false;
+
+  try {
+    const parsed = JSON.parse(base64UrlDecode(encodedPayload).toString("utf8")) as {
+      exp?: number;
+      ua?: string;
+      shop?: string;
+    };
+    const expiresAt = Number(parsed.exp || 0);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Math.floor(Date.now() / 1000)) {
+      return false;
+    }
+    if (String(parsed.ua || "") !== hashUserAgent(req)) {
+      return false;
+    }
+    const expectedShop = normalizeShopDomain(String(parsed.shop || ""));
+    if (!expectedShop) return false;
+    const requestShop = normalizeShopDomain(typeof req.query.shop === "string" ? req.query.shop : "");
+    if (requestShop && requestShop !== expectedShop) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseBasicAuth(header: string | undefined): { username: string; password: string } | null {
   const value = String(header || "").trim();
   if (!value.startsWith("Basic ")) return null;
@@ -111,6 +275,11 @@ function enforceAdminBasicAuth(req: express.Request, res: express.Response, next
   }
 
   if (shouldBypassAdminAuth(req)) {
+    next();
+    return;
+  }
+
+  if (hasValidEmbeddedAccessCookie(req)) {
     next();
     return;
   }
@@ -151,6 +320,13 @@ function adminAccessMiddleware(req: express.Request, res: express.Response, next
     next();
     return;
   }
+
+  if (isEmbeddedShopifyHtmlRequest(req)) {
+    issueEmbeddedAccessCookie(req, res);
+    next();
+    return;
+  }
+
   enforceAdminBasicAuth(req, res, next);
 }
 
