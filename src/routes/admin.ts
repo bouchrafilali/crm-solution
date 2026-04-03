@@ -1791,11 +1791,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       display: none;
     }
     .order-action-print-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
       min-width: 156px;
+      min-height: 46px;
+      padding: 0 18px;
+      border-radius: 12px;
       background: #fff;
       color: #202223;
       border: 1px solid #d7dbe0;
       box-shadow: none;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1;
+      text-align: center;
     }
     .order-action-print-toggle:hover,
     .order-action-print-toggle:active {
