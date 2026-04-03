@@ -20688,6 +20688,15 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
       <div class="grid">
         <article class="flow-card">
           <div class="flow-card-head">
+            <h2>Commande confirmée</h2>
+            <span class="flow-chip">Premier flow</span>
+          </div>
+          <div class="flow-placeholder">Espace réservé au premier flow WhatsApp dès confirmation de commande.</div>
+          <div class="flow-footer">Déclenchement immédiat après confirmation de la commande.</div>
+        </article>
+
+        <article class="flow-card">
+          <div class="flow-card-head">
             <h2>J+3</h2>
             <span class="flow-chip">À préparer</span>
           </div>
