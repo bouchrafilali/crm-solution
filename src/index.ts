@@ -47,6 +47,7 @@ function isShopifyLaunch(req: express.Request): boolean {
 
 const SHOPIFY_EMBEDDED_ACCESS_COOKIE = "__shopify_embedded_access";
 const SHOPIFY_EMBEDDED_ACCESS_TTL_SECONDS = 12 * 60 * 60;
+const SHOPIFY_EMBEDDED_ACCESS_QUERY = "ea";
 
 function buildAdminNavSuffix(req: express.Request): string {
   const host = typeof req.query.host === "string" ? req.query.host : "";
@@ -193,7 +194,7 @@ function signEmbeddedAccessPayload(encodedPayload: string): string {
   );
 }
 
-function issueEmbeddedAccessCookie(req: express.Request, res: express.Response): void {
+function createEmbeddedAccessValue(req: express.Request): string {
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     shop: normalizeShopDomain(typeof req.query.shop === "string" ? req.query.shop : ""),
@@ -203,19 +204,45 @@ function issueEmbeddedAccessCookie(req: express.Request, res: express.Response):
   };
   const encodedPayload = base64UrlEncode(Buffer.from(JSON.stringify(payload), "utf8"));
   const signature = signEmbeddedAccessPayload(encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+function issueEmbeddedAccessCookie(req: express.Request, res: express.Response, tokenValue?: string): string {
+  const value = tokenValue || createEmbeddedAccessValue(req);
   const isProduction = String(env.NODE_ENV || "").trim().toLowerCase() === "production";
 
-  res.cookie(SHOPIFY_EMBEDDED_ACCESS_COOKIE, `${encodedPayload}.${signature}`, {
+  res.cookie(SHOPIFY_EMBEDDED_ACCESS_COOKIE, value, {
     httpOnly: true,
     path: "/",
     maxAge: SHOPIFY_EMBEDDED_ACCESS_TTL_SECONDS * 1000,
     secure: isProduction,
     sameSite: isProduction ? "none" : "lax"
   });
+  return value;
 }
 
-function hasValidEmbeddedAccessCookie(req: express.Request): boolean {
-  const raw = readCookie(req, SHOPIFY_EMBEDDED_ACCESS_COOKIE);
+function readEmbeddedAccessTokenFromRequest(req: express.Request): string {
+  const direct = typeof req.query[SHOPIFY_EMBEDDED_ACCESS_QUERY] === "string"
+    ? req.query[SHOPIFY_EMBEDDED_ACCESS_QUERY]
+    : "";
+  if (direct) return String(direct);
+
+  const referrer = String(req.get("referer") || "").trim();
+  if (referrer) {
+    try {
+      const url = new URL(referrer);
+      const fromReferrer = url.searchParams.get(SHOPIFY_EMBEDDED_ACCESS_QUERY) || "";
+      if (fromReferrer) return fromReferrer;
+    } catch {
+      // ignore malformed referrer
+    }
+  }
+
+  return readCookie(req, SHOPIFY_EMBEDDED_ACCESS_COOKIE);
+}
+
+function hasValidEmbeddedAccessToken(req: express.Request): boolean {
+  const raw = readEmbeddedAccessTokenFromRequest(req);
   if (!raw) return false;
   const separator = raw.lastIndexOf(".");
   if (separator <= 0) return false;
@@ -252,6 +279,13 @@ function hasValidEmbeddedAccessCookie(req: express.Request): boolean {
   }
 }
 
+function withEmbeddedAccessQuery(req: express.Request, tokenValue: string): string {
+  const baseUrl = `${req.protocol}://${req.get("host") || "localhost"}`;
+  const current = new URL(req.originalUrl || req.url, baseUrl);
+  current.searchParams.set(SHOPIFY_EMBEDDED_ACCESS_QUERY, tokenValue);
+  return current.pathname + current.search;
+}
+
 function parseBasicAuth(header: string | undefined): { username: string; password: string } | null {
   const value = String(header || "").trim();
   if (!value.startsWith("Basic ")) return null;
@@ -279,7 +313,7 @@ function enforceAdminBasicAuth(req: express.Request, res: express.Response, next
     return;
   }
 
-  if (hasValidEmbeddedAccessCookie(req)) {
+  if (hasValidEmbeddedAccessToken(req)) {
     next();
     return;
   }
@@ -322,7 +356,12 @@ function adminAccessMiddleware(req: express.Request, res: express.Response, next
   }
 
   if (isEmbeddedShopifyHtmlRequest(req)) {
-    issueEmbeddedAccessCookie(req, res);
+    const tokenValue = createEmbeddedAccessValue(req);
+    issueEmbeddedAccessCookie(req, res, tokenValue);
+    if (!hasValidEmbeddedAccessToken(req)) {
+      res.redirect(302, withEmbeddedAccessQuery(req, tokenValue));
+      return;
+    }
     next();
     return;
   }
