@@ -1649,19 +1649,19 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .orders-table thead th {
       text-align: left;
-      color: var(--muted);
+      color: #616161;
       font-size: 12px;
       font-weight: 600;
       padding: 11px 14px;
-      border-bottom: 1px solid #e6e9ec;
-      background: #fafbfb;
+      border-bottom: 1px solid #d9d9d9;
+      background: #ffffff;
       position: sticky;
       top: 0;
       z-index: 1;
     }
     .orders-table td {
       padding: 12px 14px;
-      border-bottom: 1px solid #eef1f3;
+      border-bottom: 1px solid #e0e0e0;
       vertical-align: middle;
       background: #fff;
     }
@@ -1669,10 +1669,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       cursor: pointer;
     }
     .orders-table tr:hover td {
-      background: #f7f8f9;
+      background: #f8f8f8;
     }
     .orders-table tr.active-row td {
-      background: #f5f6f7;
+      background: #f2f2f2;
     }
     .customer-main {
       font-weight: 600;
@@ -1684,24 +1684,26 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .pill {
       border-radius: 999px;
-      padding: 3px 8px;
-      font-size: 11px;
+      padding: 4px 12px;
+      font-size: 12px;
       font-weight: 600;
-      background: #f6f6f7;
-      border: 1px solid #e1e3e5;
-      color: #4a4f55;
+      background: #f0f0f0;
+      border: 1px solid transparent;
+      color: #616161;
       display: inline-flex;
       align-items: center;
     }
     .pill.partial {
-      background: #faf7ef;
-      border-color: #e8dfc8;
-      color: #6c6142;
+      background: #fed79d;
+      color: #8a6116;
     }
     .pill.shipped {
-      background: #f1f8f4;
-      border-color: #d7e7dc;
-      color: #4f6b57;
+      background: #d9ecff;
+      color: #0b5cab;
+    }
+    .pill.ready {
+      background: #e3e3e3;
+      color: #616161;
     }
     .detail-box {
       border: 1px solid var(--border);
@@ -2210,11 +2212,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       align-items: center;
       gap: 6px;
       border-radius: 999px;
-      padding: 4px 10px;
-      border: 1px solid #e1e3e5;
-      background: #f6f6f7;
-      color: #4a4d52;
-      font-size: 11px;
+      padding: 4px 12px;
+      border: 1px solid transparent;
+      background: #f0f0f0;
+      color: #616161;
+      font-size: 12px;
       font-weight: 600;
       line-height: 1;
     }
@@ -2224,35 +2226,34 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       opacity: 0.65;
     }
     .badge-status.paid {
-      background: #ededee;
-      border-color: #e1e3e5;
-      color: #4d5156;
+      background: #e3e3e3;
+      color: #616161;
     }
     .badge-status.partial {
-      background: #faf7ef;
-      border-color: #e8dfc8;
-      color: #6c6142;
+      background: #fed79d;
+      color: #8a6116;
     }
     .badge-status.pending {
-      background: #f8f7f3;
-      border-color: #e5e2d8;
-      color: #655f52;
+      background: #fed79d;
+      color: #8a6116;
     }
     .badge-status.unfulfilled {
-      background: #f8f7f3;
-      border-color: #e5e2d8;
-      color: #655f52;
+      background: #ffe66b;
+      color: #5c4c00;
     }
     .badge-status.fulfilled {
-      background: #f1f8f4;
-      border-color: #d7e7dc;
-      color: #4f6b57;
+      background: #e3e3e3;
+      color: #616161;
     }
     .badge-status.gateway {
       background: #f6f6f7;
       border-color: #e1e3e5;
       color: #4d5156;
       font-weight: 600;
+    }
+    .badge-status.transit {
+      background: #d9ecff;
+      color: #0b5cab;
     }
     .tag-soft.gateway {
       background: #f6f6f7;
@@ -3202,7 +3203,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     function paymentBadgeIcon(order) {
       const financial = String(order.financialStatus || "").toLowerCase();
       if (financial === "partially_paid") return "⊘";
-      return "●";
+      if (financial === "paid" || Number(order.outstandingAmount || 0) <= 0) return "●";
+      return "○";
     }
 
     function paymentBadgeHtml(order) {
@@ -3225,7 +3227,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "'><span class='badge-icon'>" +
         (isShipped ? "●" : "○") +
         "</span>" +
-        (isShipped ? "Traitée" : "Non traitée") +
+        (isShipped ? "Traité" : "Non traité") +
         "</span>"
       );
     }
@@ -5092,7 +5094,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const tbody = ordersListEl.querySelector("tbody");
       visibleOrders.forEach((order) => {
         const row = document.createElement("tr");
-        const shippingClass = order.shippingStatus === "shipped" ? "pill shipped" : "pill";
+        const shippingState = String(order.shippingStatus || "");
+        const shippingClass =
+          shippingState === "shipped"
+            ? "pill shipped"
+            : shippingState === "ready"
+              ? "pill ready"
+              : "pill";
         row.innerHTML =
           "<td><strong>" +
           escapeHtml(order.name) +
@@ -5107,12 +5115,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "</div></td>" +
           "<td>" +
           paymentBadgeHtml(order) +
-          "</div></td>" +
+          "</td>" +
           "<td><span class='" +
           shippingClass +
           "'>" +
           escapeHtml(statusLabel(order.shippingStatus)) +
-          "</div></td>" +
+          "</span></td>" +
           "<td><strong>" +
           formatMoney(order.totalAmount || 0, order.currency) +
           "</strong></td>";
