@@ -5228,17 +5228,52 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       );
     }
 
+    function buildCustomerLifetimeStats(order) {
+      const customerKey = orderCustomerKey(order);
+      const matchingOrders = orders.filter((item) => orderCustomerKey(item) === customerKey);
+      const totalsByCurrency = new Map();
+      let totalMadApprox = 0;
+
+      matchingOrders.forEach((item) => {
+        const currency = String(item.currency || "MAD").toUpperCase();
+        const amount = Number(item.totalAmount || 0);
+        if (!Number.isFinite(amount)) return;
+        totalsByCurrency.set(currency, (totalsByCurrency.get(currency) || 0) + amount);
+        totalMadApprox += toMadApprox(amount, currency);
+      });
+
+      let totalSpentLabel = formatMoney(0, order.currency || "MAD");
+      if (totalsByCurrency.size === 1) {
+        const [currency, amount] = Array.from(totalsByCurrency.entries())[0];
+        totalSpentLabel = formatMoney(amount, currency);
+      } else if (totalsByCurrency.size > 1) {
+        totalSpentLabel = "≈ " + formatMoney(totalMadApprox, "MAD");
+      }
+
+      return {
+        ordersCount: matchingOrders.length,
+        totalSpentLabel
+      };
+    }
+
     function buildOrderDetailViewModel(order) {
       const needsBankDetails = Number(order.outstandingAmount || 0) > 0;
       const createdDate = new Date(order.createdAt);
       const createdDateLabel = createdDate.toLocaleDateString("fr-FR");
       const createdTimeLabel = createdDate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      const customerLifetimeStats = buildCustomerLifetimeStats(order);
       const clientInfoRows = [
         "<div class='info-item'><div class='info-label'>Client</div><div class='info-value'>" +
           escapeHtml(order.customerLabel || "Client inconnu") +
           "</div></div>",
         "<div class='info-item'><div class='info-label'>Téléphone</div><div class='info-value'>" +
           escapeHtml(customerPhoneLabel(order)) +
+          "</div></div>",
+        "<div class='info-item'><div class='info-label'>Nombre de commandes</div><div class='info-value'>" +
+          escapeHtml(String(customerLifetimeStats.ordersCount)) +
+          "</div></div>",
+        "<div class='info-item'><div class='info-label'>Montant dépensé</div><div class='info-value'>" +
+          escapeHtml(customerLifetimeStats.totalSpentLabel) +
           "</div></div>"
       ];
       if (order.customerEmail) {
