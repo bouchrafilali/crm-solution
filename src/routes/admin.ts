@@ -1166,19 +1166,92 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .orders-toolbar {
       display: grid;
-      grid-template-columns: minmax(280px, 1.3fr) minmax(0, 1fr);
       gap: 12px;
       padding: 16px;
       border-bottom: 1px solid var(--border);
       background: #fff;
     }
-    .orders-toolbar-search,
+    .orders-toolbar-main {
+      min-width: 0;
+    }
+    .orders-filter-bar {
+      display: grid;
+      grid-template-columns: minmax(168px, 220px) minmax(0, 1fr);
+      align-items: center;
+      min-height: 50px;
+      border: 1px solid #d2d5d8;
+      border-radius: 16px;
+      background: #fff;
+      overflow: hidden;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+    }
+    .orders-filter-bar:focus-within {
+      border-color: #8c9196;
+      box-shadow: 0 0 0 1px #8c9196;
+    }
+    .orders-filter-state {
+      position: relative;
+      min-width: 0;
+      border-right: 1px solid #e7e9eb;
+      background: #fff;
+    }
+    .orders-filter-state-select {
+      appearance: none;
+      border: 0;
+      border-radius: 0;
+      min-height: 50px;
+      padding: 0 38px 0 16px;
+      font-size: 14px;
+      font-weight: 600;
+      background: transparent;
+      color: #202223;
+      box-shadow: none;
+    }
+    .orders-filter-state-select:focus {
+      border: 0;
+      box-shadow: none;
+    }
+    .orders-filter-state-chevron {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      transform: translateY(-50%);
+      color: #6d7175;
+      pointer-events: none;
+    }
+    .orders-filter-search,
     .orders-toolbar-filters {
       display: grid;
-      gap: 10px;
       align-items: end;
     }
+    .orders-filter-search {
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      padding: 0 16px;
+      align-items: center;
+    }
+    .orders-filter-search-icon {
+      width: 20px;
+      height: 20px;
+      color: #6d7175;
+      flex: 0 0 auto;
+    }
+    .orders-filter-search input {
+      border: 0;
+      min-height: 50px;
+      padding: 0;
+      font-size: 14px;
+      background: transparent;
+      box-shadow: none;
+    }
+    .orders-filter-search input:focus {
+      border: 0;
+      box-shadow: none;
+    }
     .orders-toolbar-filters {
+      gap: 10px;
       grid-template-columns: 1.2fr 1fr 1fr;
     }
     .orders-toolbar-field {
@@ -1604,6 +1677,17 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       margin-bottom: 6px;
       color: var(--muted);
       font-size: 13px;
+    }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
     input, select {
       width: 100%;
@@ -2632,8 +2716,27 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       .detail-box { position: static; min-height: 280px; }
       .order-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .order-shell { grid-template-columns: 1fr; }
+      .orders-toolbar-filters { grid-template-columns: 1fr 1fr; }
+      .orders-toolbar-field-wide { grid-column: 1 / -1; }
     }
     @media (max-width: 860px) {
+      .orders-filter-bar {
+        grid-template-columns: 1fr;
+      }
+      .orders-filter-state {
+        border-right: 0;
+        border-bottom: 1px solid #e7e9eb;
+      }
+      .orders-filter-state-select,
+      .orders-filter-search input {
+        min-height: 46px;
+      }
+      .orders-toolbar-filters {
+        grid-template-columns: 1fr;
+      }
+      .orders-toolbar-field-wide {
+        grid-column: auto;
+      }
       .mobile-disclosure {
         display: block;
         border: 1px solid var(--border);
@@ -2802,9 +2905,30 @@ adminRouter.get(["/", "/orders"], (req, res) => {
 
     <section class="card orders-primary-card">
       <div class="orders-toolbar">
-        <div class="orders-toolbar-search">
-          <label for="orderSearch">Recherche</label>
-          <input id="orderSearch" type="search" placeholder="Rechercher par commande, client, téléphone, article..." />
+        <div class="orders-toolbar-main">
+          <div class="orders-filter-bar" role="search">
+            <div class="orders-filter-state">
+              <label class="visually-hidden" for="orderStateFilter">État de commande</label>
+              <select id="orderStateFilter" class="orders-filter-state-select">
+                <option value="all">Toutes</option>
+                <option value="unpaid">À encaisser</option>
+                <option value="open">En cours</option>
+                <option value="shipped">Livrées</option>
+                <option value="paid">Soldées</option>
+              </select>
+              <svg class="orders-filter-state-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M6 8.5L10 12.5L14 8.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </div>
+            <div class="orders-filter-search">
+              <svg class="orders-filter-search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.6"></circle>
+                <path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+              </svg>
+              <label class="visually-hidden" for="orderSearch">Rechercher et filtrer</label>
+              <input id="orderSearch" type="search" placeholder="Rechercher et filtrer" />
+            </div>
+          </div>
         </div>
         <div class="orders-toolbar-filters">
           <div class="orders-toolbar-field orders-toolbar-field-wide">
@@ -2839,14 +2963,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         <button type="button" class="period-horizon-btn" data-period-preset="year">Année en cours</button>
         <button type="button" class="period-horizon-btn" data-period-preset="currentMonth">Mois en cours</button>
         <button type="button" class="period-horizon-btn" data-period-preset="lastMonth">Mois dernier</button>
-      </div>
-
-      <div id="ordersStatusTabs" class="orders-status-tabs">
-        <button type="button" class="orders-status-tab active" data-order-tab="all">Toutes</button>
-        <button type="button" class="orders-status-tab" data-order-tab="unpaid">À encaisser</button>
-        <button type="button" class="orders-status-tab" data-order-tab="open">En cours</button>
-        <button type="button" class="orders-status-tab" data-order-tab="shipped">Livrées</button>
-        <button type="button" class="orders-status-tab" data-order-tab="paid">Soldées</button>
       </div>
 
       <div class="orders-list-header">
@@ -3105,8 +3221,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const presetRangeEl = document.getElementById("presetRange");
     const periodHorizonBarEl = document.getElementById("periodHorizonBar");
     const orderSearchEl = document.getElementById("orderSearch");
+    const orderStateFilterEl = document.getElementById("orderStateFilter");
     const syncNowBtnEl = document.getElementById("syncNowBtn");
-    const ordersStatusTabsEl = document.getElementById("ordersStatusTabs");
     const syncStatusEl = document.getElementById("syncStatus");
     const ordersListEl = document.getElementById("ordersList");
     const deliveryQueueListEl = document.getElementById("deliveryQueueList");
@@ -4495,7 +4611,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
 
     function renderOrdersStatusTabs() {
-      if (!ordersStatusTabsEl) return;
+      if (!orderStateFilterEl) return;
       const labels = {
         all: "Toutes",
         unpaid: "À encaisser",
@@ -4503,12 +4619,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         shipped: "Livrées",
         paid: "Soldées"
       };
-      ordersStatusTabsEl.querySelectorAll(".orders-status-tab[data-order-tab]").forEach((tabButton) => {
-        const tab = tabButton.getAttribute("data-order-tab") || "all";
+      orderStateFilterEl.querySelectorAll("option").forEach((optionEl) => {
+        const tab = optionEl.getAttribute("value") || "all";
         const count = countOrdersForTab(tab);
-        tabButton.classList.toggle("active", tab === activeOrderTab);
-        tabButton.textContent = labels[tab] + " (" + count + ")";
+        optionEl.textContent = labels[tab] + " (" + count + ")";
       });
+      orderStateFilterEl.value = activeOrderTab;
     }
 
     function getVisibleOrders() {
@@ -5728,13 +5844,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         syncOrders();
       });
     }
-    if (ordersStatusTabsEl) {
-      ordersStatusTabsEl.addEventListener("click", (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
-        const button = target.closest(".orders-status-tab[data-order-tab]");
-        if (!(button instanceof HTMLElement)) return;
-        const nextTab = button.getAttribute("data-order-tab") || "all";
+    if (orderStateFilterEl) {
+      orderStateFilterEl.addEventListener("change", () => {
+        const nextTab = orderStateFilterEl.value || "all";
         if (nextTab === activeOrderTab) return;
         activeOrderTab = nextTab;
         renderOrdersStatusTabs();
@@ -5775,6 +5887,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     activeOrderTab = initialOrderTab || "all";
     if (orderSearchEl && initialOrderSearch) {
       orderSearchEl.value = initialOrderSearch;
+    }
+    if (orderStateFilterEl) {
+      orderStateFilterEl.value = activeOrderTab;
     }
     if (initialRangeFrom && initialRangeTo) {
       presetRangeEl.value = initialPresetRange || "custom";
