@@ -2329,7 +2329,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       <h1>Panneau de gestion des commandes</h1>
     </div>
     <ui-nav-menu>
-      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
@@ -5139,7 +5139,7 @@ adminRouter.get("/invoices", (req, res) => {
       <h1>Factures</h1>
     </div>
     <ui-nav-menu>
-      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
@@ -6089,7 +6089,7 @@ adminRouter.get("/insights", (req, res) => {
   <div class="wrap">
     <h1>Insights</h1>
     <ui-nav-menu>
-      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
@@ -7191,7 +7191,7 @@ adminRouter.get("/forecast", (req, res) => {
   <div class="wrap">
     <h1>Forecast</h1>
     <ui-nav-menu>
-      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
@@ -8695,7 +8695,7 @@ adminRouter.get("/forecast-v2", (req, res) => {
   <div class="wrap">
     <h1>Forecast V2</h1>
     <ui-nav-menu>
-      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>

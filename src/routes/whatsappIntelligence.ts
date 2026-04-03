@@ -5617,7 +5617,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
 <body>
   <div class="wrap">
     <nav class="nav">
-      <a href="/admin${navSuffix}">Commandes</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
@@ -12663,7 +12663,7 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
   <div class="wrap">
     <main>
       <nav class="nav">
-        <a href="/admin${navSuffix}">Commandes</a>
+        <a href="/admin/orders${navSuffix}">Commandes</a>
         <a href="/admin/invoices${navSuffix}">Factures</a>
         <a href="/admin/insights${navSuffix}">Insights</a>
         <a href="/admin/appointments${navSuffix}">Rendez-vous</a>

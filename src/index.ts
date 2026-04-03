@@ -1279,7 +1279,7 @@ app.get("/", (req, res) => {
 
 app.get("/admin", (req, res) => {
   const navSuffix = buildAdminNavSuffix(req);
-  res.redirect(`/admin/control-center${navSuffix}`);
+  res.redirect(`/admin/orders${navSuffix}`);
 });
 
 app.get("/admin/control-center", (req, res) => {
