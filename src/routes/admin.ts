@@ -1039,6 +1039,89 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       flex-wrap: wrap;
       justify-content: flex-end;
     }
+    .orders-top-kpis-wrap {
+      margin: 0 0 14px;
+    }
+    .orders-top-kpis {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(210px, 1fr);
+      gap: 0;
+      overflow-x: auto;
+      border: 1px solid #e1e3e5;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+    }
+    .orders-top-kpi-card {
+      min-width: 210px;
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 110px;
+      gap: 12px;
+      align-items: end;
+      border-right: 1px solid #eceef0;
+    }
+    .orders-top-kpi-card:last-child {
+      border-right: 0;
+    }
+    .orders-top-kpi-card.period {
+      min-width: 160px;
+      grid-template-columns: 1fr;
+      align-items: center;
+    }
+    .orders-top-kpi-period-head {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #4a4f55;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .orders-top-kpi-period-icon {
+      width: 16px;
+      height: 16px;
+      color: #6d7175;
+      flex: 0 0 auto;
+    }
+    .orders-top-kpi-content {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+    .orders-top-kpi-title {
+      color: #4a4f55;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .orders-top-kpi-value {
+      color: #202223;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+    .orders-top-kpi-sub {
+      color: #6d7175;
+      font-size: 12px;
+      line-height: 1.25;
+      min-height: 15px;
+    }
+    .orders-top-kpi-spark {
+      align-self: end;
+      justify-self: stretch;
+      height: 34px;
+      width: 100%;
+      color: #2c6ecb;
+    }
+    .orders-top-kpi-spark svg {
+      display: block;
+      width: 100%;
+      height: 34px;
+    }
+    .orders-detail-mode .orders-top-kpis-wrap {
+      display: none;
+    }
     .orders-head-note {
       color: #6d7175;
       font-size: 13px;
@@ -2659,6 +2742,64 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       </div>
     </div>
 
+    ${orderViewMode === "detail" ? "" : `
+    <section class="orders-top-kpis-wrap">
+      <div class="orders-top-kpis">
+        <div class="orders-top-kpi-card period">
+          <div class="orders-top-kpi-period-head">
+            <svg class="orders-top-kpi-period-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <rect x="3" y="4.5" width="14" height="12" rx="3" stroke="currentColor" stroke-width="1.6"></rect>
+              <path d="M6.5 2.75V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+              <path d="M13.5 2.75V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+              <path d="M3.8 7.25H16.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+            </svg>
+            <span id="ordersTopPeriodLabel">Période active</span>
+          </div>
+          <div id="ordersTopPeriodSub" class="orders-top-kpi-sub">Chargement…</div>
+        </div>
+        <div class="orders-top-kpi-card">
+          <div class="orders-top-kpi-content">
+            <div class="orders-top-kpi-title">Commandes</div>
+            <div id="ordersTopOrdersValue" class="orders-top-kpi-value">0</div>
+            <div id="ordersTopOrdersSub" class="orders-top-kpi-sub">sur période</div>
+          </div>
+          <div id="ordersTopOrdersSpark" class="orders-top-kpi-spark"></div>
+        </div>
+        <div class="orders-top-kpi-card">
+          <div class="orders-top-kpi-content">
+            <div class="orders-top-kpi-title">Articles commandés</div>
+            <div id="ordersTopArticlesValue" class="orders-top-kpi-value">0</div>
+            <div id="ordersTopArticlesSub" class="orders-top-kpi-sub">pièces totales</div>
+          </div>
+          <div id="ordersTopArticlesSpark" class="orders-top-kpi-spark"></div>
+        </div>
+        <div class="orders-top-kpi-card">
+          <div class="orders-top-kpi-content">
+            <div class="orders-top-kpi-title">À encaisser</div>
+            <div id="ordersTopUnpaidValue" class="orders-top-kpi-value">0</div>
+            <div id="ordersTopUnpaidSub" class="orders-top-kpi-sub">solde restant</div>
+          </div>
+          <div id="ordersTopUnpaidSpark" class="orders-top-kpi-spark"></div>
+        </div>
+        <div class="orders-top-kpi-card">
+          <div class="orders-top-kpi-content">
+            <div class="orders-top-kpi-title">Commandes en cours</div>
+            <div id="ordersTopInProgressValue" class="orders-top-kpi-value">0</div>
+            <div id="ordersTopInProgressSub" class="orders-top-kpi-sub">non livrées</div>
+          </div>
+          <div id="ordersTopInProgressSpark" class="orders-top-kpi-spark"></div>
+        </div>
+        <div class="orders-top-kpi-card">
+          <div class="orders-top-kpi-content">
+            <div class="orders-top-kpi-title">Commandes livrées</div>
+            <div id="ordersTopShippedValue" class="orders-top-kpi-value">0</div>
+            <div id="ordersTopShippedSub" class="orders-top-kpi-sub">traitées</div>
+          </div>
+          <div id="ordersTopShippedSpark" class="orders-top-kpi-spark"></div>
+        </div>
+      </div>
+    </section>`}
+
     <section class="card orders-primary-card">
       <div class="orders-toolbar">
         <div class="orders-toolbar-search">
@@ -2975,6 +3116,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const orderMobileTopMetaEl = document.getElementById("orderMobileTopMeta");
     const orderMobileHeadTitleEl = document.getElementById("orderMobileHeadTitle");
     const orderMobileBackBtnEl = document.getElementById("orderMobileBackBtn");
+    const ordersTopPeriodLabelEl = document.getElementById("ordersTopPeriodLabel");
+    const ordersTopPeriodSubEl = document.getElementById("ordersTopPeriodSub");
+    const ordersTopOrdersValueEl = document.getElementById("ordersTopOrdersValue");
+    const ordersTopOrdersSubEl = document.getElementById("ordersTopOrdersSub");
+    const ordersTopOrdersSparkEl = document.getElementById("ordersTopOrdersSpark");
+    const ordersTopArticlesValueEl = document.getElementById("ordersTopArticlesValue");
+    const ordersTopArticlesSubEl = document.getElementById("ordersTopArticlesSub");
+    const ordersTopArticlesSparkEl = document.getElementById("ordersTopArticlesSpark");
+    const ordersTopUnpaidValueEl = document.getElementById("ordersTopUnpaidValue");
+    const ordersTopUnpaidSubEl = document.getElementById("ordersTopUnpaidSub");
+    const ordersTopUnpaidSparkEl = document.getElementById("ordersTopUnpaidSpark");
+    const ordersTopInProgressValueEl = document.getElementById("ordersTopInProgressValue");
+    const ordersTopInProgressSubEl = document.getElementById("ordersTopInProgressSub");
+    const ordersTopInProgressSparkEl = document.getElementById("ordersTopInProgressSpark");
+    const ordersTopShippedValueEl = document.getElementById("ordersTopShippedValue");
+    const ordersTopShippedSubEl = document.getElementById("ordersTopShippedSub");
+    const ordersTopShippedSparkEl = document.getElementById("ordersTopShippedSpark");
     const kpiRevenueTotalEl = document.getElementById("kpiRevenueTotal");
     const kpiRevenueBreakdownEl = document.getElementById("kpiRevenueBreakdown");
     const kpiRevenueChartEl = document.getElementById("kpiRevenueChart");
@@ -3918,6 +4076,115 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       }
     }
 
+    function getOrdersTopPeriodMeta() {
+      if (!ordersTopPeriodLabelEl || !ordersTopPeriodSubEl) return;
+      const presetMap = {
+        year: "Année en cours",
+        currentMonth: "Mois en cours",
+        today: "Aujourd'hui",
+        yesterday: "Hier",
+        last90: "90 jours",
+        last30: "30 jours",
+        last7: "7 jours",
+        last365: "365 jours",
+        last12m: "12 mois",
+        lastMonth: "Mois dernier",
+        lastWeek: "Semaine dernière",
+        custom: "Période personnalisée"
+      };
+      const presetValue = presetRangeEl && presetRangeEl.value ? presetRangeEl.value : "year";
+      const from = syncFromEl && syncFromEl.value ? syncFromEl.value : "";
+      const to = syncToEl && syncToEl.value ? syncToEl.value : "";
+      ordersTopPeriodLabelEl.textContent = presetMap[presetValue] || "Période active";
+      if (from && to) {
+        ordersTopPeriodSubEl.textContent =
+          new Date(from + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) +
+          " → " +
+          new Date(to + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+      } else {
+        ordersTopPeriodSubEl.textContent = "Filtre courant";
+      }
+    }
+
+    function buildOrdersTopDaySeries(data) {
+      const activeRange = getActiveChartRange();
+      const chartData = activeRange
+        ? data.filter((order) => {
+            const d = parseIsoDay(String(order.createdAt || "").slice(0, 10));
+            return !!d && d.getTime() >= activeRange.fromDate.getTime() && d.getTime() <= activeRange.toDate.getTime();
+          })
+        : data;
+      const daySeries = buildChartDaySeries(chartData.length ? chartData : data).map((entry) => ({
+        key: entry.key,
+        orders: 0,
+        items: 0,
+        unpaid: 0,
+        inProgress: 0,
+        shipped: 0
+      }));
+      const bucket = new Map(daySeries.map((entry) => [entry.key, entry]));
+      chartData.forEach((order) => {
+        const key = String(order.createdAt || "").slice(0, 10);
+        const target = bucket.get(key);
+        if (!target) return;
+        target.orders += 1;
+        target.items += orderItemsCount(order);
+        target.unpaid += Math.max(0, Number(order.outstandingAmount || 0));
+        if (String(order.shippingStatus || "") === "shipped") {
+          target.shipped += 1;
+        } else {
+          target.inProgress += 1;
+        }
+      });
+      return daySeries;
+    }
+
+    function renderOrdersTopSparkline(element, values) {
+      if (!element) return;
+      const numericValues = Array.isArray(values) ? values.map((value) => Number(value || 0)) : [];
+      if (!numericValues.length) {
+        element.innerHTML = "";
+        return;
+      }
+      const width = 120;
+      const height = 34;
+      const maxValue = Math.max(...numericValues, 0);
+      const plotMax = maxValue > 0 ? maxValue : 1;
+      const stepX = numericValues.length > 1 ? width / (numericValues.length - 1) : width;
+      const path = numericValues.map((value, index) => {
+        const x = stepX * index;
+        const y = height - 4 - ((height - 8) * value) / plotMax;
+        return (index === 0 ? "M " : "L ") + x + " " + y;
+      }).join(" ");
+      element.innerHTML =
+        "<svg viewBox='0 0 120 34' preserveAspectRatio='none' aria-hidden='true'>" +
+          "<path d='" + path + "' fill='none' stroke='#1f8fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'></path>" +
+        "</svg>";
+    }
+
+    function updateOrdersTopKpis(data, meta) {
+      if (!ordersTopOrdersValueEl) return;
+      const topMeta = meta || {};
+      getOrdersTopPeriodMeta();
+      ordersTopOrdersValueEl.textContent = String(topMeta.totalOrders || 0);
+      ordersTopOrdersSubEl.textContent = String(topMeta.uniqueCustomers || 0) + " clients";
+      ordersTopArticlesValueEl.textContent = String(topMeta.totalArticles || 0);
+      ordersTopArticlesSubEl.textContent = "pièces totales";
+      ordersTopUnpaidValueEl.textContent = topMeta.unpaidDisplay || "0";
+      ordersTopUnpaidSubEl.textContent = String(topMeta.unpaidCount || 0) + " commande(s)";
+      ordersTopInProgressValueEl.textContent = String(topMeta.inProgressCount || 0);
+      ordersTopInProgressSubEl.textContent = "non livrées";
+      ordersTopShippedValueEl.textContent = String(topMeta.shippedCount || 0);
+      ordersTopShippedSubEl.textContent = "livrées";
+
+      const daySeries = buildOrdersTopDaySeries(data);
+      renderOrdersTopSparkline(ordersTopOrdersSparkEl, daySeries.map((entry) => entry.orders));
+      renderOrdersTopSparkline(ordersTopArticlesSparkEl, daySeries.map((entry) => entry.items));
+      renderOrdersTopSparkline(ordersTopUnpaidSparkEl, daySeries.map((entry) => entry.unpaid));
+      renderOrdersTopSparkline(ordersTopInProgressSparkEl, daySeries.map((entry) => entry.inProgress));
+      renderOrdersTopSparkline(ordersTopShippedSparkEl, daySeries.map((entry) => entry.shipped));
+    }
+
     function renderRevenueChart(data) {
       if (!kpiRevenueChartEl) return;
       const width = 640;
@@ -4451,6 +4718,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       kpiUnpaidEl.textContent = String(unpaidCount);
       kpiShippedEl.textContent = String(shippedCount);
       kpiInProgressEl.textContent = String(inProgressCount);
+
+      updateOrdersTopKpis(data, {
+        totalOrders: data.length,
+        totalArticles,
+        unpaidCount,
+        shippedCount,
+        inProgressCount,
+        uniqueCustomers: uniqueCustomerCount,
+        unpaidDisplay: kpiUnpaidTotalEl ? kpiUnpaidTotalEl.textContent || "0" : "0"
+      });
     }
 
     function isOrdersMobileView() {
