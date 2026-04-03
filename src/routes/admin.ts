@@ -1729,7 +1729,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .order-mobile-primary-actions {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: 10px;
     }
     .order-mobile-primary-actions button,
@@ -1738,10 +1738,105 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       min-height: 46px;
       justify-content: center;
     }
+    .order-mobile-primary-actions .save-order-btn {
+      margin-top: 0;
+    }
+    .order-mobile-primary-actions .action-primary {
+      order: 1;
+    }
+    .order-mobile-primary-actions .action-secondary {
+      order: 2;
+    }
+    .order-mobile-primary-actions .action-tertiary {
+      order: 3;
+    }
     .order-mobile-secondary-actions {
       display: grid;
       gap: 10px;
       margin-top: 10px;
+    }
+    .order-action-block {
+      margin-top: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .order-action-primary {
+      width: 100%;
+      min-height: 48px;
+      margin-top: 0;
+    }
+    .order-action-secondary-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+    }
+    .order-action-secondary-row .save-order-btn {
+      margin-top: 0;
+      min-height: 46px;
+    }
+    .order-action-secondary {
+      width: 100%;
+    }
+    .order-action-print {
+      position: relative;
+    }
+    .order-action-print details {
+      position: relative;
+    }
+    .order-action-print summary {
+      list-style: none;
+    }
+    .order-action-print summary::-webkit-details-marker {
+      display: none;
+    }
+    .order-action-print-toggle {
+      min-width: 156px;
+      background: #fff;
+      color: #202223;
+      border: 1px solid #d7dbe0;
+      box-shadow: none;
+    }
+    .order-action-print-toggle:hover,
+    .order-action-print-toggle:active {
+      background: #fff;
+      color: #202223;
+      box-shadow: none;
+      transform: none;
+    }
+    .order-action-print-toggle::after {
+      content: "▾";
+      margin-left: 8px;
+      font-size: 12px;
+      opacity: 0.72;
+    }
+    .order-action-print-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 220px;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid #dfe3e8;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 18px 38px rgba(15, 23, 42, 0.12);
+      z-index: 6;
+    }
+    .order-action-print-menu .save-order-btn {
+      width: 100%;
+      min-height: 42px;
+      margin-top: 0;
+    }
+    .order-mobile-secondary .order-action-print-menu {
+      position: static;
+      width: 100%;
+      margin-top: 10px;
+      box-shadow: none;
+      border-radius: 12px;
+      border-color: #ece7de;
+      background: #fbfaf7;
     }
     .order-mobile-payment-list {
       display: grid;
@@ -1983,6 +2078,24 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .save-order-btn {
       margin-top: 12px;
+    }
+    .save-order-btn.action-primary {
+      border-color: #20252c;
+      background: linear-gradient(180deg, #353a42 0%, #1d2128 100%);
+      color: #fff;
+    }
+    .save-order-btn.action-secondary {
+      border-color: #d0d5dc;
+      background: #fff;
+      color: #202223;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+    }
+    .save-order-btn.action-secondary:hover,
+    .save-order-btn.action-secondary:active {
+      background: #fff;
+      color: #202223;
+      transform: none;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
     }
     .modal-backdrop {
       position: fixed;
@@ -4222,8 +4335,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const sendMaisonBtn = container.querySelector("#sendMaisonBtn");
       const printInvoiceBtn = container.querySelector("#printInvoiceBtn");
       const printReceiptBtn = container.querySelector("#printReceiptBtn");
-      const previewInvoiceBtn = container.querySelector("#previewInvoiceBtn");
-      const previewReceiptBtn = container.querySelector("#previewReceiptBtn");
       const maisonPhone = "+212661981392";
 
       async function fetchFreshOrderSnapshot() {
@@ -4359,23 +4470,17 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           }
         });
       }
-      if (previewInvoiceBtn) {
-        previewInvoiceBtn.addEventListener("click", async () => {
-          await printDocument("classic");
-        });
-      }
-      if (previewReceiptBtn) {
-        previewReceiptBtn.addEventListener("click", async () => {
-          await printDocument("showroom_receipt");
-        });
-      }
       if (printInvoiceBtn) {
         printInvoiceBtn.addEventListener("click", async () => {
+          const printMenu = printInvoiceBtn.closest("details");
+          if (printMenu) printMenu.removeAttribute("open");
           await printDocument("classic");
         });
       }
       if (printReceiptBtn) {
         printReceiptBtn.addEventListener("click", async () => {
+          const printMenu = printReceiptBtn.closest("details");
+          if (printMenu) printMenu.removeAttribute("open");
           await printDocument("showroom_receipt");
         });
       }
@@ -4448,18 +4553,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "</div>" +
         "</div>" +
         "<div class='order-mobile-primary-actions'>" +
-          "<button type='button' id='sendClientBtn' class='save-order-btn' style='margin-top:0;'>Envoyer au client</button>" +
-          "<button type='button' id='sendMaisonBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer à Bouchra</button>" +
-          "<button type='button' id='previewInvoiceBtn' class='save-order-btn' style='margin-top:0;'>Facture</button>" +
-          "<button type='button' id='previewReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Reçu</button>" +
+          "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer à Bouchra</button>" +
+          "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary action-secondary order-action-secondary'>Envoyer au client</button>" +
+          "<div class='order-action-print action-tertiary'>" +
+            "<details>" +
+              "<summary class='save-order-btn order-action-print-toggle'>Impression</summary>" +
+              "<div class='order-action-print-menu'>" +
+                "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer facture</button>" +
+                "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer reçu</button>" +
+              "</div>" +
+            "</details>" +
+          "</div>" +
         "</div>" +
         "<details class='order-mobile-secondary'>" +
           "<summary>Autres actions</summary>" +
           "<div class='order-mobile-secondary-body'>" +
             "<div class='order-mobile-secondary-actions'>" +
-              "<button type='button' id='printInvoiceBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer facture</button>" +
-              "<button type='button' id='printReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer reçu</button>" +
-              "<button type='button' id='reviewBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer demande avis Google</button>" +
+              "<button type='button' id='reviewBtn' class='save-order-btn action-secondary'>Envoyer demande avis Google</button>" +
             "</div>" +
           "</div>" +
         "</details>" +
@@ -4503,7 +4613,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             vm.clientInfoRows.join("") +
             "</div>" +
             "<div class='line' style='margin-top:10px; gap:8px;'>" +
-              "<button type='button' id='reviewBtn' class='save-order-btn' style='margin-top:0;'>Envoyer demande avis Google</button>" +
+              "<button type='button' id='reviewBtn' class='save-order-btn action-secondary' style='margin-top:0;'>Envoyer demande avis Google</button>" +
             "</div>" +
           "</div>" +
           "<div class='order-card'>" +
@@ -4516,11 +4626,20 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             "<div class='info-list'>" +
             vm.paymentInfoRows.join("") +
             "</div>" +
-            "<div class='line' style='margin-top:10px; gap:8px;'>" +
-              "<button type='button' id='printInvoiceBtn' class='save-order-btn' style='margin-top:0;'>Imprimer facture</button>" +
-              "<button type='button' id='printReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer reçu</button>" +
-              "<button type='button' id='sendClientBtn' class='save-order-btn' style='margin-top:0;'>Envoyer au client</button>" +
-              "<button type='button' id='sendMaisonBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer à Bouchra</button>" +
+            "<div class='order-action-block'>" +
+              "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer à Bouchra</button>" +
+              "<div class='order-action-secondary-row'>" +
+                "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary order-action-secondary'>Envoyer au client</button>" +
+                "<div class='order-action-print'>" +
+                  "<details>" +
+                    "<summary class='save-order-btn order-action-print-toggle'>Impression</summary>" +
+                    "<div class='order-action-print-menu'>" +
+                      "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer facture</button>" +
+                      "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer reçu</button>" +
+                    "</div>" +
+                  "</details>" +
+                "</div>" +
+              "</div>" +
             "</div>" +
           "</div>" +
         "</div>";
