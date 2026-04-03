@@ -1012,25 +1012,57 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .orders-page-head {
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      margin: 18px 0 14px;
+      gap: 18px;
+      margin: 10px 0 14px;
     }
     .orders-page-head-copy {
-      display: grid;
-      gap: 4px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
     }
     .orders-page-kicker {
-      color: #6d7175;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
+      display: none;
+    }
+    .orders-page-title-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .orders-page-title-icon {
+      width: 22px;
+      height: 22px;
+      color: #202223;
+      flex: 0 0 auto;
     }
     .orders-page-head h1 {
-      font-size: 28px;
+      font-size: 24px;
       line-height: 1.1;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+    }
+    .orders-page-location-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid #d2d5d8;
+      border-radius: 14px;
+      background: #f3f4f5;
+      color: #202223;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: none;
+      cursor: default;
+    }
+    .orders-page-location-btn::after {
+      content: "▾";
+      font-size: 11px;
+      color: #6d7175;
     }
     .orders-page-head-actions {
       display: flex;
@@ -1045,7 +1077,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .orders-top-kpis {
       display: grid;
       grid-auto-flow: column;
-      grid-auto-columns: minmax(210px, 1fr);
+      grid-auto-columns: minmax(250px, 1fr);
       gap: 0;
       overflow-x: auto;
       border: 1px solid #e1e3e5;
@@ -1054,29 +1086,63 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
     }
     .orders-top-kpi-card {
-      min-width: 210px;
-      padding: 14px 18px;
+      min-width: 250px;
+      padding: 16px 18px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 110px;
+      grid-template-columns: minmax(0, 1fr) 118px;
       gap: 12px;
       align-items: end;
       border-right: 1px solid #eceef0;
+      min-height: 102px;
     }
     .orders-top-kpi-card:last-child {
       border-right: 0;
     }
     .orders-top-kpi-card.period {
-      min-width: 160px;
+      min-width: 190px;
       grid-template-columns: 1fr;
-      align-items: center;
+      align-items: stretch;
+      padding: 0;
+      position: relative;
+      overflow: visible;
     }
-    .orders-top-kpi-period-head {
+    .orders-top-kpi-period-head,
+    .orders-top-kpi-period-toggle {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      color: #4a4f55;
-      font-size: 13px;
+      color: #202223;
+      font-size: 14px;
       font-weight: 600;
+    }
+    .orders-top-kpi-period-toggle {
+      width: 100%;
+      min-height: 102px;
+      padding: 16px 18px;
+      background: #fff;
+      border: 0;
+      border-radius: 18px 0 0 18px;
+      box-shadow: none;
+      cursor: pointer;
+      justify-content: flex-start;
+      text-align: left;
+      position: relative;
+      line-height: 1.25;
+    }
+    .orders-top-kpi-period-toggle:hover,
+    .orders-top-kpi-period-toggle:active {
+      background: #fbfbfb;
+      transform: none;
+      box-shadow: none;
+      color: #202223;
+    }
+    .orders-top-kpi-period-toggle::after {
+      content: "▾";
+      position: absolute;
+      right: 16px;
+      top: 18px;
+      font-size: 12px;
+      color: #6d7175;
     }
     .orders-top-kpi-period-icon {
       width: 16px;
@@ -1084,19 +1150,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       color: #6d7175;
       flex: 0 0 auto;
     }
+    .orders-top-kpi-period-stack {
+      display: grid;
+      gap: 8px;
+    }
     .orders-top-kpi-content {
       min-width: 0;
       display: grid;
-      gap: 3px;
+      gap: 4px;
     }
     .orders-top-kpi-title {
-      color: #4a4f55;
-      font-size: 12px;
+      color: #303030;
+      font-size: 15px;
       font-weight: 600;
     }
     .orders-top-kpi-value {
       color: #202223;
-      font-size: 15px;
+      font-size: 17px;
       font-weight: 700;
       line-height: 1.2;
       font-variant-numeric: tabular-nums;
@@ -1107,38 +1177,99 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       line-height: 1.25;
       min-height: 15px;
     }
+    .orders-top-kpi-trend {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #008060;
+      font-size: 12px;
+      font-weight: 700;
+    }
     .orders-top-kpi-spark {
       align-self: end;
       justify-self: stretch;
-      height: 34px;
+      height: 36px;
       width: 100%;
       color: #2c6ecb;
     }
     .orders-top-kpi-spark svg {
       display: block;
       width: 100%;
-      height: 34px;
+      height: 36px;
+    }
+    .orders-top-kpi-period-sub {
+      color: #6d7175;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    .orders-period-card[open] .orders-top-kpi-period-toggle {
+      background: #fbfbfb;
+    }
+    .orders-period-popover {
+      position: absolute;
+      top: calc(100% + 10px);
+      left: 0;
+      width: 320px;
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid #dfe3e8;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 18px 38px rgba(15, 23, 42, 0.14);
+      z-index: 14;
+    }
+    .orders-period-popover-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .orders-period-popover-grid label {
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: #6d7175;
+    }
+    .orders-period-popover-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .orders-period-popover-close {
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid #d2d5d8;
+      border-radius: 10px;
+      background: #fff;
+      color: #202223;
+      box-shadow: none;
+    }
+    .orders-period-popover-close:hover,
+    .orders-period-popover-close:active {
+      background: #fff;
+      color: #202223;
+      transform: none;
+      box-shadow: none;
     }
     .orders-detail-mode .orders-top-kpis-wrap {
       display: none;
     }
     .orders-head-note {
-      color: #6d7175;
-      font-size: 13px;
-      white-space: nowrap;
+      display: none;
     }
     .orders-head-sync-btn {
       min-height: 36px;
-      padding: 0 14px;
+      padding: 0 12px;
       border-radius: 10px;
-      border: 1px solid #1f2328;
-      background: #1f2328;
-      color: #fff;
+      border: 1px solid #d2d5d8;
+      background: #fff;
+      color: #202223;
       box-shadow: none;
+      font-size: 13px;
+      font-weight: 600;
     }
     .orders-head-sync-btn:hover,
     .orders-head-sync-btn:active {
-      background: #111418;
+      background: #fff;
+      color: #202223;
       transform: none;
       box-shadow: none;
     }
@@ -1167,12 +1298,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .orders-toolbar {
       display: grid;
       gap: 12px;
-      padding: 16px;
+      padding: 0;
       border-bottom: 1px solid var(--border);
       background: #fff;
     }
     .orders-toolbar-main {
       min-width: 0;
+      padding: 16px;
     }
     .orders-filter-bar {
       display: grid;
@@ -2862,10 +2994,30 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       .order-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .order-shell { grid-template-columns: 1fr; }
       .order-actions-primary-row { grid-template-columns: 1fr; }
-      .orders-toolbar-filters { grid-template-columns: 1fr 1fr; }
-      .orders-toolbar-field-wide { grid-column: 1 / -1; }
+      .orders-page-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .orders-page-head-copy {
+        flex-wrap: wrap;
+      }
     }
     @media (max-width: 860px) {
+      .orders-page-head-copy {
+        gap: 10px;
+      }
+      .orders-page-location-btn {
+        min-height: 38px;
+      }
+      .orders-top-kpis {
+        grid-auto-columns: minmax(220px, 1fr);
+      }
+      .orders-top-kpi-card {
+        min-width: 220px;
+      }
+      .orders-period-popover {
+        width: min(320px, calc(100vw - 40px));
+      }
       .orders-filter-bar {
         grid-template-columns: 1fr;
       }
@@ -2876,12 +3028,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       .orders-filter-state-select,
       .orders-filter-search input {
         min-height: 46px;
-      }
-      .orders-toolbar-filters {
-        grid-template-columns: 1fr;
-      }
-      .orders-toolbar-field-wide {
-        grid-column: auto;
       }
       .mobile-disclosure {
         display: block;
@@ -2980,13 +3126,25 @@ adminRouter.get(["/", "/orders"], (req, res) => {
 
     <div class="orders-page-head">
       <div class="orders-page-head-copy">
-        <div class="orders-page-kicker">Commandes</div>
-        <h1>${orderViewMode === "detail" ? "Détail de commande" : "Orders"}</h1>
-        <p class="intro">${orderViewMode === "detail" ? "Fiche indépendante, reliée à votre liste de commandes." : "Gérez et suivez les commandes sur une surface proche de Shopify Admin."}</p>
+        ${orderViewMode === "detail"
+          ? `<div class="orders-page-title-wrap">
+              <svg class="orders-page-title-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M5 5.5H15.2L14.4 15.2H5.6L5 5.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
+                <path d="M7.25 7.25V4.85C7.25 3.55 8.3 2.5 9.6 2.5H10.4C11.7 2.5 12.75 3.55 12.75 4.85V7.25" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+              </svg>
+              <h1>Détail de commande</h1>
+            </div>`
+          : `<div class="orders-page-title-wrap">
+              <svg class="orders-page-title-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M5 5.5H15.2L14.4 15.2H5.6L5 5.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
+                <path d="M7.25 7.25V4.85C7.25 3.55 8.3 2.5 9.6 2.5H10.4C11.7 2.5 12.75 3.55 12.75 4.85V7.25" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+              </svg>
+              <h1>Commandes</h1>
+            </div>
+            <button type="button" class="orders-page-location-btn">Tous les emplacements</button>`}
         ${orderViewMode === "detail" ? `<a class="orders-detail-back" href="${detailBackHref}">← Retour à Commandes</a>` : ""}
       </div>
       <div class="orders-page-head-actions">
-        <span class="orders-head-note">Mode direct via synchronisation de vos commandes</span>
         <button id="syncNowBtn" type="button" class="orders-head-sync-btn">Synchroniser</button>
       </div>
     </div>
@@ -2994,18 +3152,54 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     ${orderViewMode === "detail" ? "" : `
     <section class="orders-top-kpis-wrap">
       <div class="orders-top-kpis">
-        <div class="orders-top-kpi-card period">
-          <div class="orders-top-kpi-period-head">
-            <svg class="orders-top-kpi-period-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <rect x="3" y="4.5" width="14" height="12" rx="3" stroke="currentColor" stroke-width="1.6"></rect>
-              <path d="M6.5 2.75V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
-              <path d="M13.5 2.75V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
-              <path d="M3.8 7.25H16.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
-            </svg>
-            <span id="ordersTopPeriodLabel">Période active</span>
+        <details id="ordersTopPeriodCard" class="orders-top-kpi-card period orders-period-card">
+          <summary class="orders-top-kpi-period-toggle">
+            <div class="orders-top-kpi-period-stack">
+              <div class="orders-top-kpi-period-head">
+                <svg class="orders-top-kpi-period-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <rect x="3" y="4.5" width="14" height="12" rx="3" stroke="currentColor" stroke-width="1.6"></rect>
+                  <path d="M6.5 2.75V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                  <path d="M13.5 2.75V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                  <path d="M3.8 7.25H16.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                </svg>
+                <span id="ordersTopPeriodLabel">Période active</span>
+              </div>
+              <div id="ordersTopPeriodSub" class="orders-top-kpi-period-sub">Chargement…</div>
+            </div>
+          </summary>
+          <div class="orders-period-popover">
+            <div class="orders-period-popover-grid">
+              <div>
+                <label for="presetRange">Période</label>
+                <select id="presetRange">
+                  <option value="year">Année en cours</option>
+                  <option value="currentMonth">Mois en cours</option>
+                  <option value="today">Aujourd'hui</option>
+                  <option value="yesterday">Hier</option>
+                  <option value="last90">90 derniers jours</option>
+                  <option value="last30">30 derniers jours</option>
+                  <option value="last7">7 derniers jours</option>
+                  <option value="last365">365 derniers jours</option>
+                  <option value="last12m">12 derniers mois</option>
+                  <option value="lastMonth">Le mois dernier</option>
+                  <option value="lastWeek">La semaine dernière</option>
+                  <option value="custom">Personnalisé</option>
+                </select>
+              </div>
+              <div>
+                <label for="syncFrom">Du</label>
+                <input id="syncFrom" type="date" />
+              </div>
+              <div>
+                <label for="syncTo">Au</label>
+                <input id="syncTo" type="date" />
+              </div>
+            </div>
+            <div class="orders-period-popover-actions">
+              <button id="ordersTopPeriodCloseBtn" type="button" class="orders-period-popover-close">Fermer</button>
+            </div>
           </div>
-          <div id="ordersTopPeriodSub" class="orders-top-kpi-sub">Chargement…</div>
-        </div>
+        </details>
         <div class="orders-top-kpi-card">
           <div class="orders-top-kpi-content">
             <div class="orders-top-kpi-title">Commandes</div>
@@ -3076,39 +3270,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             </div>
           </div>
         </div>
-        <div class="orders-toolbar-filters">
-          <div class="orders-toolbar-field orders-toolbar-field-wide">
-            <label for="presetRange">Période</label>
-            <select id="presetRange">
-              <option value="year">Année en cours</option>
-              <option value="currentMonth">Mois en cours</option>
-              <option value="today">Aujourd'hui</option>
-              <option value="yesterday">Hier</option>
-              <option value="last90">90 derniers jours</option>
-              <option value="last30">30 derniers jours</option>
-              <option value="last7">7 derniers jours</option>
-              <option value="last365">365 derniers jours</option>
-              <option value="last12m">12 derniers mois</option>
-              <option value="lastMonth">Le mois dernier</option>
-              <option value="lastWeek">La semaine dernière</option>
-              <option value="custom">Personnalisé</option>
-            </select>
-          </div>
-          <div class="orders-toolbar-field">
-            <label for="syncFrom">Du</label>
-            <input id="syncFrom" type="date" />
-          </div>
-          <div class="orders-toolbar-field">
-            <label for="syncTo">Au</label>
-            <input id="syncTo" type="date" />
-          </div>
-        </div>
-      </div>
-
-      <div id="periodHorizonBar" class="period-horizon shopify-period-horizon">
-        <button type="button" class="period-horizon-btn" data-period-preset="year">Année en cours</button>
-        <button type="button" class="period-horizon-btn" data-period-preset="currentMonth">Mois en cours</button>
-        <button type="button" class="period-horizon-btn" data-period-preset="lastMonth">Mois dernier</button>
       </div>
 
       <div class="orders-list-header">
@@ -3378,6 +3539,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const orderMobileTopMetaEl = document.getElementById("orderMobileTopMeta");
     const orderMobileHeadTitleEl = document.getElementById("orderMobileHeadTitle");
     const orderMobileBackBtnEl = document.getElementById("orderMobileBackBtn");
+    const ordersTopPeriodCardEl = document.getElementById("ordersTopPeriodCard");
+    const ordersTopPeriodCloseBtnEl = document.getElementById("ordersTopPeriodCloseBtn");
     const ordersTopPeriodLabelEl = document.getElementById("ordersTopPeriodLabel");
     const ordersTopPeriodSubEl = document.getElementById("ordersTopPeriodSub");
     const ordersTopOrdersValueEl = document.getElementById("ordersTopOrdersValue");
@@ -6091,6 +6254,27 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         chartRangeTo = syncToEl.value;
         updateKpis(orders);
         scheduleSync(180);
+      });
+    }
+    if (ordersTopPeriodCloseBtnEl && ordersTopPeriodCardEl) {
+      ordersTopPeriodCloseBtnEl.addEventListener("click", () => {
+        ordersTopPeriodCardEl.removeAttribute("open");
+      });
+    }
+    if (ordersTopPeriodCardEl && presetRangeEl) {
+      ordersTopPeriodCardEl.addEventListener("toggle", () => {
+        if (ordersTopPeriodCardEl.hasAttribute("open")) {
+          window.setTimeout(() => {
+            presetRangeEl.focus();
+          }, 0);
+        }
+      });
+      document.addEventListener("click", (event) => {
+        if (!ordersTopPeriodCardEl.hasAttribute("open")) return;
+        const target = event.target;
+        if (target instanceof Node && !ordersTopPeriodCardEl.contains(target)) {
+          ordersTopPeriodCardEl.removeAttribute("open");
+        }
       });
     }
 
