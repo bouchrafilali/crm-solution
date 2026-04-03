@@ -389,24 +389,24 @@ function protectedApiAccessMiddleware(req: express.Request, res: express.Respons
 
 function renderAdminControlCenterPage(navSuffix: string): string {
   return `<!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Centre de Contrôle — Maison BFL</title>
   <style>
     :root{
-      --bg:#0a1020;
-      --bg-soft:#121a2c;
-      --panel:rgba(31,41,62,.50);
-      --panel-soft:rgba(27,36,56,.42);
-      --text:#ecf2ff;
-      --muted:#afbdd7;
-      --line:rgba(255,255,255,.15);
-      --line-strong:rgba(255,255,255,.24);
-      --cyan:#7dd3fc;
-      --green:#86efac;
-      --amber:#fcd34d;
+      --bg:#f6f6f7;
+      --panel:#ffffff;
+      --panel-soft:#fafbfb;
+      --text:#202223;
+      --muted:#6d7175;
+      --line:#e1e3e5;
+      --line-strong:#c9cccf;
+      --accent:#2c6ecb;
+      --accent-soft:#eef4ff;
+      --success:#008060;
+      --secondary:#8c9196;
     }
     *{box-sizing:border-box}
     html{
@@ -417,44 +417,55 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       margin:0;
       font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Inter,Arial,sans-serif;
       color:var(--text);
-      background:
-        radial-gradient(980px 420px at 8% -5%, rgba(125,211,252,.22), transparent 58%),
-        radial-gradient(760px 380px at 95% 0%, rgba(52,211,153,.14), transparent 50%),
-        linear-gradient(180deg, #0a1120 0%, #0c1424 48%, #0d1628 100%);
+      background:var(--bg);
       min-height:100vh;
       min-height:100dvh;
       padding-left:max(0px, env(safe-area-inset-left));
       padding-right:max(0px, env(safe-area-inset-right));
       padding-bottom:max(0px, env(safe-area-inset-bottom));
     }
-    .wrap{max-width:1320px;margin:0 auto;padding:28px 20px 42px}
-    .orientation{margin-top:8px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-    .orientation::-webkit-scrollbar{display:none}
-    .tile{
+    .wrap{max-width:1180px;margin:0 auto;padding:24px 18px 40px}
+    .hero{
       border:1px solid var(--line);
-      border-radius:18px;
-      background:rgba(25,35,54,.50);
-      backdrop-filter:blur(14px);
-      padding:14px 14px 13px;
+      border-radius:20px;
+      background:var(--panel);
+      padding:22px;
+      box-shadow:0 1px 0 rgba(0,0,0,.02);
     }
-    .tile .k{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700}
-    .tile .v{margin-top:8px;font-size:24px;letter-spacing:-.02em;font-weight:650}
-    .tile .d{margin-top:7px;color:var(--muted);font-size:14px;line-height:1.42}
-    .modules-head{
-      margin:26px 0 12px;
+    .hero-kicker{
+      font-size:12px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      font-weight:700;
+      color:var(--muted);
+    }
+    .hero h1{
+      margin:8px 0 6px;
+      font-size:32px;
+      line-height:1.04;
+      letter-spacing:-.03em;
+    }
+    .hero p{
+      margin:0;
+      max-width:760px;
+      color:var(--muted);
+      font-size:15px;
+      line-height:1.5;
+    }
+    .hero-actions{
+      margin-top:18px;
       display:flex;
-      justify-content:space-between;
       align-items:center;
-      gap:10px;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
     }
-    .modules-head h2{margin:0;font-size:24px;letter-spacing:-.02em}
-    .modules-head p{margin:6px 0 0;color:var(--muted);font-size:14px}
     .search{
-      width:280px;
+      width:min(360px,100%);
       max-width:100%;
-      border:1px solid var(--line);
+      border:1px solid var(--line-strong);
       border-radius:999px;
-      background:rgba(255,255,255,.08);
+      background:#fff;
       color:var(--text);
       padding:12px 14px;
       font-size:14px;
@@ -463,129 +474,73 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       -webkit-appearance:none;
       appearance:none;
     }
-    .search:focus{border-color:var(--line-strong);box-shadow:0 0 0 3px rgba(125,211,252,.08)}
-    .sections-grid{
-      display:grid;
-      gap:14px;
+    .search:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(44,110,203,.10)}
+    .hero-meta{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
     }
-    .ai-widget{
+    .meta-chip{
+      display:inline-flex;
+      align-items:center;
+      min-height:36px;
+      padding:0 12px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:var(--panel-soft);
+      color:#4a4f54;
+      font-size:13px;
+      font-weight:600;
+    }
+    .quick{
       margin-top:14px;
-      border:1px solid rgba(255,255,255,.14);
+      border:1px solid var(--line);
       border-radius:20px;
-      background:rgba(26,37,58,.45);
-      backdrop-filter:blur(14px) saturate(140%);
-      padding:12px;
+      background:var(--panel);
+      padding:18px;
+      box-shadow:0 1px 0 rgba(0,0,0,.02);
     }
-    .ai-widget-head{
+    .quick-head{
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
-      gap:10px;
-      margin-bottom:10px;
+      gap:12px;
+      margin-bottom:12px;
     }
-    .ai-widget-title{
+    .quick-head h2{
       margin:0;
-      font-size:12px;
-      letter-spacing:.14em;
-      color:#b7c6e2;
-      font-weight:700;
-      text-transform:uppercase;
+      font-size:18px;
+      letter-spacing:-.02em;
     }
-    .ai-widget-sub{
-      margin:6px 0 0;
-      font-size:12px;
-      color:#c5d2e9;
-      line-height:1.4;
-    }
-    .ai-widget-badge{
-      border:1px solid rgba(125,211,252,.42);
-      border-radius:999px;
-      padding:5px 9px;
-      font-size:10px;
-      text-transform:uppercase;
-      letter-spacing:.1em;
-      color:#d8f3ff;
-      background:rgba(125,211,252,.12);
-      white-space:nowrap;
-    }
-    .ai-task-grid{
-      display:grid;
-      grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:10px;
-    }
-    .ai-task{
-      border:1px solid rgba(255,255,255,.11);
-      border-radius:14px;
-      background:rgba(255,255,255,.07);
-      padding:10px;
-      min-height:124px;
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    }
-    .ai-task-top{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-    }
-    .ai-task-priority{
-      border:1px solid rgba(255,255,255,.24);
-      border-radius:999px;
-      padding:3px 8px;
-      font-size:9px;
-      letter-spacing:.08em;
-      text-transform:uppercase;
-      white-space:nowrap;
-    }
-    .ai-task-priority.high{
-      color:#ffe6be;
-      background:rgba(245,158,11,.14);
-      border-color:rgba(245,158,11,.35);
-    }
-    .ai-task-priority.medium{
-      color:#d6f1ff;
-      background:rgba(56,189,248,.14);
-      border-color:rgba(56,189,248,.32);
-    }
-    .ai-task-priority.low{
-      color:#d5f7e3;
-      background:rgba(34,197,94,.13);
-      border-color:rgba(74,222,128,.34);
-    }
-    .ai-task-source{
-      font-size:10px;
-      color:#98aac7;
-      text-transform:uppercase;
-      letter-spacing:.08em;
-      white-space:nowrap;
-    }
-    .ai-task-title{
-      margin:0;
+    .quick-head p{
+      margin:4px 0 0;
       font-size:13px;
-      line-height:1.3;
-      font-weight:650;
-      color:#edf5ff;
+      color:var(--muted);
     }
-    .ai-task-reason{
-      margin:0;
-      font-size:12px;
-      line-height:1.35;
-      color:#b8c7df;
-      flex:1;
+    .layout{
+      margin-top:16px;
+      display:grid;
+      grid-template-columns:minmax(0,1.3fr) minmax(320px,.9fr);
+      gap:16px;
     }
-    .ai-task-link{
-      text-decoration:none;
-      font-size:11px;
-      color:#d7f2ff;
-      border:1px solid rgba(125,211,252,.32);
-      border-radius:999px;
-      padding:6px 9px;
-      align-self:flex-start;
-      background:rgba(125,211,252,.12);
+    .section{
+      border:1px solid var(--line);
+      border-radius:20px;
+      background:var(--panel);
+      padding:18px;
+      box-shadow:0 1px 0 rgba(0,0,0,.02);
     }
-    .apps-rail{
-      display:none;
+    .section-title{
+      margin:0 0 4px;
+      font-size:20px;
+      line-height:1.1;
+      letter-spacing:-.02em;
+    }
+    .section-sub{
+      margin:0 0 14px;
+      font-size:14px;
+      color:var(--muted);
+      line-height:1.45;
     }
     .mobile-home{
       display:none;
@@ -601,160 +556,77 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     .app-chip{
       flex:0 0 auto;
       display:flex;
-      flex-direction:column;
       align-items:center;
-      justify-content:center;
-      gap:6px;
-      width:82px;
-      min-width:82px;
-      min-height:100px;
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:18px;
-      background:rgba(255,255,255,.08);
-      color:#d5def0;
+      gap:10px;
+      min-height:52px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:var(--panel-soft);
+      color:var(--text);
       text-decoration:none;
-      font-size:10px;
+      font-size:12px;
       font-weight:600;
-      padding:8px 6px;
-      text-align:center;
+      padding:8px 10px;
     }
     .app-chip:hover{
-      border-color:rgba(125,211,252,.45);
-      background:rgba(125,211,252,.18);
-      color:#e8f7ff;
+      border-color:var(--line-strong);
+      background:#fff;
     }
     .app-icon{
-      width:50px;
-      height:50px;
-      border-radius:15px;
-      border:1px solid rgba(255,255,255,.20);
-      background:linear-gradient(180deg, rgba(125,211,252,.30) 0%, rgba(56,189,248,.20) 100%);
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.22), 0 8px 16px -10px rgba(0,0,0,.7);
+      width:34px;
+      height:34px;
+      border-radius:10px;
+      border:1px solid var(--line);
+      background:var(--accent-soft);
       display:grid;
       place-items:center;
-      color:#f4fbff;
-      font-size:18px;
+      color:var(--accent);
+      font-size:15px;
     }
     .app-chip-label{
       display:block;
-      line-height:1.15;
+      line-height:1.2;
       letter-spacing:.01em;
-      color:#dbe7ff;
+      color:var(--text);
       max-width:100%;
-    }
-    .app-dot{
-      width:8px;
-      height:8px;
-      border-radius:999px;
-      background:rgba(125,211,252,.65);
-      box-shadow:0 0 10px rgba(125,211,252,.45);
-    }
-    .home-section{
-      border:1px solid rgba(255,255,255,.14);
-      border-radius:20px;
-      background:rgba(26,37,58,.45);
-      backdrop-filter:blur(14px) saturate(140%);
-      padding:12px 10px;
-      margin-top:10px;
-    }
-    .home-section-title{
-      margin:0 2px 10px;
-      font-size:10px;
-      letter-spacing:.14em;
-      color:#b7c6e2;
-      font-weight:700;
-      text-transform:uppercase;
-    }
-    .home-grid{
-      display:grid;
-      grid-template-columns:repeat(4,minmax(0,1fr));
-      gap:12px 8px;
-    }
-    .home-app{
-      text-decoration:none;
-      color:#e8f1ff;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      gap:6px;
-      min-width:0;
-      -webkit-tap-highlight-color:rgba(125,211,252,.2);
-    }
-    .home-app-icon{
-      width:64px;
-      height:64px;
-      border-radius:18px;
-      border:1px solid rgba(255,255,255,.24);
-      background:linear-gradient(180deg, rgba(125,211,252,.34) 0%, rgba(56,189,248,.20) 100%);
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.26), 0 10px 18px -14px rgba(0,0,0,.78);
-      display:grid;
-      place-items:center;
-      color:#f4fbff;
-      font-size:22px;
-      font-weight:700;
-    }
-    .home-app-label{
-      display:block;
-      max-width:72px;
-      font-size:11px;
-      line-height:1.15;
-      text-align:center;
-      color:#d7e5ff;
-      letter-spacing:.01em;
-      overflow:hidden;
-      text-overflow:ellipsis;
       white-space:nowrap;
     }
-    .section{
-      border:1px solid var(--line);
-      border-radius:24px;
-      background:linear-gradient(180deg,var(--panel-soft) 0%, rgba(21,30,47,.46) 100%);
-      backdrop-filter:blur(18px);
-      padding:14px;
-    }
-    .section-title{
-      margin:2px 4px 10px;
-      font-size:12px;
-      letter-spacing:.16em;
-      text-transform:uppercase;
-      color:var(--muted);
-      font-weight:700;
-    }
     .rows{
-      display:flex;
-      flex-direction:column;
-      gap:9px;
-    }
-    .row{
-      display:flex;
-      align-items:center;
+      display:grid;
       gap:12px;
-      border:1px solid rgba(255,255,255,.08);
+    }
+    .primary-grid{
+      grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+    .module-card{
+      display:flex;
+      align-items:flex-start;
+      gap:14px;
+      border:1px solid var(--line);
       border-radius:16px;
-      background:rgba(255,255,255,.06);
-      padding:12px 13px;
+      background:#fff;
+      padding:14px;
       text-decoration:none;
       color:inherit;
-      transition:border-color .2s ease, transform .2s ease, background .2s ease;
-      min-height:56px;
-      -webkit-tap-highlight-color:rgba(125,211,252,.2);
+      transition:border-color .2s ease, background .2s ease, transform .2s ease;
+      min-height:92px;
     }
-    .row:hover{
-      border-color:rgba(255,255,255,.26);
-      background:rgba(255,255,255,.10);
+    .module-card:hover{
+      border-color:var(--line-strong);
+      background:#fcfcfd;
       transform:translateY(-1px);
     }
     .icon{
-      width:36px;
-      height:36px;
-      border-radius:10px;
-      border:1px solid rgba(255,255,255,.14);
-      background:rgba(125,211,252,.14);
+      width:40px;
+      height:40px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:var(--accent-soft);
       display:grid;
       place-items:center;
-      color:#d8f2ff;
+      color:var(--accent);
       font-size:15px;
-      flex:0 0 36px;
+      flex:0 0 40px;
     }
     .content{
       min-width:0;
@@ -762,10 +634,10 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     }
     .title{
       margin:0;
-      font-size:17px;
+      font-size:16px;
       line-height:1.2;
       letter-spacing:-.01em;
-      font-weight:650;
+      font-weight:700;
     }
     .subtitle{
       margin:4px 0 0;
@@ -782,281 +654,93 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       letter-spacing:.12em;
       text-transform:uppercase;
       border-radius:999px;
-      padding:7px 10px;
+      padding:6px 10px;
       border:1px solid;
       flex:0 0 auto;
       margin-left:6px;
-      min-height:28px;
+      min-height:26px;
       display:inline-flex;
       align-items:center;
+      white-space:nowrap;
     }
-    .active{color:#d9ffe9;background:rgba(34,197,94,.13);border-color:rgba(74,222,128,.35)}
-    .progress{color:#ffefcf;background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35)}
+    .active{color:var(--success);background:rgba(0,128,96,.08);border-color:rgba(0,128,96,.2)}
+    .progress{color:#5c5f62;background:#f6f6f7;border-color:#d9dadd}
     .arrow{
-      color:#a8b8d2;
+      color:#8c9196;
       font-size:20px;
       line-height:1;
       flex:0 0 auto;
     }
-    @media (min-width:1080px){
-      .sections-grid{
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        align-items:start;
+    @media (max-width:980px){
+      .layout{
+        grid-template-columns:1fr;
+      }
+      .primary-grid{
+        grid-template-columns:1fr;
       }
     }
     @media (max-width:760px){
       .wrap{
-        padding:16px 14px calc(116px + env(safe-area-inset-bottom));
+        padding:16px 14px 28px;
       }
-      .orientation{
-        display:grid;
-        grid-template-columns:repeat(3,minmax(0,1fr));
-        gap:8px;
-        overflow:visible;
-        padding-bottom:0;
+      .hero{
+        padding:18px;
       }
-      .modules-head{align-items:flex-start;flex-direction:column}
-      .search{width:100%}
-      .tile{
-        border-radius:14px;
-        padding:12px 12px 11px;
-        min-width:0;
-        flex:0 0 auto;
+      .hero h1{
+        font-size:28px;
       }
-      .tile .v{
-        font-size:16px;
+      .hero-actions{
+        align-items:stretch;
       }
-      .tile .k{font-size:9px;letter-spacing:.1em}
-      .tile .d{font-size:11px;line-height:1.3}
-      .modules-head{
-        margin:18px 0 10px;
-        gap:8px;
+      .search{
+        width:100%;
       }
-      .modules-head h2{
-        font-size:21px;
+      .section,
+      .quick{
+        padding:16px;
+        border-radius:18px;
       }
-      .modules-head p{
-        font-size:13px;
-      }
-      .modules-head{
-        display:none;
-      }
-      .sections-grid{
-        gap:10px;
-        display:none;
-      }
-      .apps-rail{
-        position:fixed;
-        left:12px;
-        right:12px;
-        bottom:calc(10px + env(safe-area-inset-bottom));
-        z-index:5;
-        display:block;
-        margin:0 0 10px;
-        border:1px solid rgba(255,255,255,.24);
-        border-radius:16px;
-        background:rgba(26,37,58,.58);
-        backdrop-filter:blur(16px) saturate(150%);
-        box-shadow:0 12px 26px -20px rgba(0,0,0,.85);
-        padding:7px;
-      }
-      .apps-track{
-        gap:10px;
-        justify-content:space-between;
+      .module-card{
+        min-height:84px;
       }
       .app-chip{
-        width:calc((100% - 30px) / 4);
-        min-width:0;
-        min-height:74px;
-        border-radius:14px;
-        padding:5px 4px;
-        font-size:9px;
-      }
-      .app-icon{
-        width:38px;
-        height:38px;
-        border-radius:12px;
-        font-size:16px;
-      }
-      .app-chip-label{
-        font-size:9px;
-      }
-      .apps-track{
-        gap:10px;
-      }
-      .app-dot{
-        display:none;
-      }
-      .mobile-home{
-        display:block;
-      }
-      .section{
-        border-radius:18px;
-        padding:10px;
-        background:rgba(29,40,61,.62);
-        backdrop-filter:blur(14px) saturate(145%);
-      }
-      .section-title{
-        margin:1px 4px 8px;
-        font-size:11px;
-      }
-      .rows{
-        gap:8px;
-      }
-      .row{
-        border-radius:16px;
-        padding:11px 12px;
-        min-height:60px;
-        background:rgba(255,255,255,.10);
-        border-color:rgba(255,255,255,.18);
-      }
-      .title{
-        font-size:16px;
-        font-weight:700;
-      }
-      .subtitle{
-        font-size:12px;
-        -webkit-line-clamp:2;
-        color:#c1cee5;
-      }
-      .arrow{
-        font-size:18px;
-        color:#d0dcf4;
-      }
-      .status{
-        font-size:9px;
-        letter-spacing:.10em;
-        padding:6px 8px;
-      }
-      .orientation{
-        margin-bottom:8px;
-      }
-      .ai-widget{
-        margin-top:12px;
-        padding:10px;
-        border-radius:18px;
-      }
-      .ai-task-grid{
-        display:flex;
-        gap:8px;
-        overflow-x:auto;
-        -webkit-overflow-scrolling:touch;
-        scrollbar-width:none;
-      }
-      .ai-task-grid::-webkit-scrollbar{display:none}
-      .ai-task{
-        min-width:84%;
-        flex:0 0 84%;
-        border-radius:16px;
-      }
-    }
-    @media (max-width:420px){
-      .icon{
-        width:34px;
-        height:34px;
-        flex:0 0 34px;
-      }
-      .status{
-        padding:5px 7px;
-      }
-      .home-grid{
-        gap:11px 6px;
-      }
-      .home-app-icon{
-        width:60px;
-        height:60px;
-      }
-      .home-app-label{
-        max-width:66px;
-      }
-      .ai-task{
-        min-width:88%;
-        flex:0 0 88%;
+        min-width:190px;
       }
     }
   </style>
 </head>
 <body>
   <main class="wrap">
-    <section class="orientation">
-      <article class="tile"><div class="k">Page principale</div><div class="v">Centre de contrôle</div><div class="d">Hub d’orientation de l’app pour choisir rapidement le bon module sans doublon.</div></article>
-      <article class="tile"><div class="k">Modules quotidiens</div><div class="v">6 modules canoniques</div><div class="d">Commandes, Factures, Rendez-vous, Forecast, Flows clients et WhatsApp concentrent la navigation principale.</div></article>
-      <article class="tile"><div class="k">Zone secondaire</div><div class="v">Outils</div><div class="d">Architecture, IA, mobile et workflows avancés restent accessibles, mais hors navigation quotidienne.</div></article>
-    </section>
-
-    <header class="modules-head">
-      <div>
-        <h2>Navigation Système</h2>
-        <p>Groupée par fonction pour un scan plus rapide et un choix de module plus clair.</p>
+    <header class="hero">
+      <div class="hero-kicker">Page principale</div>
+      <h1>Navigation système</h1>
+      <p>Page d’entrée simple pour ouvrir rapidement le bon module, avec la même sobriété que le reste de l’application.</p>
+      <div class="hero-actions">
+        <input id="moduleSearch" class="search" type="search" placeholder="Rechercher un module..." />
+        <div class="hero-meta">
+          <span class="meta-chip">6 modules principaux</span>
+          <span class="meta-chip">Outils séparés</span>
+          <span class="meta-chip">Navigation simplifiée</span>
+        </div>
       </div>
-      <input id="moduleSearch" class="search" type="search" placeholder="Rechercher un module..." />
     </header>
 
-    <div class="apps-rail" id="appsRail">
+    <section class="quick">
+      <div class="quick-head">
+        <div>
+          <h2>Accès rapides</h2>
+          <p>Les derniers modules ouverts restent disponibles ici.</p>
+        </div>
+      </div>
       <div class="apps-track" id="recentAppsTrack"></div>
-    </div>
+    </section>
 
-    <div class="mobile-home">
-      <section class="home-section section-block" data-section="modules">
-        <p class="home-section-title">Modules principaux</p>
-        <div class="home-grid">
-          <a class="home-app module-item" data-app-id="orders" data-search="commandes paiements acomptes soldes documents ordre commerce" href="/admin/orders${navSuffix}">
-            <span class="home-app-icon">◐</span><span class="home-app-label">Commandes</span>
-          </a>
-          <a class="home-app module-item" data-app-id="invoice" data-search="factures facture generation pdf facturation documents" href="/admin/invoices${navSuffix}">
-            <span class="home-app-icon">◔</span><span class="home-app-label">Factures</span>
-          </a>
-          <a class="home-app module-item" data-app-id="appointments" data-search="rendez-vous showroom planning disponibilites rappels" href="/admin/appointments${navSuffix}">
-            <span class="home-app-icon">◒</span><span class="home-app-label">Rendez-vous</span>
-          </a>
-          <a class="home-app module-item" data-app-id="forecast" data-search="forecast previsions revenue demande scenarios planification" href="/admin/forecast${navSuffix}">
-            <span class="home-app-icon">◍</span><span class="home-app-label">Forecast</span>
-          </a>
-          <a class="home-app module-item" data-app-id="client-flows" data-search="flows clients whatsapp j+3 j+15 saison messages sequences relances" href="/admin/client-flows${navSuffix}">
-            <span class="home-app-icon">◐</span><span class="home-app-label">Flows clients</span>
-          </a>
-          <a class="home-app module-item" data-app-id="whatsapp" data-search="whatsapp conversations priorites intelligence flux conversion" href="/admin/whatsapp-intelligence${navSuffix}">
-            <span class="home-app-icon">◈</span><span class="home-app-label">WhatsApp</span>
-          </a>
-        </div>
-      </section>
-
-      <section id="outils" class="home-section section-block" data-section="tools">
-        <p class="home-section-title">Outils</p>
-        <div class="home-grid">
-          <a class="home-app module-item" data-app-id="agent" data-search="agent control centre operations runs leads approvals system brain ia" href="/agent-control-center-v1/${navSuffix}#/index">
-            <span class="home-app-icon">◎</span><span class="home-app-label">Agent Control</span>
-          </a>
-          <a class="home-app module-item" data-app-id="blueprint" data-search="blueprint architecture systeme cartographie flux modules services" href="/blueprint${navSuffix}">
-            <span class="home-app-icon">◇</span><span class="home-app-label">Blueprint</span>
-          </a>
-          <a class="home-app module-item" data-app-id="ml" data-search="ml dashboard intelligence artificielle automation machine learning" href="/admin/ml${navSuffix}">
-            <span class="home-app-icon">◌</span><span class="home-app-label">ML Dashboard</span>
-          </a>
-          <a class="home-app module-item" data-app-id="spline" data-search="spline 3d viewer scene visualisation" href="/admin/spline${navSuffix}">
-            <span class="home-app-icon">⬡</span><span class="home-app-label">Spline</span>
-          </a>
-          <a class="home-app module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
-            <span class="home-app-icon">◉</span><span class="home-app-label">App mobile</span>
-          </a>
-          <a class="home-app module-item" data-app-id="whatsapp-lab" data-search="whatsapp lab experimentation tests outils" href="/whatsapp-lab${navSuffix}">
-            <span class="home-app-icon">◫</span><span class="home-app-label">WhatsApp Lab</span>
-          </a>
-          <a class="home-app module-item" data-app-id="logic" data-search="logic diagram schema logique whatsapp systeme" href="/whatsapp-logic-diagram${navSuffix}">
-            <span class="home-app-icon">⌘</span><span class="home-app-label">Schéma logique</span>
-          </a>
-          <a class="home-app module-item" data-app-id="workflow" data-search="manager approval flow validation manager whatsapp" href="/whatsapp-intelligence/workflow${navSuffix}">
-            <span class="home-app-icon">⇄</span><span class="home-app-label">Flux manager</span>
-          </a>
-        </div>
-      </section>
-    </div>
-
-    <div class="sections-grid">
-      <section class="section section-block" data-section="modules">
-        <p class="section-title">Modules principaux</p>
-        <div class="rows">
-          <a class="row module-row module-item" data-app-id="orders" data-search="commandes paiements acomptes soldes documents ordre commerce" href="/admin/orders${navSuffix}">
+    <div class="layout">
+      <section class="section filter-section" data-filter-section="modules">
+        <h2 class="section-title">Modules principaux</h2>
+        <p class="section-sub">Les modules du quotidien, pensés pour une lecture rapide et une ouverture immédiate.</p>
+        <div class="rows primary-grid">
+          <a class="module-card module-item" data-app-id="orders" data-search="commandes paiements acomptes soldes documents ordre commerce" href="/admin/orders${navSuffix}">
             <div class="icon">◐</div>
             <div class="content">
               <p class="title">Commandes</p>
@@ -1065,7 +749,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="invoice" data-search="factures facture generation pdf facturation documents" href="/admin/invoices${navSuffix}">
+          <a class="module-card module-item" data-app-id="invoice" data-search="factures facture generation pdf facturation documents" href="/admin/invoices${navSuffix}">
             <div class="icon">◔</div>
             <div class="content">
               <p class="title">Factures</p>
@@ -1074,7 +758,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="appointments" data-search="rendez-vous showroom planning disponibilites rappels" href="/admin/appointments${navSuffix}">
+          <a class="module-card module-item" data-app-id="appointments" data-search="rendez-vous showroom planning disponibilites rappels" href="/admin/appointments${navSuffix}">
             <div class="icon">◒</div>
             <div class="content">
               <p class="title">Rendez-vous</p>
@@ -1083,7 +767,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="forecast" data-search="forecast previsions revenue demande scenarios planification" href="/admin/forecast${navSuffix}">
+          <a class="module-card module-item" data-app-id="forecast" data-search="forecast previsions revenue demande scenarios planification" href="/admin/forecast${navSuffix}">
             <div class="icon">◍</div>
             <div class="content">
               <p class="title">Forecast</p>
@@ -1092,7 +776,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="client-flows" data-search="flows clients whatsapp j+3 j+15 saison messages sequences relances" href="/admin/client-flows${navSuffix}">
+          <a class="module-card module-item" data-app-id="client-flows" data-search="flows clients whatsapp j+3 j+15 saison messages sequences relances" href="/admin/client-flows${navSuffix}">
             <div class="icon">◐</div>
             <div class="content">
               <p class="title">Flows clients</p>
@@ -1101,7 +785,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="whatsapp" data-search="whatsapp conversations priorites intelligence flux conversion" href="/admin/whatsapp-intelligence${navSuffix}">
+          <a class="module-card module-item" data-app-id="whatsapp" data-search="whatsapp conversations priorites intelligence flux conversion" href="/admin/whatsapp-intelligence${navSuffix}">
             <div class="icon">◈</div>
             <div class="content">
               <p class="title">WhatsApp</p>
@@ -1113,10 +797,11 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         </div>
       </section>
 
-      <section id="outils-desktop" class="section section-block" data-section="tools">
-        <p class="section-title">Outils</p>
+      <section id="outils" class="section filter-section" data-filter-section="tools">
+        <h2 class="section-title">Outils</h2>
+        <p class="section-sub">Les espaces secondaires, techniques ou exploratoires, gardés hors du parcours quotidien.</p>
         <div class="rows">
-          <a class="row module-row module-item" data-app-id="agent" data-search="agent control centre operations runs leads approvals system brain ia" href="/agent-control-center-v1/${navSuffix}#/index">
+          <a class="module-card module-item" data-app-id="agent" data-search="agent control centre operations runs leads approvals system brain ia" href="/agent-control-center-v1/${navSuffix}#/index">
             <div class="icon">◎</div>
             <div class="content">
               <p class="title">Agent Control</p>
@@ -1125,7 +810,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="blueprint" data-search="blueprint architecture systeme cartographie flux modules services" href="/blueprint${navSuffix}">
+          <a class="module-card module-item" data-app-id="blueprint" data-search="blueprint architecture systeme cartographie flux modules services" href="/blueprint${navSuffix}">
             <div class="icon">◇</div>
             <div class="content">
               <p class="title">Blueprint</p>
@@ -1134,7 +819,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="ml" data-search="ml dashboard intelligence artificielle automation machine learning" href="/admin/ml${navSuffix}">
+          <a class="module-card module-item" data-app-id="ml" data-search="ml dashboard intelligence artificielle automation machine learning" href="/admin/ml${navSuffix}">
             <div class="icon">◌</div>
             <div class="content">
               <p class="title">ML Dashboard</p>
@@ -1143,7 +828,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="spline" data-search="spline 3d viewer scene visualisation" href="/admin/spline${navSuffix}">
+          <a class="module-card module-item" data-app-id="spline" data-search="spline 3d viewer scene visualisation" href="/admin/spline${navSuffix}">
             <div class="icon">⬡</div>
             <div class="content">
               <p class="title">Spline</p>
@@ -1152,7 +837,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
+          <a class="module-card module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
             <div class="icon">◉</div>
             <div class="content">
               <p class="title">App mobile</p>
@@ -1161,7 +846,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="whatsapp-lab" data-search="whatsapp lab experimentation tests outils" href="/whatsapp-lab${navSuffix}">
+          <a class="module-card module-item" data-app-id="whatsapp-lab" data-search="whatsapp lab experimentation tests outils" href="/whatsapp-lab${navSuffix}">
             <div class="icon">◫</div>
             <div class="content">
               <p class="title">Laboratoire WhatsApp</p>
@@ -1170,7 +855,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="logic" data-search="logic diagram schema logique whatsapp systeme" href="/whatsapp-logic-diagram${navSuffix}">
+          <a class="module-card module-item" data-app-id="logic" data-search="logic diagram schema logique whatsapp systeme" href="/whatsapp-logic-diagram${navSuffix}">
             <div class="icon">⌘</div>
             <div class="content">
               <p class="title">Schéma logique</p>
@@ -1179,7 +864,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="workflow" data-search="manager approval flow validation manager whatsapp" href="/whatsapp-intelligence/workflow${navSuffix}">
+          <a class="module-card module-item" data-app-id="workflow" data-search="manager approval flow validation manager whatsapp" href="/whatsapp-intelligence/workflow${navSuffix}">
             <div class="icon">⇄</div>
             <div class="content">
               <p class="title">Flux manager</p>
@@ -1191,55 +876,16 @@ function renderAdminControlCenterPage(navSuffix: string): string {
         </div>
       </section>
     </div>
-
-    <section class="ai-widget" aria-label="AI Suggested Development Tasks Widget">
-      <div class="ai-widget-head">
-        <div>
-          <p class="ai-widget-title">AI Suggested Development Tasks</p>
-          <p class="ai-widget-sub">Widget mobile-first pour suivre rapidement les améliorations produit/système recommandées.</p>
-        </div>
-        <span class="ai-widget-badge">Widget</span>
-      </div>
-      <div class="ai-task-grid">
-        <article class="ai-task">
-          <div class="ai-task-top">
-            <span class="ai-task-priority high">High</span>
-            <span class="ai-task-source">run_errors</span>
-          </div>
-          <h3 class="ai-task-title">Stabiliser les runs en erreur</h3>
-          <p class="ai-task-reason">Réduire les échecs pour éviter les blocages opérateurs sur les leads prioritaires.</p>
-          <a class="ai-task-link" href="/agent-control-center-v1/${navSuffix}#/index">Ouvrir cockpit IA</a>
-        </article>
-        <article class="ai-task">
-          <div class="ai-task-top">
-            <span class="ai-task-priority medium">Medium</span>
-            <span class="ai-task-source">approval_gaps</span>
-          </div>
-          <h3 class="ai-task-title">Durcir la persistance approvals</h3>
-          <p class="ai-task-reason">Tracer les transitions d’approbation et remonter les éléments en attente trop longtemps.</p>
-          <a class="ai-task-link" href="/agent-control-center-v1/${navSuffix}#/index">Voir tâches IA</a>
-        </article>
-        <article class="ai-task">
-          <div class="ai-task-top">
-            <span class="ai-task-priority low">Low</span>
-            <span class="ai-task-source">system_brain</span>
-          </div>
-          <h3 class="ai-task-title">Activer signaux live System Brain</h3>
-          <p class="ai-task-reason">Remplacer les placeholders restants par la télémétrie runtime dans les vues de supervision.</p>
-          <a class="ai-task-link" href="/agent-control-center-v1/${navSuffix}#/system-brain">Ouvrir System Brain</a>
-        </article>
-      </div>
-    </section>
   </main>
   <script>
     const input = document.getElementById("moduleSearch");
-    const moduleItems = Array.from(document.querySelectorAll(".module-row, .home-app.module-item"));
     const recentAppsTrack = document.getElementById("recentAppsTrack");
-    const sections = Array.from(document.querySelectorAll(".section-block"));
+    const filterSections = Array.from(document.querySelectorAll("[data-filter-section]"));
     const appCatalog = {
       agent: { label: "Agent Control", icon: "◎", href: "/agent-control-center-v1/${navSuffix}#/index" },
       mobile: { label: "App mobile", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
       forecast: { label: "Forecast", icon: "◍", href: "/admin/forecast${navSuffix}" },
+      "client-flows": { label: "Flows clients", icon: "◐", href: "/admin/client-flows${navSuffix}" },
       whatsapp: { label: "WhatsApp", icon: "◈", href: "/admin/whatsapp-intelligence${navSuffix}" },
       blueprint: { label: "Blueprint", icon: "◇", href: "/blueprint${navSuffix}" },
       ml: { label: "ML Dashboard", icon: "◌", href: "/admin/ml${navSuffix}" },
@@ -1251,7 +897,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       logic: { label: "Schéma logique", icon: "⌘", href: "/whatsapp-logic-diagram${navSuffix}" },
       workflow: { label: "Flux manager", icon: "⇄", href: "/whatsapp-intelligence/workflow${navSuffix}" }
     };
-    const defaultRecentApps = ["orders", "invoice", "forecast", "whatsapp"];
+    const defaultRecentApps = ["orders", "invoice", "client-flows", "whatsapp"];
 
     function readRecentApps() {
       try {
@@ -1293,19 +939,17 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       renderRecentApps();
     });
     function applyVisibility() {
-      const q = String((input && input.value) || "").toLowerCase().trim();
-      sections.forEach((section) => {
-        const allRows = Array.from(section.querySelectorAll(".module-row, .home-app.module-item"));
-        const visibleRows = allRows.filter((row) => row.style.display !== "none");
-        const hasVisibleRows = visibleRows.length > 0;
-        section.style.display = hasVisibleRows ? "block" : "none";
+      filterSections.forEach((section) => {
+        const allRows = Array.from(section.querySelectorAll(".module-item"));
+        const hasVisibleRows = allRows.some((row) => row.style.display !== "none");
+        section.style.display = hasVisibleRows ? "" : "none";
       });
     }
 
     if (input) {
       input.addEventListener("input", (event) => {
         const q = String(event.target.value || "").toLowerCase().trim();
-        const liveItems = Array.from(document.querySelectorAll(".module-row, .home-app.module-item, .app-chip.module-item"));
+        const liveItems = Array.from(document.querySelectorAll(".module-item"));
         liveItems.forEach((row) => {
           const hay = String(row.getAttribute("data-search") || "").toLowerCase();
           row.style.display = q && !hay.includes(q) ? "none" : "";
