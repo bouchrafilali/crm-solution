@@ -1103,8 +1103,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       grid-template-columns: 1fr;
       align-items: stretch;
       padding: 0;
-      position: relative;
-      overflow: visible;
+      overflow: hidden;
     }
     .orders-top-kpi-period-head,
     .orders-top-kpi-period-toggle {
@@ -1202,13 +1201,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       font-size: 12px;
       line-height: 1.25;
     }
-    .orders-period-card[open] .orders-top-kpi-period-toggle {
+    .orders-top-kpi-period-toggle.is-open {
       background: #fbfbfb;
     }
     .orders-period-popover {
-      position: absolute;
-      top: calc(100% + 10px);
-      left: 0;
+      position: fixed;
       width: 320px;
       display: grid;
       gap: 12px;
@@ -1218,6 +1215,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       background: #fff;
       box-shadow: 0 18px 38px rgba(15, 23, 42, 0.14);
       z-index: 14;
+    }
+    .orders-period-popover.hidden {
+      display: none;
     }
     .orders-period-popover-grid {
       display: grid;
@@ -3152,8 +3152,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     ${orderViewMode === "detail" ? "" : `
     <section class="orders-top-kpis-wrap">
       <div class="orders-top-kpis">
-        <details id="ordersTopPeriodCard" class="orders-top-kpi-card period orders-period-card">
-          <summary class="orders-top-kpi-period-toggle">
+        <div class="orders-top-kpi-card period">
+          <button id="ordersTopPeriodToggle" type="button" class="orders-top-kpi-period-toggle">
             <div class="orders-top-kpi-period-stack">
               <div class="orders-top-kpi-period-head">
                 <svg class="orders-top-kpi-period-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -3166,40 +3166,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
               </div>
               <div id="ordersTopPeriodSub" class="orders-top-kpi-period-sub">Chargement…</div>
             </div>
-          </summary>
-          <div class="orders-period-popover">
-            <div class="orders-period-popover-grid">
-              <div>
-                <label for="presetRange">Période</label>
-                <select id="presetRange">
-                  <option value="year">Année en cours</option>
-                  <option value="currentMonth">Mois en cours</option>
-                  <option value="today">Aujourd'hui</option>
-                  <option value="yesterday">Hier</option>
-                  <option value="last90">90 derniers jours</option>
-                  <option value="last30">30 derniers jours</option>
-                  <option value="last7">7 derniers jours</option>
-                  <option value="last365">365 derniers jours</option>
-                  <option value="last12m">12 derniers mois</option>
-                  <option value="lastMonth">Le mois dernier</option>
-                  <option value="lastWeek">La semaine dernière</option>
-                  <option value="custom">Personnalisé</option>
-                </select>
-              </div>
-              <div>
-                <label for="syncFrom">Du</label>
-                <input id="syncFrom" type="date" />
-              </div>
-              <div>
-                <label for="syncTo">Au</label>
-                <input id="syncTo" type="date" />
-              </div>
-            </div>
-            <div class="orders-period-popover-actions">
-              <button id="ordersTopPeriodCloseBtn" type="button" class="orders-period-popover-close">Fermer</button>
-            </div>
-          </div>
-        </details>
+          </button>
+        </div>
         <div class="orders-top-kpi-card">
           <div class="orders-top-kpi-content">
             <div class="orders-top-kpi-title">Commandes</div>
@@ -3242,6 +3210,40 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         </div>
       </div>
     </section>`}
+
+    ${orderViewMode === "detail" ? "" : `
+    <div id="ordersPeriodPopover" class="orders-period-popover hidden">
+      <div class="orders-period-popover-grid">
+        <div>
+          <label for="presetRange">Période</label>
+          <select id="presetRange">
+            <option value="year">Année en cours</option>
+            <option value="currentMonth">Mois en cours</option>
+            <option value="today">Aujourd'hui</option>
+            <option value="yesterday">Hier</option>
+            <option value="last90">90 derniers jours</option>
+            <option value="last30">30 derniers jours</option>
+            <option value="last7">7 derniers jours</option>
+            <option value="last365">365 derniers jours</option>
+            <option value="last12m">12 derniers mois</option>
+            <option value="lastMonth">Le mois dernier</option>
+            <option value="lastWeek">La semaine dernière</option>
+            <option value="custom">Personnalisé</option>
+          </select>
+        </div>
+        <div>
+          <label for="syncFrom">Du</label>
+          <input id="syncFrom" type="date" />
+        </div>
+        <div>
+          <label for="syncTo">Au</label>
+          <input id="syncTo" type="date" />
+        </div>
+      </div>
+      <div class="orders-period-popover-actions">
+        <button id="ordersTopPeriodCloseBtn" type="button" class="orders-period-popover-close">Fermer</button>
+      </div>
+    </div>`}
 
     <section class="card orders-primary-card">
       <div class="orders-toolbar">
@@ -3539,7 +3541,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const orderMobileTopMetaEl = document.getElementById("orderMobileTopMeta");
     const orderMobileHeadTitleEl = document.getElementById("orderMobileHeadTitle");
     const orderMobileBackBtnEl = document.getElementById("orderMobileBackBtn");
-    const ordersTopPeriodCardEl = document.getElementById("ordersTopPeriodCard");
+    const ordersTopPeriodToggleEl = document.getElementById("ordersTopPeriodToggle");
+    const ordersPeriodPopoverEl = document.getElementById("ordersPeriodPopover");
     const ordersTopPeriodCloseBtnEl = document.getElementById("ordersTopPeriodCloseBtn");
     const ordersTopPeriodLabelEl = document.getElementById("ordersTopPeriodLabel");
     const ordersTopPeriodSubEl = document.getElementById("ordersTopPeriodSub");
@@ -6256,25 +6259,60 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         scheduleSync(180);
       });
     }
-    if (ordersTopPeriodCloseBtnEl && ordersTopPeriodCardEl) {
+    function positionOrdersPeriodPopover() {
+      if (!ordersTopPeriodToggleEl || !ordersPeriodPopoverEl) return;
+      const rect = ordersTopPeriodToggleEl.getBoundingClientRect();
+      const popoverWidth = Math.min(320, window.innerWidth - 24);
+      const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - popoverWidth - 12));
+      ordersPeriodPopoverEl.style.width = popoverWidth + "px";
+      ordersPeriodPopoverEl.style.left = left + "px";
+      ordersPeriodPopoverEl.style.top = Math.min(window.innerHeight - 24, rect.bottom + 10) + "px";
+    }
+    function closeOrdersPeriodPopover() {
+      if (!ordersPeriodPopoverEl || !ordersTopPeriodToggleEl) return;
+      ordersPeriodPopoverEl.classList.add("hidden");
+      ordersTopPeriodToggleEl.classList.remove("is-open");
+    }
+    function openOrdersPeriodPopover() {
+      if (!ordersPeriodPopoverEl || !ordersTopPeriodToggleEl || !presetRangeEl) return;
+      positionOrdersPeriodPopover();
+      ordersPeriodPopoverEl.classList.remove("hidden");
+      ordersTopPeriodToggleEl.classList.add("is-open");
+      window.setTimeout(() => {
+        presetRangeEl.focus();
+      }, 0);
+    }
+    if (ordersTopPeriodCloseBtnEl) {
       ordersTopPeriodCloseBtnEl.addEventListener("click", () => {
-        ordersTopPeriodCardEl.removeAttribute("open");
+        closeOrdersPeriodPopover();
       });
     }
-    if (ordersTopPeriodCardEl && presetRangeEl) {
-      ordersTopPeriodCardEl.addEventListener("toggle", () => {
-        if (ordersTopPeriodCardEl.hasAttribute("open")) {
-          window.setTimeout(() => {
-            presetRangeEl.focus();
-          }, 0);
+    if (ordersTopPeriodToggleEl) {
+      ordersTopPeriodToggleEl.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (ordersPeriodPopoverEl && !ordersPeriodPopoverEl.classList.contains("hidden")) {
+          closeOrdersPeriodPopover();
+        } else {
+          openOrdersPeriodPopover();
         }
       });
-      document.addEventListener("click", (event) => {
-        if (!ordersTopPeriodCardEl.hasAttribute("open")) return;
-        const target = event.target;
-        if (target instanceof Node && !ordersTopPeriodCardEl.contains(target)) {
-          ordersTopPeriodCardEl.removeAttribute("open");
+    }
+    if (ordersPeriodPopoverEl) {
+      ordersPeriodPopoverEl.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+      window.addEventListener("resize", () => {
+        if (!ordersPeriodPopoverEl.classList.contains("hidden")) {
+          positionOrdersPeriodPopover();
         }
+      });
+      window.addEventListener("scroll", () => {
+        if (!ordersPeriodPopoverEl.classList.contains("hidden")) {
+          positionOrdersPeriodPopover();
+        }
+      }, { passive: true });
+      document.addEventListener("click", () => {
+        closeOrdersPeriodPopover();
       });
     }
 
