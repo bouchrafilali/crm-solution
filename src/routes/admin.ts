@@ -2465,6 +2465,39 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     })();
   </script>
   <script>
+    (() => {
+      const current = new URL(window.location.href);
+      const passthroughKeys = ["host", "shop", "embedded", "ea"];
+      const originalFetch = window.fetch.bind(window);
+
+      function withEmbeddedContext(input) {
+        const raw = typeof input === "string" || input instanceof URL ? String(input) : input instanceof Request ? input.url : "";
+        if (!raw) return null;
+        const url = new URL(raw, window.location.origin);
+        if (url.origin !== window.location.origin) return null;
+        if (!url.pathname.startsWith("/admin/") && !url.pathname.startsWith("/api/")) return null;
+        passthroughKeys.forEach((key) => {
+          const value = current.searchParams.get(key);
+          if (value && !url.searchParams.get(key)) {
+            url.searchParams.set(key, value);
+          }
+        });
+        return url.toString();
+      }
+
+      window.fetch = (input, init) => {
+        const nextUrl = withEmbeddedContext(input);
+        if (!nextUrl) {
+          return originalFetch(input, init);
+        }
+        if (input instanceof Request) {
+          return originalFetch(new Request(nextUrl, input), init);
+        }
+        return originalFetch(nextUrl, init);
+      };
+    })();
+  </script>
+  <script>
     const syncFromEl = document.getElementById("syncFrom");
     const syncToEl = document.getElementById("syncTo");
     const presetRangeEl = document.getElementById("presetRange");
