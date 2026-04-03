@@ -949,13 +949,65 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       display: block;
       margin-bottom: 4px;
     }
+    .orders-page {
+      max-width: 1680px;
+    }
+    .orders-page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 18px 0 14px;
+    }
+    .orders-page-head-copy {
+      display: grid;
+      gap: 4px;
+    }
+    .orders-page-kicker {
+      color: #6d7175;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    .orders-page-head h1 {
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+    .orders-page-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .orders-head-note {
+      color: #6d7175;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .orders-head-sync-btn {
+      min-height: 36px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid #1f2328;
+      background: #1f2328;
+      color: #fff;
+      box-shadow: none;
+    }
+    .orders-head-sync-btn:hover,
+    .orders-head-sync-btn:active {
+      background: #111418;
+      transform: none;
+      box-shadow: none;
+    }
     h1 {
       margin: 0;
       font-size: 32px;
       font-weight: 700;
     }
     .intro {
-      margin: -4px 0 14px;
+      margin: 0;
       color: #5c5f62;
       font-size: 14px;
     }
@@ -966,6 +1018,86 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       padding: 18px;
       margin-bottom: 16px;
       box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+    .orders-primary-card {
+      padding: 0;
+      overflow: hidden;
+    }
+    .orders-toolbar {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.3fr) minmax(0, 1fr);
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+    }
+    .orders-toolbar-search,
+    .orders-toolbar-filters {
+      display: grid;
+      gap: 10px;
+      align-items: end;
+    }
+    .orders-toolbar-filters {
+      grid-template-columns: 1.2fr 1fr 1fr;
+    }
+    .orders-toolbar-field {
+      min-width: 0;
+    }
+    .orders-toolbar-field-wide {
+      min-width: 180px;
+    }
+    .shopify-period-horizon {
+      padding: 0 16px 14px;
+      margin-top: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .orders-status-tabs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      background: #fff;
+    }
+    .orders-status-tab {
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: #61656a;
+      min-height: 34px;
+      padding: 0 12px;
+      font-weight: 600;
+      box-shadow: none;
+      white-space: nowrap;
+    }
+    .orders-status-tab:hover,
+    .orders-status-tab:active {
+      background: #f1f2f3;
+      color: #202223;
+      transform: none;
+      box-shadow: none;
+    }
+    .orders-status-tab.active {
+      background: #eef1f4;
+      color: #202223;
+    }
+    .orders-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      background: #fff;
+    }
+    .orders-list-header-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #202223;
+    }
+    .orders-list-status {
+      color: #6d7175;
+      font-size: 13px;
     }
     .kpi-row {
       margin: 12px 0 14px;
@@ -1376,6 +1508,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       grid-template-columns: 1.35fr 0.95fr;
       gap: 14px;
     }
+    .orders-main-surface {
+      padding: 0 16px 16px;
+      align-items: start;
+      background: #fff;
+    }
+    .orders-main-column {
+      min-width: 0;
+    }
     .orders-search-block {
       margin-top: 14px;
     }
@@ -1413,9 +1553,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .orders-list {
       border: 1px solid var(--border);
       border-radius: 10px;
-      max-height: 56vh;
+      max-height: 64vh;
       overflow: auto;
       background: #fff;
+    }
+    .shopify-orders-list {
+      border-radius: 12px;
+      border-color: #dfe3e8;
     }
     .orders-list.mobile-stack {
       border: 0;
@@ -1434,24 +1578,24 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .orders-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 14px;
-      min-width: 960px;
+      font-size: 13px;
+      min-width: 1000px;
     }
     .orders-table thead th {
       text-align: left;
       color: var(--muted);
       font-size: 12px;
       font-weight: 600;
-      padding: 10px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--border);
-      background: #f6f6f7;
+      background: #fafbfb;
       position: sticky;
       top: 0;
       z-index: 1;
     }
     .orders-table td {
-      padding: 10px;
-      border-bottom: 1px solid var(--border);
+      padding: 14px;
+      border-bottom: 1px solid #edf0f2;
       vertical-align: middle;
       background: #fff;
     }
@@ -1462,7 +1606,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       background: #f8f9fa;
     }
     .orders-table tr.active-row td {
-      background: #f1f8f5;
+      background: #f4f6f8;
     }
     .customer-main {
       font-weight: 600;
@@ -1474,11 +1618,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .pill {
       border-radius: 999px;
-      padding: 2px 8px;
+      padding: 4px 10px;
       font-size: 12px;
-      background: #e4e5e7;
-      color: #3f4246;
-      display: inline-block;
+      background: #f1f2f3;
+      color: #4a4f55;
+      display: inline-flex;
+      align-items: center;
     }
     .pill.partial {
       background: #f8dca8;
@@ -1491,11 +1636,19 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .detail-box {
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 14px;
-      min-height: 56vh;
-      background: var(--panel-strong);
+      padding: 0;
+      min-height: 64vh;
+      background: #fff;
       position: sticky;
       top: 12px;
+      overflow: hidden;
+    }
+    .shopify-detail-box {
+      border-color: #dfe3e8;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+    }
+    .shopify-detail-summary {
+      margin-top: 12px;
     }
     .order-shell {
       display: grid;
@@ -1503,15 +1656,18 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       gap: 12px;
     }
     .order-card {
-      border: 1px solid var(--border);
+      border: 1px solid #e5e7eb;
       border-radius: 12px;
       background: #fff;
-      padding: 12px;
-      margin-bottom: 10px;
+      padding: 14px;
+      margin-bottom: 0;
     }
     .order-card h4 {
-      margin: 0 0 8px;
-      font-size: 18px;
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      text-transform: none;
     }
     .order-meta-row {
       display: flex;
@@ -2067,13 +2223,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       margin-bottom: 6px;
     }
     .detail-title-row strong {
-      font-size: 24px;
-      font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
-      letter-spacing: 0.01em;
+      font-size: 20px;
+      font-family: inherit;
+      letter-spacing: -0.01em;
     }
     .detail-empty {
       color: var(--muted);
       font-size: 14px;
+      padding: 20px;
     }
     .detail-grid {
       display: grid;
@@ -2102,9 +2259,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       margin-top: 12px;
     }
     .save-order-btn.action-primary {
-      border-color: #20252c;
-      background: linear-gradient(180deg, #353a42 0%, #1d2128 100%);
+      border-color: #1f2328;
+      background: #1f2328;
       color: #fff;
+      box-shadow: none;
     }
     .save-order-btn.action-secondary {
       border-color: #d0d5dc;
@@ -2225,6 +2383,39 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .hidden {
       display: none;
     }
+    .orders-advanced-disclosure {
+      margin: 0 16px 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+    .orders-advanced-disclosure > summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      color: #202223;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0;
+    }
+    .orders-advanced-disclosure > summary::-webkit-details-marker {
+      display: none;
+    }
+    .orders-advanced-disclosure > summary::before {
+      content: "▸";
+      color: #6d7175;
+      font-size: 12px;
+    }
+    .orders-advanced-disclosure[open] > summary::before {
+      content: "▾";
+    }
+    .orders-advanced-body {
+      padding-top: 14px;
+    }
+    .orders-advanced-deliveries {
+      margin-top: 16px;
+    }
     @media (max-width: 980px) {
       .sync-grid { grid-template-columns: 1fr; }
       .queue-grid { grid-template-columns: 1fr; }
@@ -2324,10 +2515,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top-header">
-      <h1>Panneau de gestion des commandes</h1>
-    </div>
+  <div class="wrap orders-page">
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
@@ -2336,169 +2524,185 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
-    <p class="intro">Maison Bouchra Filali Lahlou · suivi raffiné des commandes et livraisons</p>
 
-    <section class="card">
-      <h2>Commandes</h2>
-      <div class="line">
-        <span class="status">Mode direct: la synchronisation utilise vos identifiants .env.</span>
-        <span id="syncStatus" class="status"></span>
+    <div class="orders-page-head">
+      <div class="orders-page-head-copy">
+        <div class="orders-page-kicker">Commandes</div>
+        <h1>Orders</h1>
+        <p class="intro">Gérez et suivez les commandes sur une surface proche de Shopify Admin.</p>
       </div>
-      <details id="ordersOverviewDisclosure" class="mobile-disclosure mobile-overview-disclosure">
-        <summary>Vue d'ensemble</summary>
-        <div class="mobile-disclosure-body">
-      <div class="kpi-row">
-        <div class="kpi-layout">
-          <div class="kpi">
-            <div class="kpi-title">Total chiffre d'affaires</div>
-            <div id="kpiRevenueTotal" class="kpi-value small">0</div>
-            <div id="kpiRevenueBreakdown" class="kpi-sub"><span class="kpi-muted">-</span></div>
-            <div class="kpi-chart-toggles">
-              <label id="toggleRevenueCurveCard" class="kpi-chart-toggle revenue active">
-                <span class="kpi-chart-toggle-head">
-                  <input id="toggleRevenueCurve" type="checkbox" checked />
-                </span>
-                <span id="toggleRevenueCurveState" class="kpi-chart-toggle-state">CA</span>
-              </label>
-              <label id="toggleScoreCurveCard" class="kpi-chart-toggle score active">
-                <span class="kpi-chart-toggle-head">
-                  <input id="toggleScoreCurve" type="checkbox" checked />
-                </span>
-                <span id="toggleScoreCurveState" class="kpi-chart-toggle-state">Score</span>
-              </label>
-            </div>
-            <div id="kpiRevenueChart" class="kpi-chart"></div>
+      <div class="orders-page-head-actions">
+        <span class="orders-head-note">Mode direct via synchronisation de vos commandes</span>
+        <button id="syncNowBtn" type="button" class="orders-head-sync-btn">Synchroniser</button>
+      </div>
+    </div>
+
+    <section class="card orders-primary-card">
+      <div class="orders-toolbar">
+        <div class="orders-toolbar-search">
+          <label for="orderSearch">Recherche</label>
+          <input id="orderSearch" type="search" placeholder="Rechercher par commande, client, téléphone, article..." />
+        </div>
+        <div class="orders-toolbar-filters">
+          <div class="orders-toolbar-field orders-toolbar-field-wide">
+            <label for="presetRange">Période</label>
+            <select id="presetRange">
+              <option value="year">Année en cours</option>
+              <option value="currentMonth">Mois en cours</option>
+              <option value="today">Aujourd'hui</option>
+              <option value="yesterday">Hier</option>
+              <option value="last90">90 derniers jours</option>
+              <option value="last30">30 derniers jours</option>
+              <option value="last7">7 derniers jours</option>
+              <option value="last365">365 derniers jours</option>
+              <option value="last12m">12 derniers mois</option>
+              <option value="lastMonth">Le mois dernier</option>
+              <option value="lastWeek">La semaine dernière</option>
+              <option value="custom">Personnalisé</option>
+            </select>
           </div>
-          <div class="kpi-middle">
-            <div class="kpi">
-              <div class="kpi-orders-split">
-                <div class="kpi-orders-main">
-                  <div class="kpi-title">Nombre de commandes</div>
-                  <div id="kpiOrdersCount" class="kpi-value">0</div>
-                  <div id="kpiArticlesSummary" class="kpi-sub"><span class="kpi-muted">-</span></div>
+          <div class="orders-toolbar-field">
+            <label for="syncFrom">Du</label>
+            <input id="syncFrom" type="date" />
+          </div>
+          <div class="orders-toolbar-field">
+            <label for="syncTo">Au</label>
+            <input id="syncTo" type="date" />
+          </div>
+        </div>
+      </div>
+
+      <div id="periodHorizonBar" class="period-horizon shopify-period-horizon">
+        <button type="button" class="period-horizon-btn" data-period-preset="year">Année en cours</button>
+        <button type="button" class="period-horizon-btn" data-period-preset="currentMonth">Mois en cours</button>
+        <button type="button" class="period-horizon-btn" data-period-preset="lastMonth">Mois dernier</button>
+      </div>
+
+      <div id="ordersStatusTabs" class="orders-status-tabs">
+        <button type="button" class="orders-status-tab active" data-order-tab="all">Toutes</button>
+        <button type="button" class="orders-status-tab" data-order-tab="unpaid">À encaisser</button>
+        <button type="button" class="orders-status-tab" data-order-tab="open">En cours</button>
+        <button type="button" class="orders-status-tab" data-order-tab="shipped">Livrées</button>
+        <button type="button" class="orders-status-tab" data-order-tab="paid">Soldées</button>
+      </div>
+
+      <div class="orders-list-header">
+        <div class="orders-list-header-title">Commandes</div>
+        <div id="syncStatus" class="orders-list-status">Chargement…</div>
+      </div>
+
+      <div class="queue-grid orders-main-surface">
+        <div class="orders-main-column">
+          <div id="ordersList" class="orders-list shopify-orders-list"></div>
+        </div>
+        <aside class="detail-box shopify-detail-box">
+          <div id="orderDetail" class="detail-empty">Sélectionnez une commande pour afficher sa fiche.</div>
+        </aside>
+      </div>
+
+      <details id="ordersAdvancedDisclosure" class="orders-advanced-disclosure">
+        <summary>Vue avancée</summary>
+        <div class="orders-advanced-body">
+          <div class="line">
+            <span class="status">Analyse et suivi avancé des commandes</span>
+          </div>
+          <div class="kpi-row">
+            <div class="kpi-layout">
+              <div class="kpi">
+                <div class="kpi-title">Total chiffre d'affaires</div>
+                <div id="kpiRevenueTotal" class="kpi-value small">0</div>
+                <div id="kpiRevenueBreakdown" class="kpi-sub"><span class="kpi-muted">-</span></div>
+                <div class="kpi-chart-toggles">
+                  <label id="toggleRevenueCurveCard" class="kpi-chart-toggle revenue active">
+                    <span class="kpi-chart-toggle-head">
+                      <input id="toggleRevenueCurve" type="checkbox" checked />
+                    </span>
+                    <span id="toggleRevenueCurveState" class="kpi-chart-toggle-state">CA</span>
+                  </label>
+                  <label id="toggleScoreCurveCard" class="kpi-chart-toggle score active">
+                    <span class="kpi-chart-toggle-head">
+                      <input id="toggleScoreCurve" type="checkbox" checked />
+                    </span>
+                    <span id="toggleScoreCurveState" class="kpi-chart-toggle-state">Score</span>
+                  </label>
                 </div>
-                <div class="kpi-orders-insights">
-                  <div class="kpi-insight-grid">
-                    <div class="kpi-insight-item">
-                      <div class="kpi-insight-title">Panier moyen</div>
-                      <div id="kpiInsightAov" class="kpi-insight-value">0</div>
-                      <div id="kpiInsightAovSub" class="kpi-insight-sub">sur période chargée</div>
+                <div id="kpiRevenueChart" class="kpi-chart"></div>
+              </div>
+              <div class="kpi-middle">
+                <div class="kpi">
+                  <div class="kpi-orders-split">
+                    <div class="kpi-orders-main">
+                      <div class="kpi-title">Nombre de commandes</div>
+                      <div id="kpiOrdersCount" class="kpi-value">0</div>
+                      <div id="kpiArticlesSummary" class="kpi-sub"><span class="kpi-muted">-</span></div>
                     </div>
-                    <div class="kpi-insight-item">
-                      <div class="kpi-insight-title">Ventes en espèces</div>
-                      <div id="kpiInsightRevenue" class="kpi-insight-value">0</div>
-                      <div id="kpiInsightRevenueSub" class="kpi-insight-sub">sur période chargée</div>
+                    <div class="kpi-orders-insights">
+                      <div class="kpi-insight-grid">
+                        <div class="kpi-insight-item">
+                          <div class="kpi-insight-title">Panier moyen</div>
+                          <div id="kpiInsightAov" class="kpi-insight-value">0</div>
+                          <div id="kpiInsightAovSub" class="kpi-insight-sub">sur période chargée</div>
+                        </div>
+                        <div class="kpi-insight-item">
+                          <div class="kpi-insight-title">Ventes en espèces</div>
+                          <div id="kpiInsightRevenue" class="kpi-insight-value">0</div>
+                          <div id="kpiInsightRevenueSub" class="kpi-insight-sub">sur période chargée</div>
+                        </div>
+                        <div class="kpi-insight-item">
+                          <div class="kpi-insight-title">Taux clients récurrents</div>
+                          <div id="kpiInsightRepeatRate" class="kpi-insight-value">0%</div>
+                          <div id="kpiInsightRepeatRateSub" class="kpi-insight-sub">clients avec +1 commande</div>
+                        </div>
+                      </div>
                     </div>
-                    <div class="kpi-insight-item">
-                      <div class="kpi-insight-title">Taux clients récurrents</div>
-                      <div id="kpiInsightRepeatRate" class="kpi-insight-value">0%</div>
-                      <div id="kpiInsightRepeatRateSub" class="kpi-insight-sub">clients avec +1 commande</div>
+                  </div>
+                </div>
+                <div class="kpi">
+                  <div class="kpi-dual-grid">
+                    <div class="kpi-dual-item">
+                      <div class="kpi-dual-title">Ventes en virements</div>
+                      <div id="kpiTransferSales" class="kpi-dual-value">0</div>
+                      <div id="kpiTransferSalesSub" class="kpi-dual-sub">sur période chargée</div>
+                    </div>
+                    <div class="kpi-dual-item">
+                      <div class="kpi-dual-title">Ventes en chéquier</div>
+                      <div id="kpiChequeSales" class="kpi-dual-value">0</div>
+                      <div id="kpiChequeSalesSub" class="kpi-dual-sub">sur période chargée</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="kpi-stack">
+                <div class="kpi">
+                  <div class="kpi-title">Commandes avec solde restant</div>
+                  <div id="kpiUnpaid" class="kpi-value">0</div>
+                </div>
+                <div class="kpi">
+                  <div class="kpi-title">Total à encaisser</div>
+                  <div id="kpiUnpaidTotal" class="kpi-value small">0</div>
+                  <div id="kpiUnpaidBreakdown" class="kpi-sub"><span class="kpi-muted">-</span></div>
+                </div>
+                <div class="kpi">
+                  <div class="kpi-dual-grid">
+                    <div class="kpi-dual-item">
+                      <div class="kpi-dual-title">Commandes en cours</div>
+                      <div id="kpiInProgress" class="kpi-dual-value">0</div>
+                    </div>
+                    <div class="kpi-dual-item">
+                      <div class="kpi-dual-title">Commandes livrées</div>
+                      <div id="kpiShipped" class="kpi-dual-value">0</div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div class="kpi">
-              <div class="kpi-dual-grid">
-                <div class="kpi-dual-item">
-                  <div class="kpi-dual-title">Ventes en virements</div>
-                  <div id="kpiTransferSales" class="kpi-dual-value">0</div>
-                  <div id="kpiTransferSalesSub" class="kpi-dual-sub">sur période chargée</div>
-                </div>
-                <div class="kpi-dual-item">
-                  <div class="kpi-dual-title">Vente en chéquier</div>
-                  <div id="kpiChequeSales" class="kpi-dual-value">0</div>
-                  <div id="kpiChequeSalesSub" class="kpi-dual-sub">sur période chargée</div>
-                </div>
-              </div>
-            </div>
           </div>
-          <div class="kpi-stack">
-            <div class="kpi">
-              <div class="kpi-title">Commandes avec solde restant</div>
-              <div id="kpiUnpaid" class="kpi-value">0</div>
-            </div>
-            <div class="kpi">
-              <div class="kpi-title">Total à encaisser</div>
-              <div id="kpiUnpaidTotal" class="kpi-value small">0</div>
-              <div id="kpiUnpaidBreakdown" class="kpi-sub"><span class="kpi-muted">-</span></div>
-            </div>
-            <div class="kpi">
-              <div class="kpi-dual-grid">
-                <div class="kpi-dual-item">
-                  <div class="kpi-dual-title">Commandes en cours</div>
-                  <div id="kpiInProgress" class="kpi-dual-value">0</div>
-                </div>
-                <div class="kpi-dual-item">
-                  <div class="kpi-dual-title">Commandes livrées</div>
-                  <div id="kpiShipped" class="kpi-dual-value">0</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-        </div>
-      </details>
-      <div class="orders-search-block">
-        <label for="orderSearch">Recherche commandes</label>
-        <input id="orderSearch" type="search" placeholder="Commande, client, téléphone, article, mode de paiement..." />
-      </div>
-      <details id="ordersFiltersDisclosure" class="mobile-disclosure mobile-filters-disclosure">
-        <summary>Filtres et synchronisation</summary>
-        <div class="mobile-disclosure-body">
-      <div class="sync-grid mobile-filters-grid">
-        <div>
-          <label for="presetRange">Période</label>
-          <select id="presetRange">
-            <option value="year">Année en cours</option>
-            <option value="currentMonth">Mois en cours</option>
-            <option value="today">Aujourd'hui</option>
-            <option value="yesterday">Hier</option>
-            <option value="last90">90 derniers jours</option>
-            <option value="last30">30 derniers jours</option>
-            <option value="last7">7 derniers jours</option>
-            <option value="last365">365 derniers jours</option>
-            <option value="last12m">12 derniers mois</option>
-            <option value="lastMonth">Le mois dernier</option>
-            <option value="lastWeek">La semaine dernière</option>
-            <option value="custom">Personnalisé</option>
-          </select>
-          <div id="periodHorizonBar" class="period-horizon">
-            <span class="period-horizon-label">Horizon</span>
-            <button type="button" class="period-horizon-btn" data-period-preset="year">Année en cours</button>
-            <button type="button" class="period-horizon-btn" data-period-preset="lastMonth">Mois dernier</button>
-            <button type="button" class="period-horizon-btn" data-period-preset="currentMonth">Mois en cours</button>
-          </div>
-        </div>
-        <div>
-          <label for="syncFrom">Du</label>
-          <input id="syncFrom" type="date" />
-        </div>
-        <div>
-          <label for="syncTo">Au</label>
-          <input id="syncTo" type="date" />
-        </div>
-      </div>
-        </div>
-      </details>
-      <div class="queue-grid">
-        <div>
-          <div id="ordersList" class="orders-list"></div>
-          <details id="ordersDeliveryDisclosure" class="mobile-disclosure mobile-delivery-disclosure">
-            <summary>Livraisons par tour</summary>
-            <div class="mobile-disclosure-body">
-          <div class="deliveries-box">
+          <div class="deliveries-box orders-advanced-deliveries">
             <h3>Livraisons par tour</h3>
             <div id="deliveryQueueList" class="orders-list"></div>
           </div>
-            </div>
-          </details>
         </div>
-        <div class="detail-box">
-          <div id="orderDetail" class="detail-empty">Sélectionnez une commande pour voir et mettre à jour son suivi.</div>
-        </div>
-      </div>
+      </details>
     </section>
   </div>
 
@@ -2637,6 +2841,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const presetRangeEl = document.getElementById("presetRange");
     const periodHorizonBarEl = document.getElementById("periodHorizonBar");
     const orderSearchEl = document.getElementById("orderSearch");
+    const syncNowBtnEl = document.getElementById("syncNowBtn");
+    const ordersStatusTabsEl = document.getElementById("ordersStatusTabs");
     const syncStatusEl = document.getElementById("syncStatus");
     const ordersListEl = document.getElementById("ordersList");
     const deliveryQueueListEl = document.getElementById("deliveryQueueList");
@@ -2712,6 +2918,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     let chartRangeFrom = "";
     let chartRangeTo = "";
     let orderSearchTerm = "";
+    let activeOrderTab = "all";
     let showRevenueCurve = true;
     let showScoreCurve = true;
     let mobileDetailOpen = false;
@@ -3866,10 +4073,53 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       return false;
     }
 
+    function orderMatchesActiveTab(order, tab) {
+      const financial = String(order.financialStatus || "").toLowerCase();
+      const shipping = String(order.shippingStatus || "").toLowerCase();
+      const outstanding = Number(order.outstandingAmount || 0);
+      switch (tab) {
+        case "unpaid":
+          return outstanding > 0;
+        case "open":
+          return shipping !== "shipped";
+        case "shipped":
+          return shipping === "shipped";
+        case "paid":
+          return outstanding <= 0 || financial === "paid";
+        case "all":
+        default:
+          return true;
+      }
+    }
+
+    function countOrdersForTab(tab) {
+      return orders.reduce((count, order) => count + (orderMatchesActiveTab(order, tab) ? 1 : 0), 0);
+    }
+
+    function renderOrdersStatusTabs() {
+      if (!ordersStatusTabsEl) return;
+      const labels = {
+        all: "Toutes",
+        unpaid: "À encaisser",
+        open: "En cours",
+        shipped: "Livrées",
+        paid: "Soldées"
+      };
+      ordersStatusTabsEl.querySelectorAll(".orders-status-tab[data-order-tab]").forEach((tabButton) => {
+        const tab = tabButton.getAttribute("data-order-tab") || "all";
+        const count = countOrdersForTab(tab);
+        tabButton.classList.toggle("active", tab === activeOrderTab);
+        tabButton.textContent = labels[tab] + " (" + count + ")";
+      });
+    }
+
     function getVisibleOrders() {
       const term = String(orderSearchTerm || "").trim().toLowerCase();
-      if (!term) return orders;
-      return orders.filter((order) => orderMatchesSearch(order, term));
+      return orders.filter((order) => {
+        if (!orderMatchesActiveTab(order, activeOrderTab)) return false;
+        if (!term) return true;
+        return orderMatchesSearch(order, term);
+      });
     }
 
     function updateKpis(data) {
@@ -4609,24 +4859,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       detail.innerHTML =
         "<div class='line detail-title-row'><strong>" +
         escapeHtml(order.name) +
-        "</strong><span class='pill'>Rang #" +
-        escapeHtml(order.rank) +
+        "</strong><span class='customer-sub'>Commande #" +
+        escapeHtml(order.id) +
         "</span></div>" +
         "<div class='order-meta-row'>" +
         paymentBadgeHtml(order) +
         treatmentBadgeHtml(order) +
         vm.gatewayTag +
         "</div>" +
-        "<div class='status'>Reçu le " +
-        escapeHtml(vm.createdDateLabel) +
-        " à " +
-        escapeHtml(vm.createdTimeLabel) +
-        " · " +
-        escapeHtml(order.orderLocation || "Non renseigné") +
+        "<div class='info-list shopify-detail-box shopify-detail-summary'>" +
+          "<div class='info-item'><div class='info-label'>Créée</div><div class='info-value'>" + escapeHtml(vm.createdDateLabel + " à " + vm.createdTimeLabel) + "</div></div>" +
+          "<div class='info-item'><div class='info-label'>Canal</div><div class='info-value'>" + escapeHtml(order.orderLocation || "Non renseigné") + "</div></div>" +
+          "<div class='info-item'><div class='info-label'>Total</div><div class='info-value'>" + vm.totalLabel + "</div></div>" +
+          "<div class='info-item'><div class='info-label'>Reste à payer</div><div class='info-value'>" + vm.remainingLabel + "</div></div>" +
         "</div>" +
         "<div class='order-shell'>" +
           "<div class='order-card'>" +
-            "<h4>Client</h4>" +
+            "<h4>Client et actions</h4>" +
             "<div class='order-action-block'>" +
               "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer le document à Bouchra</button>" +
               "<div class='order-action-utility-row'>" +
@@ -4648,15 +4897,15 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             "</div>" +
           "</div>" +
           "<div class='order-card'>" +
-            "<h4>Traitement</h4>" +
-            "<div class='status'>Statut de livraison et date planifiée</div>" +
-            "<div id='quickOrderForm'></div>" +
-          "</div>" +
-          "<div class='order-card'>" +
             "<h4>Paiement</h4>" +
             "<div class='info-list'>" +
             vm.paymentInfoRows.join("") +
             "</div>" +
+          "</div>" +
+          "<div class='order-card'>" +
+            "<h4>Traitement</h4>" +
+            "<div class='status'>Statut de livraison, date planifiée et emplacement de suivi.</div>" +
+            "<div id='quickOrderForm'></div>" +
           "</div>" +
         "</div>";
 
@@ -4680,9 +4929,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "<th>Commande</th>" +
         "<th>Date</th>" +
         "<th>Client</th>" +
-        "<th>Reste à payer</th>" +
-        "<th>Statut du paiement</th>" +
+        "<th>Paiement</th>" +
         "<th>Livraison</th>" +
+        "<th>Total</th>" +
         "</tr></thead><tbody></tbody></table>";
 
       const tbody = ordersListEl.querySelector("tbody");
@@ -4708,19 +4957,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "Tél: " +
           escapeHtml(customerPhoneLabel(order)) +
           " · " +
-          order.articles.length +
-          " article(s)</div></td>" +
-          "<td>" +
-          escapeHtml(remainingAmountLabel(order)) +
-          "</td>" +
+          orderItemsCount(order) +
+          " pièce(s)</div></td>" +
           "<td>" +
           paymentBadgeHtml(order) +
-          "</td>" +
+          "<div class='customer-sub'>" +
+          escapeHtml(remainingAmountLabel(order)) +
+          "</div></td>" +
           "<td><span class='" +
           shippingClass +
           "'>" +
           escapeHtml(statusLabel(order.shippingStatus)) +
-          "</span></td>";
+          "</span><div class='customer-sub'>" +
+          escapeHtml(order.shippingDate ? String(order.shippingDate).slice(0, 10) : "Date non planifiée") +
+          "</div></td>" +
+          "<td><strong>" +
+          formatMoney(order.totalAmount || 0, order.currency) +
+          "</strong></td>";
         row.addEventListener("click", () => {
           handleOrderSelection(order);
         });
@@ -4801,13 +5054,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
 
     function renderOrdersView() {
       const visibleOrders = getVisibleOrders();
+      if (syncStatusEl && orders.length && !syncInFlight) {
+        syncStatusEl.textContent = visibleOrders.length + " commande(s) affichée(s)";
+      }
 
       if (visibleOrders.length === 0) {
         closeMobileOrderDetail();
         ordersListEl.classList.remove("mobile-stack");
-        ordersListEl.innerHTML = "<div class='status'>Aucun résultat pour votre recherche.</div>";
+        ordersListEl.innerHTML = "<div class='status'>Aucune commande pour ce filtre.</div>";
         deliveryQueueListEl.classList.remove("mobile-stack");
-        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison pour cette recherche.</div>";
+        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison pour ce filtre.</div>";
         orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
         return;
       }
@@ -4869,6 +5125,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       }
 
       orders = parsed.data.orders || [];
+      renderOrdersStatusTabs();
       if (orders.length === 0) {
         closeMobileOrderDetail();
         ordersListEl.classList.remove("mobile-stack");
@@ -4882,6 +5139,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
 
       refreshLocationOptions(orders);
       updateKpis(orders);
+      renderOrdersStatusTabs();
       renderOrdersView();
     }
 
@@ -5028,6 +5286,24 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       orderSearchTerm = orderSearchEl.value || "";
       renderOrdersView();
     });
+    if (syncNowBtnEl) {
+      syncNowBtnEl.addEventListener("click", () => {
+        syncOrders();
+      });
+    }
+    if (ordersStatusTabsEl) {
+      ordersStatusTabsEl.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const button = target.closest(".orders-status-tab[data-order-tab]");
+        if (!(button instanceof HTMLElement)) return;
+        const nextTab = button.getAttribute("data-order-tab") || "all";
+        if (nextTab === activeOrderTab) return;
+        activeOrderTab = nextTab;
+        renderOrdersStatusTabs();
+        renderOrdersView();
+      });
+    }
     if (orderMobileBackBtnEl) {
       orderMobileBackBtnEl.addEventListener("click", () => {
         closeMobileOrderDetail();
