@@ -1373,12 +1373,53 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       grid-template-columns: 1.35fr 0.95fr;
       gap: 14px;
     }
+    .orders-search-block {
+      margin-top: 14px;
+    }
+    .mobile-disclosure {
+      margin-top: 14px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      overflow: visible;
+    }
+    .mobile-disclosure > summary {
+      display: none;
+      list-style: none;
+    }
+    .mobile-disclosure > summary::-webkit-details-marker {
+      display: none;
+    }
+    .mobile-disclosure:not([open]) > *:not(summary) {
+      display: block;
+    }
+    .mobile-disclosure-body {
+      padding: 0;
+    }
+    .mobile-overview-disclosure {
+      margin-top: 14px;
+      border: 0;
+      background: transparent;
+    }
+    .mobile-overview-disclosure .mobile-disclosure-body {
+      padding: 0;
+    }
+    .mobile-filters-grid {
+      margin-top: 0;
+    }
     .orders-list {
       border: 1px solid var(--border);
       border-radius: 10px;
       max-height: 56vh;
       overflow: auto;
       background: #fff;
+    }
+    .orders-list.mobile-stack {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      max-height: none;
+      overflow: visible;
     }
     .deliveries-box {
       margin-top: 12px;
@@ -1475,6 +1516,293 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       align-items: center;
       flex-wrap: wrap;
       margin-bottom: 8px;
+    }
+    .mobile-order-card-list {
+      display: grid;
+      gap: 10px;
+    }
+    .mobile-order-card {
+      display: block;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+      padding: 14px;
+      text-align: left;
+      color: inherit;
+      box-shadow: none;
+      min-height: 0;
+      line-height: 1.35;
+    }
+    .mobile-order-card:hover,
+    .mobile-order-card:active {
+      background: #fff;
+      transform: none;
+      box-shadow: none;
+    }
+    .mobile-order-card.active {
+      border-color: #c7ddd3;
+      background: #f3faf7;
+    }
+    .mobile-order-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .mobile-order-card-title {
+      font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.05;
+      color: #202223;
+    }
+    .mobile-order-card-date {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .mobile-order-card-balance {
+      font-size: 13px;
+      font-weight: 700;
+      color: #202223;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .mobile-order-card-customer {
+      margin-top: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #202223;
+    }
+    .mobile-order-card-sub {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .mobile-order-card-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .mobile-order-card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .mobile-order-card-metric {
+      border: 1px solid #eceef0;
+      border-radius: 10px;
+      background: #f8f8f8;
+      padding: 10px;
+    }
+    .mobile-order-card-metric-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .mobile-order-card-metric-value {
+      margin-top: 4px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #202223;
+    }
+    .order-mobile-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 960;
+      background: rgba(17, 19, 22, 0.46);
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+    .order-mobile-overlay.hidden {
+      display: none;
+    }
+    .order-mobile-sheet {
+      width: 100%;
+      max-width: 680px;
+      background: #f6f4ef;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .order-mobile-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 14px 10px;
+      background: rgba(246, 244, 239, 0.96);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e5e0d8;
+    }
+    .order-mobile-back {
+      border-radius: 999px;
+      min-height: 40px;
+      padding: 0 14px;
+      background: #fff;
+      color: #202223;
+      border: 1px solid #d8d2c7;
+      box-shadow: none;
+    }
+    .order-mobile-back:hover,
+    .order-mobile-back:active {
+      background: #fff;
+      color: #202223;
+      transform: none;
+      box-shadow: none;
+    }
+    .order-mobile-head-copy {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .order-mobile-head-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .order-mobile-head-title {
+      margin-top: 3px;
+      font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
+      font-size: 24px;
+      line-height: 1.05;
+      font-weight: 700;
+      color: #202223;
+    }
+    .order-mobile-topmeta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 0 14px 12px;
+      background: rgba(246, 244, 239, 0.96);
+      border-bottom: 1px solid #e5e0d8;
+    }
+    .order-mobile-body {
+      padding: 14px 14px 24px;
+      display: grid;
+      gap: 12px;
+    }
+    .order-mobile-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .order-mobile-summary-card {
+      border: 1px solid #e4ded4;
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+    }
+    .order-mobile-summary-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .order-mobile-summary-value {
+      margin-top: 6px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #202223;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+    .order-mobile-section {
+      border: 1px solid #e4ded4;
+      border-radius: 14px;
+      background: #fff;
+      padding: 14px;
+    }
+    .order-mobile-section h4 {
+      margin: 0 0 10px;
+      font-size: 17px;
+    }
+    .order-mobile-primary-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .order-mobile-primary-actions button,
+    .order-mobile-secondary-actions button {
+      width: 100%;
+      min-height: 46px;
+      justify-content: center;
+    }
+    .order-mobile-secondary-actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .order-mobile-payment-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .order-mobile-payment-item {
+      border: 1px solid #eceef0;
+      border-radius: 10px;
+      background: #fafafa;
+      padding: 10px;
+      display: grid;
+      gap: 4px;
+    }
+    .order-mobile-payment-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #202223;
+    }
+    .order-mobile-payment-date {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .order-mobile-secondary {
+      border: 1px solid #e4ded4;
+      border-radius: 14px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .order-mobile-secondary > summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 14px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #202223;
+    }
+    .order-mobile-secondary > summary::-webkit-details-marker {
+      display: none;
+    }
+    .order-mobile-secondary-body {
+      padding: 0 14px 14px;
+    }
+    .order-mobile-empty {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .order-mobile-form-host .detail-grid,
+    .order-mobile-form-host .article-row,
+    .order-mobile-form-host .modal-grid {
+      grid-template-columns: 1fr;
+    }
+    .order-mobile-form-host input,
+    .order-mobile-form-host select {
+      min-height: 44px;
+      font-size: 16px;
+    }
+    .order-mobile-form-host .save-order-btn {
+      width: 100%;
+      min-height: 46px;
     }
     .tag-soft {
       display: inline-flex;
@@ -1775,6 +2103,86 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       .detail-box { position: static; min-height: 280px; }
       .order-shell { grid-template-columns: 1fr; }
     }
+    @media (max-width: 860px) {
+      .mobile-disclosure {
+        display: block;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        overflow: hidden;
+      }
+      .mobile-disclosure > summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 14px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #202223;
+        cursor: pointer;
+      }
+      .mobile-disclosure > summary::after {
+        content: "+";
+        color: #6b6f73;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .mobile-disclosure[open] > summary::after {
+        content: "−";
+      }
+      .mobile-disclosure:not([open]) > *:not(summary) {
+        display: none;
+      }
+      .mobile-disclosure[open] > *:not(summary) {
+        display: block;
+      }
+      .mobile-disclosure-body {
+        padding: 12px 14px 14px;
+        background: #fff;
+      }
+      .mobile-overview-disclosure {
+        border: 1px solid var(--border);
+        background: #fff;
+      }
+      .mobile-overview-disclosure .mobile-disclosure-body {
+        padding: 12px;
+      }
+      .mobile-filters-grid {
+        grid-template-columns: 1fr;
+      }
+      .orders-list {
+        max-height: none;
+        overflow: visible;
+      }
+      .detail-box {
+        display: none;
+      }
+      .deliveries-box {
+        margin-top: 0;
+      }
+      .modal-backdrop {
+        padding: 0;
+        align-items: stretch;
+      }
+      .modal-card {
+        width: 100%;
+        max-height: none;
+        height: 100vh;
+        border-radius: 0;
+        border: 0;
+        padding: 14px;
+      }
+      .modal-preview-frame {
+        min-height: 58vh;
+      }
+      .modal-actions {
+        position: sticky;
+        bottom: 0;
+        background: #fff;
+        padding-top: 10px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1802,6 +2210,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         <span class="status">Mode direct: la synchronisation utilise vos identifiants .env.</span>
         <span id="syncStatus" class="status"></span>
       </div>
+      <details id="ordersOverviewDisclosure" class="mobile-disclosure mobile-overview-disclosure">
+        <summary>Vue d'ensemble</summary>
+        <div class="mobile-disclosure-body">
       <div class="kpi-row">
         <div class="kpi-layout">
           <div class="kpi">
@@ -1893,7 +2304,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           </div>
         </div>
       </div>
-      <div class="sync-grid">
+        </div>
+      </details>
+      <div class="orders-search-block">
+        <label for="orderSearch">Recherche commandes</label>
+        <input id="orderSearch" type="search" placeholder="Commande, client, téléphone, article, mode de paiement..." />
+      </div>
+      <details id="ordersFiltersDisclosure" class="mobile-disclosure mobile-filters-disclosure">
+        <summary>Filtres et synchronisation</summary>
+        <div class="mobile-disclosure-body">
+      <div class="sync-grid mobile-filters-grid">
         <div>
           <label for="presetRange">Période</label>
           <select id="presetRange">
@@ -1925,18 +2345,21 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           <label for="syncTo">Au</label>
           <input id="syncTo" type="date" />
         </div>
-        <div class="full-span">
-          <label for="orderSearch">Recherche commandes</label>
-          <input id="orderSearch" type="search" placeholder="Commande, client, téléphone, article, mode de paiement..." />
-        </div>
       </div>
+        </div>
+      </details>
       <div class="queue-grid">
         <div>
           <div id="ordersList" class="orders-list"></div>
+          <details id="ordersDeliveryDisclosure" class="mobile-disclosure mobile-delivery-disclosure">
+            <summary>Livraisons par tour</summary>
+            <div class="mobile-disclosure-body">
           <div class="deliveries-box">
             <h3>Livraisons par tour</h3>
             <div id="deliveryQueueList" class="orders-list"></div>
           </div>
+            </div>
+          </details>
         </div>
         <div class="detail-box">
           <div id="orderDetail" class="detail-empty">Sélectionnez une commande pour voir et mettre à jour son suivi.</div>
@@ -1944,6 +2367,20 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       </div>
     </section>
   </div>
+
+    <div id="orderMobileDetailOverlay" class="order-mobile-overlay hidden">
+      <div class="order-mobile-sheet">
+        <div class="order-mobile-topbar">
+          <button id="orderMobileBackBtn" type="button" class="order-mobile-back">Retour</button>
+          <div class="order-mobile-head-copy">
+            <div class="order-mobile-head-label">Commande</div>
+            <div id="orderMobileHeadTitle" class="order-mobile-head-title">-</div>
+          </div>
+        </div>
+        <div id="orderMobileTopMeta" class="order-mobile-topmeta"></div>
+        <div id="orderMobileDetailBody" class="order-mobile-body"></div>
+      </div>
+    </div>
 
     <div id="bankDetailsModal" class="modal-backdrop hidden">
       <div class="modal-card">
@@ -2037,6 +2474,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const ordersListEl = document.getElementById("ordersList");
     const deliveryQueueListEl = document.getElementById("deliveryQueueList");
     const orderDetailEl = document.getElementById("orderDetail");
+    const orderMobileDetailOverlayEl = document.getElementById("orderMobileDetailOverlay");
+    const orderMobileDetailBodyEl = document.getElementById("orderMobileDetailBody");
+    const orderMobileTopMetaEl = document.getElementById("orderMobileTopMeta");
+    const orderMobileHeadTitleEl = document.getElementById("orderMobileHeadTitle");
+    const orderMobileBackBtnEl = document.getElementById("orderMobileBackBtn");
     const kpiRevenueTotalEl = document.getElementById("kpiRevenueTotal");
     const kpiRevenueBreakdownEl = document.getElementById("kpiRevenueBreakdown");
     const kpiRevenueChartEl = document.getElementById("kpiRevenueChart");
@@ -2105,6 +2547,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     let orderSearchTerm = "";
     let showRevenueCurve = true;
     let showScoreCurve = true;
+    let mobileDetailOpen = false;
     const defaultLocationOptions = [
       "Showroom Massira - Casablanca, Maroc",
       "Showroom Triangle D'or - Casablanca, Maroc"
@@ -3445,202 +3888,17 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       kpiInProgressEl.textContent = String(inProgressCount);
     }
 
-    function renderOrdersView() {
-      const visibleOrders = getVisibleOrders();
-
-      if (visibleOrders.length === 0) {
-        ordersListEl.innerHTML = "<div class='status'>Aucun résultat pour votre recherche.</div>";
-        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison pour cette recherche.</div>";
-        orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
-        return;
-      }
-
-      if (!selectedOrderId || !visibleOrders.some((order) => order.id === selectedOrderId)) {
-        selectedOrderId = visibleOrders[0].id;
-      }
-
-      ordersListEl.innerHTML =
-        "<table class='orders-table'>" +
-        "<thead><tr>" +
-        "<th>Commande</th>" +
-        "<th>Date</th>" +
-        "<th>Client</th>" +
-        "<th>Reste à payer</th>" +
-        "<th>Statut du paiement</th>" +
-        "<th>Livraison</th>" +
-        "</tr></thead><tbody></tbody></table>";
-
-      const tbody = ordersListEl.querySelector("tbody");
-      visibleOrders.forEach((order) => {
-        const row = document.createElement("tr");
-        if (order.id === selectedOrderId) {
-          row.className = "active-row";
-        }
-
-        const shippingClass = order.shippingStatus === "shipped" ? "pill shipped" : "pill";
-        row.innerHTML =
-          "<td><strong>" +
-          order.name +
-          "</strong><div class='customer-sub'>#" +
-          order.id +
-          "</div></td>" +
-          "<td>" +
-          formatOrderDateLabel(order.createdAt) +
-          "</td>" +
-          "<td><div class='customer-main'>" +
-          (order.customerLabel || "Client inconnu") +
-          "</div><div class='customer-sub'>" +
-          "Tél: " +
-          customerPhoneLabel(order) +
-          " · " +
-          order.articles.length +
-          " article(s)</div></td>" +
-          "<td>" +
-          remainingAmountLabel(order) +
-          "</td>" +
-          "<td>" +
-          paymentBadgeHtml(order) +
-          "</td>" +
-          "<td><span class='" +
-          shippingClass +
-          "'>" +
-          statusLabel(order.shippingStatus) +
-          "</span></td>";
-        row.addEventListener("click", () => {
-          selectedOrderId = order.id;
-          renderOrderDetail(order);
-          loadOrders();
-        });
-        tbody.appendChild(row);
-      });
-
-      renderDeliveryQueue(visibleOrders);
-
-      const selected = visibleOrders.find((order) => order.id === selectedOrderId);
-      if (selected) renderOrderDetail(selected);
+    function isOrdersMobileView() {
+      return window.matchMedia ? window.matchMedia("(max-width: 860px)").matches : window.innerWidth <= 860;
     }
 
-    function refreshLocationOptions(data) {
-      const values = new Set();
-      defaultLocationOptions.forEach((location) => values.add(location));
-      data.forEach((order) => {
-        const value = String(order.orderLocation || "").trim();
-        if (value && value.toLowerCase() !== "non renseigné") {
-          values.add(value);
-        }
-      });
-      locationOptions = Array.from(values).sort((a, b) => a.localeCompare(b));
+    function orderItemsCount(order) {
+      return (Array.isArray(order.articles) ? order.articles : []).reduce((sum, article) => {
+        return sum + Math.max(1, Number(article.quantity || 1));
+      }, 0);
     }
 
-    async function loadOrders() {
-      const query = new URLSearchParams();
-      if (syncFromEl && syncFromEl.value) query.set("from", syncFromEl.value);
-      if (syncToEl && syncToEl.value) query.set("to", syncToEl.value);
-      const res = await fetch("/admin/api/orders" + (query.toString() ? "?" + query.toString() : ""));
-      const parsed = await readJsonSafe(res);
-      if (!parsed.ok) {
-        ordersListEl.innerHTML = "<div class='status'>Impossible de charger les commandes.</div>";
-        return;
-      }
-
-      orders = parsed.data.orders || [];
-      if (orders.length === 0) {
-        ordersListEl.innerHTML = "<div class='status'>Aucune commande chargée. Cliquez sur Synchroniser les commandes.</div>";
-        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison en attente.</div>";
-        orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
-        updateKpis([]);
-        return;
-      }
-
-      refreshLocationOptions(orders);
-      updateKpis(orders);
-      renderOrdersView();
-    }
-
-    function renderDeliveryQueue(data) {
-      const turns = buildDeliveryTurns(data);
-      if (turns.length === 0) {
-        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison en attente.</div>";
-        return;
-      }
-
-      deliveryQueueListEl.innerHTML =
-        "<table class='orders-table'>" +
-        "<thead><tr>" +
-        "<th>Tour</th>" +
-        "<th>Commande</th>" +
-        "<th>Client</th>" +
-        "<th>Date livraison</th>" +
-        "<th>Statut</th>" +
-        "</tr></thead><tbody></tbody></table>";
-
-      const tbody = deliveryQueueListEl.querySelector("tbody");
-      turns.forEach((order, index) => {
-        const row = document.createElement("tr");
-        row.innerHTML =
-          "<td><strong>" +
-          (index + 1) +
-          "</strong></td>" +
-          "<td>" +
-          order.name +
-          "</td>" +
-          "<td>" +
-          (order.customerLabel || "Client inconnu") +
-          "<div class='customer-sub'>Tél: " +
-          customerPhoneLabel(order) +
-          "</div>" +
-          "</td>" +
-          "<td>" +
-          (order.shippingDate ? String(order.shippingDate).slice(0, 10) : "Non planifiée") +
-          "</td>" +
-          "<td><span class='pill'>" +
-          statusLabel(order.shippingStatus) +
-          "</span></td>";
-        row.addEventListener("click", () => {
-          selectedOrderId = order.id;
-          renderOrderDetail(order);
-          loadOrders();
-        });
-        tbody.appendChild(row);
-      });
-    }
-
-    function renderOrderDetail(order) {
-      orderDetailEl.innerHTML = "";
-      const detail = document.createElement("div");
-      const needsBankDetails = Number(order.outstandingAmount || 0) > 0;
-      const createdDate = new Date(order.createdAt);
-      const createdDateLabel = createdDate.toLocaleDateString("fr-FR");
-      const createdTimeLabel = createdDate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-      const clientInfoRows = [
-        "<div class='info-item'><div class='info-label'>Client</div><div class='info-value'>" +
-          (order.customerLabel || "Client inconnu") +
-          "</div></div>",
-        "<div class='info-item'><div class='info-label'>Téléphone</div><div class='info-value'>" +
-          customerPhoneLabel(order) +
-          "</div></div>"
-      ];
-      if (order.customerEmail) {
-        clientInfoRows.push(
-          "<div class='info-item'><div class='info-label'>Email</div><div class='info-value'>" +
-            order.customerEmail +
-            "</div></div>"
-        );
-      }
-      if (order.shippingAddress) {
-        clientInfoRows.push(
-          "<div class='info-item'><div class='info-label'>Adresse d'expédition</div><div class='info-value'>" +
-            order.shippingAddress +
-            "</div></div>"
-        );
-      }
-      if (order.billingAddress) {
-        clientInfoRows.push(
-          "<div class='info-item'><div class='info-label'>Adresse de facturation</div><div class='info-value'>" +
-            order.billingAddress +
-            "</div></div>"
-        );
-      }
+    function buildOrderPaymentRows(order) {
       const paymentDetails = paymentCountDetails(order);
       const paymentTransactions = Array.isArray(order.paymentTransactions) ? order.paymentTransactions : [];
       const paymentBreakdown = Array.isArray(order.paymentBreakdown) ? order.paymentBreakdown : [];
@@ -3682,19 +3940,75 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         if (bValid) return 1;
         return 0;
       });
-      const paymentBreakdownTableHtml = paymentRows.length
+      return { paymentRows, paymentCountText };
+    }
+
+    function buildMobilePaymentBreakdownHtml(paymentRows) {
+      if (!paymentRows.length) {
+        return "<div class='order-mobile-empty'>Montants par moyen non disponibles</div>";
+      }
+      return (
+        "<div class='order-mobile-payment-list'>" +
+        paymentRows.map((row) =>
+          "<div class='order-mobile-payment-item'>" +
+            "<div class='order-mobile-payment-head'><span>" + row.method + "</span><span>" + row.amount + "</span></div>" +
+            "<div class='order-mobile-payment-date'>" + formatPaymentDateLabel(row.occurredAt) + "</div>" +
+          "</div>"
+        ).join("") +
+        "</div>"
+      );
+    }
+
+    function buildOrderDetailViewModel(order) {
+      const needsBankDetails = Number(order.outstandingAmount || 0) > 0;
+      const createdDate = new Date(order.createdAt);
+      const createdDateLabel = createdDate.toLocaleDateString("fr-FR");
+      const createdTimeLabel = createdDate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      const clientInfoRows = [
+        "<div class='info-item'><div class='info-label'>Client</div><div class='info-value'>" +
+          escapeHtml(order.customerLabel || "Client inconnu") +
+          "</div></div>",
+        "<div class='info-item'><div class='info-label'>Téléphone</div><div class='info-value'>" +
+          escapeHtml(customerPhoneLabel(order)) +
+          "</div></div>"
+      ];
+      if (order.customerEmail) {
+        clientInfoRows.push(
+          "<div class='info-item'><div class='info-label'>Email</div><div class='info-value'>" +
+            escapeHtml(order.customerEmail) +
+            "</div></div>"
+        );
+      }
+      if (order.shippingAddress) {
+        clientInfoRows.push(
+          "<div class='info-item'><div class='info-label'>Adresse d'expédition</div><div class='info-value'>" +
+            escapeHtml(order.shippingAddress) +
+            "</div></div>"
+        );
+      }
+      if (order.billingAddress) {
+        clientInfoRows.push(
+          "<div class='info-item'><div class='info-label'>Adresse de facturation</div><div class='info-value'>" +
+            escapeHtml(order.billingAddress) +
+            "</div></div>"
+        );
+      }
+
+      const paymentData = buildOrderPaymentRows(order);
+      const paymentBreakdownTableHtml = paymentData.paymentRows.length
         ? "<table class='payment-detail-table'><tbody>" +
-          paymentRows
+          paymentData.paymentRows
             .map((row) => "<tr><td>" + row.method + "</td><td class='d'>" + formatPaymentDateLabel(row.occurredAt) + "</td><td class='r'>" + row.amount + "</td></tr>")
             .join("") +
           "</tbody></table>"
         : "<span>Montants par moyen non disponibles</span>";
+
       const paymentInfoRows = [
         "<div class='info-item'><div class='info-label'>Statut</div><div class='info-value'>" +
-          paymentLabel(order) +
+          escapeHtml(paymentLabel(order)) +
           "</div></div>",
         "<div class='info-item'><div class='info-label'>Nombre de paiements</div><div class='info-value'>" +
-          paymentCountText +
+          paymentData.paymentCountText +
           "</div></div>",
         "<div class='info-item'><div class='info-label'>Détail des paiements</div><div class='info-value'>" +
           paymentBreakdownTableHtml +
@@ -3706,60 +4020,38 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       if (Number(order.outstandingAmount || 0) > 0) {
         paymentInfoRows.push(
           "<div class='info-item'><div class='info-label'>Reste à payer</div><div class='info-value'>" +
-            remainingAmountLabel(order) +
+            escapeHtml(remainingAmountLabel(order)) +
             "</div></div>"
         );
       }
+
       const gatewayTag = order.paymentGateway
         ? "<span class='badge-status gateway'><span class='badge-icon'>●</span>" + escapeHtml(order.paymentGateway) + "</span>"
         : "";
-      detail.innerHTML =
-        "<div class='line detail-title-row'><strong>" +
-        order.name +
-        "</strong><span class='pill'>Rang #" +
-        order.rank +
-        "</span></div>" +
-        "<div class='order-meta-row'>" +
-        paymentBadgeHtml(order) +
-        treatmentBadgeHtml(order) +
-        gatewayTag +
-        "</div>" +
-        "<div class='status'>Reçu le " +
-        createdDateLabel +
-        " à " +
-        createdTimeLabel +
-        " · " +
-        (order.orderLocation || "Non renseigné") +
-        "</div>" +
-        "<div class='order-shell'>" +
-          "<div class='order-card'>" +
-            "<h4>Client</h4>" +
-            "<div class='info-list'>" +
-            clientInfoRows.join("") +
-            "</div>" +
-            "<div class='line' style='margin-top:10px; gap:8px;'>" +
-              "<button type='button' id='reviewBtn' class='save-order-btn' style='margin-top:0;'>Envoyer demande avis Google</button>" +
-            "</div>" +
-          "</div>" +
-          "<div class='order-card'>" +
-            "<h4>Traitement</h4>" +
-            "<div class='status'>Statut de livraison et date planifiée</div>" +
-            "<div id='quickOrderForm'></div>" +
-          "</div>" +
-          "<div class='order-card'>" +
-            "<h4>Paiement</h4>" +
-            "<div class='info-list'>" +
-            paymentInfoRows.join("") +
-            "</div>" +
-            "<div class='line' style='margin-top:10px; gap:8px;'>" +
-              "<button type='button' id='printInvoiceBtn' class='save-order-btn' style='margin-top:0;'>Imprimer facture</button>" +
-              "<button type='button' id='printReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer reçu</button>" +
-              "<button type='button' id='sendClientBtn' class='save-order-btn' style='margin-top:0;'>Envoyer au client</button>" +
-              "<button type='button' id='sendMaisonBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer à Bouchra</button>" +
-            "</div>" +
-          "</div>" +
-        "</div>";
+      const totalAmount = Math.max(0, Number(order.totalAmount || 0));
+      const outstandingAmount = Math.max(0, Number(order.outstandingAmount || 0));
+      const paidAmount = Math.max(0, totalAmount - outstandingAmount);
 
+      return {
+        needsBankDetails,
+        createdDateLabel,
+        createdTimeLabel,
+        clientInfoRows,
+        paymentInfoRows,
+        paymentRows: paymentData.paymentRows,
+        paymentCountText: paymentData.paymentCountText,
+        paymentBreakdownMobileHtml: buildMobilePaymentBreakdownHtml(paymentData.paymentRows),
+        gatewayTag,
+        totalLabel: formatMoney(totalAmount, order.currency),
+        paidLabel: formatMoney(paidAmount, order.currency),
+        remainingLabel: outstandingAmount > 0 ? formatMoney(outstandingAmount, order.currency) : "Soldée",
+        itemsLabel: String(orderItemsCount(order)) + " pièce(s)",
+        paymentGatewayLabel: escapeHtml(order.paymentGateway || "Non précisée"),
+        paymentStatusLabel: escapeHtml(paymentLabel(order))
+      };
+    }
+
+    function buildOrderQuickForm(order) {
       const form = document.createElement("form");
       form.innerHTML =
         "<div class='detail-grid'>" +
@@ -3781,7 +4073,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const locationCustomWrap = form.querySelector("#orderLocationCustomWrap");
       const locationCustomInput = form.orderLocationCustom;
 
-      const options = Array.from(new Set([...locationOptions, order.orderLocation || ""])).filter(Boolean);
+      const options = Array.from(new Set((locationOptions || []).concat([order.orderLocation || ""]))).filter(Boolean);
       if (options.length === 0) {
         options.push("Non renseigné");
       }
@@ -3825,12 +4117,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         row.className = "article-row";
         row.innerHTML =
           "<div class='article-title'>" +
-          article.title +
+          escapeHtml(article.title) +
           " x" +
-          article.quantity +
+          Math.max(1, Number(article.quantity || 1)) +
           "</div>" +
           "<select data-article-id='" +
-          article.id +
+          escapeHtml(article.id) +
           "'>" +
           "<option value='pending'>En attente</option>" +
           "<option value='in_progress'>En cours</option>" +
@@ -3842,13 +4134,60 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         articlesEl.appendChild(row);
       });
 
-      const quickContainer = detail.querySelector("#quickOrderForm");
-      quickContainer.appendChild(form);
-      const reviewBtn = detail.querySelector("#reviewBtn");
-      const sendClientBtn = detail.querySelector("#sendClientBtn");
-      const sendMaisonBtn = detail.querySelector("#sendMaisonBtn");
-      const printInvoiceBtn = detail.querySelector("#printInvoiceBtn");
-      const printReceiptBtn = detail.querySelector("#printReceiptBtn");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const saveStatus = form.querySelector("#saveOrderStatus");
+        const articleRows = Array.from(form.querySelectorAll("select[data-article-id]"));
+        const payload = {
+          shippingStatus: form.shippingStatus.value,
+          shippingDate: form.shippingDate.value || null,
+          orderLocation:
+            form.orderLocation.value === "__custom__"
+              ? (form.orderLocationCustom.value || "").trim()
+              : (form.orderLocation.value || "").trim(),
+          articles: articleRows.map((select) => ({
+            id: select.getAttribute("data-article-id"),
+            status: select.value
+          }))
+        };
+
+        saveStatus.textContent = "Enregistrement...";
+        const res = await fetch("/admin/api/orders/" + encodeURIComponent(order.id), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const parsedError = await readJsonSafe(res);
+          saveStatus.textContent = parsedError.ok ? (parsedError.data.error || "Échec de l'enregistrement") : "Échec de l'enregistrement";
+          return;
+        }
+
+        saveStatus.textContent = "Enregistré";
+        await loadOrders();
+        setTimeout(() => {
+          saveStatus.textContent = "";
+        }, 1200);
+      });
+
+      return form;
+    }
+
+    function attachOrderDetailInteractions(container, order, needsBankDetails) {
+      const quickContainer = container.querySelector("#quickOrderForm");
+      if (quickContainer) {
+        quickContainer.innerHTML = "";
+        quickContainer.appendChild(buildOrderQuickForm(order));
+      }
+
+      const reviewBtn = container.querySelector("#reviewBtn");
+      const sendClientBtn = container.querySelector("#sendClientBtn");
+      const sendMaisonBtn = container.querySelector("#sendMaisonBtn");
+      const printInvoiceBtn = container.querySelector("#printInvoiceBtn");
+      const printReceiptBtn = container.querySelector("#printReceiptBtn");
+      const previewInvoiceBtn = container.querySelector("#previewInvoiceBtn");
+      const previewReceiptBtn = container.querySelector("#previewReceiptBtn");
       const maisonPhone = "+212661981392";
 
       async function fetchFreshOrderSnapshot() {
@@ -3927,35 +4266,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         }
       }
 
-      sendClientBtn.addEventListener("click", async () => {
-        await sendDocument(order.customerPhone || "", "classic");
-      });
-
-      sendMaisonBtn.addEventListener("click", async () => {
-        await sendDocument(maisonPhone, "classic");
-      });
-
-      reviewBtn.addEventListener("click", async () => {
-        try {
-          syncStatusEl.textContent = "Envoi demande avis Google...";
-          const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(order.id) + "/send-review-template", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" }
-          });
-          const parsed = await readJsonSafe(sendRes);
-          if (!sendRes.ok) {
-            const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
-            syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
-            return;
-          }
-          syncStatusEl.textContent = "Demande d'avis Google envoyée via WhatsApp.";
-        } catch (error) {
-          syncStatusEl.textContent =
-            "Envoi API échoué: " +
-            (error instanceof Error ? error.message : "Erreur inattendue");
-        }
-      });
-
       async function printDocument(initialTemplateChoice) {
         const latestOrder = await fetchFreshOrderSnapshot();
         const latestNeedsBankDetails = Number(latestOrder.outstandingAmount || 0) > 0;
@@ -3981,52 +4291,451 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         popup.print();
       }
 
-      printInvoiceBtn.addEventListener("click", async () => {
-        await printDocument("classic");
-      });
-
-      printReceiptBtn.addEventListener("click", async () => {
-        await printDocument("showroom_receipt");
-      });
-
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const saveStatus = form.querySelector("#saveOrderStatus");
-        const articleRows = Array.from(form.querySelectorAll("select[data-article-id]"));
-        const payload = {
-          shippingStatus: form.shippingStatus.value,
-          shippingDate: form.shippingDate.value || null,
-          orderLocation:
-            form.orderLocation.value === "__custom__"
-              ? (form.orderLocationCustom.value || "").trim()
-              : (form.orderLocation.value || "").trim(),
-          articles: articleRows.map((select) => ({
-            id: select.getAttribute("data-article-id"),
-            status: select.value
-          }))
-        };
-
-        saveStatus.textContent = "Enregistrement...";
-        const res = await fetch("/admin/api/orders/" + encodeURIComponent(order.id), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+      if (sendClientBtn) {
+        sendClientBtn.addEventListener("click", async () => {
+          await sendDocument(order.customerPhone || "", "classic");
         });
+      }
+      if (sendMaisonBtn) {
+        sendMaisonBtn.addEventListener("click", async () => {
+          await sendDocument(maisonPhone, "classic");
+        });
+      }
+      if (reviewBtn) {
+        reviewBtn.addEventListener("click", async () => {
+          try {
+            syncStatusEl.textContent = "Envoi demande avis Google...";
+            const sendRes = await fetch("/admin/api/orders/" + encodeURIComponent(order.id) + "/send-review-template", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" }
+            });
+            const parsed = await readJsonSafe(sendRes);
+            if (!sendRes.ok) {
+              const errMsg = extractApiErrorMessage(parsed, "Réponse invalide API.");
+              syncStatusEl.textContent = "Envoi API échoué: " + errMsg;
+              return;
+            }
+            syncStatusEl.textContent = "Demande d'avis Google envoyée via WhatsApp.";
+          } catch (error) {
+            syncStatusEl.textContent =
+              "Envoi API échoué: " +
+              (error instanceof Error ? error.message : "Erreur inattendue");
+          }
+        });
+      }
+      if (previewInvoiceBtn) {
+        previewInvoiceBtn.addEventListener("click", async () => {
+          await printDocument("classic");
+        });
+      }
+      if (previewReceiptBtn) {
+        previewReceiptBtn.addEventListener("click", async () => {
+          await printDocument("showroom_receipt");
+        });
+      }
+      if (printInvoiceBtn) {
+        printInvoiceBtn.addEventListener("click", async () => {
+          await printDocument("classic");
+        });
+      }
+      if (printReceiptBtn) {
+        printReceiptBtn.addEventListener("click", async () => {
+          await printDocument("showroom_receipt");
+        });
+      }
+    }
 
-        if (!res.ok) {
-          const parsedError = await readJsonSafe(res);
-          saveStatus.textContent = parsedError.ok ? (parsedError.data.error || "Échec de l'enregistrement") : "Échec de l'enregistrement";
-          return;
+    function buildMobileOrderCardHtml(order) {
+      const remainingLabel = remainingAmountLabel(order) || "Soldée";
+      return (
+        "<button type='button' class='mobile-order-card" + (order.id === selectedOrderId ? " active" : "") + "' data-order-id='" + escapeHtml(order.id) + "'>" +
+          "<div class='mobile-order-card-head'>" +
+            "<div>" +
+              "<div class='mobile-order-card-title'>" + escapeHtml(order.name) + "</div>" +
+              "<div class='mobile-order-card-date'>" + escapeHtml(formatOrderDateLabel(order.createdAt)) + "</div>" +
+            "</div>" +
+            "<div class='mobile-order-card-balance'>" + escapeHtml(remainingLabel) + "</div>" +
+          "</div>" +
+          "<div class='mobile-order-card-customer'>" + escapeHtml(order.customerLabel || "Client inconnu") + "</div>" +
+          "<div class='mobile-order-card-sub'>" + escapeHtml(customerPhoneLabel(order)) + " · " + escapeHtml(String(orderItemsCount(order))) + " pièce(s)</div>" +
+          "<div class='mobile-order-card-badges'>" + paymentBadgeHtml(order) + treatmentBadgeHtml(order) + "</div>" +
+          "<div class='mobile-order-card-grid'>" +
+            "<div class='mobile-order-card-metric'><div class='mobile-order-card-metric-label'>Total</div><div class='mobile-order-card-metric-value'>" + formatMoney(order.totalAmount || 0, order.currency) + "</div></div>" +
+            "<div class='mobile-order-card-metric'><div class='mobile-order-card-metric-label'>Paiement</div><div class='mobile-order-card-metric-value'>" + escapeHtml(order.paymentGateway || "Non précisée") + "</div></div>" +
+          "</div>" +
+        "</button>"
+      );
+    }
+
+    function buildMobileDeliveryCardHtml(order, index) {
+      return (
+        "<button type='button' class='mobile-order-card' data-delivery-order-id='" + escapeHtml(order.id) + "'>" +
+          "<div class='mobile-order-card-head'>" +
+            "<div>" +
+              "<div class='mobile-order-card-title'>Tour " + String(index + 1) + "</div>" +
+              "<div class='mobile-order-card-date'>" + escapeHtml(order.name) + "</div>" +
+            "</div>" +
+            "<div class='mobile-order-card-balance'>" + escapeHtml(order.shippingDate ? String(order.shippingDate).slice(0, 10) : "Non planifiée") + "</div>" +
+          "</div>" +
+          "<div class='mobile-order-card-customer'>" + escapeHtml(order.customerLabel || "Client inconnu") + "</div>" +
+          "<div class='mobile-order-card-sub'>" + escapeHtml(customerPhoneLabel(order)) + "</div>" +
+          "<div class='mobile-order-card-badges'><span class='pill'>" + escapeHtml(statusLabel(order.shippingStatus)) + "</span></div>" +
+        "</button>"
+      );
+    }
+
+    function closeMobileOrderDetail() {
+      mobileDetailOpen = false;
+      if (orderMobileDetailOverlayEl) orderMobileDetailOverlayEl.classList.add("hidden");
+      if (orderMobileDetailBodyEl) orderMobileDetailBodyEl.innerHTML = "";
+      if (orderMobileTopMetaEl) orderMobileTopMetaEl.innerHTML = "";
+      document.body.style.overflow = "";
+    }
+
+    function renderMobileOrderDetail(order) {
+      if (!orderMobileDetailOverlayEl || !orderMobileDetailBodyEl || !orderMobileTopMetaEl || !orderMobileHeadTitleEl) return;
+      const vm = buildOrderDetailViewModel(order);
+      orderMobileHeadTitleEl.textContent = order.name || "Commande";
+      orderMobileTopMetaEl.innerHTML = paymentBadgeHtml(order) + treatmentBadgeHtml(order) + vm.gatewayTag;
+      orderMobileDetailBodyEl.innerHTML =
+        "<div class='order-mobile-summary'>" +
+          "<div class='order-mobile-summary-card'><div class='order-mobile-summary-label'>Total</div><div class='order-mobile-summary-value'>" + vm.totalLabel + "</div></div>" +
+          "<div class='order-mobile-summary-card'><div class='order-mobile-summary-label'>Réglé</div><div class='order-mobile-summary-value'>" + vm.paidLabel + "</div></div>" +
+          "<div class='order-mobile-summary-card'><div class='order-mobile-summary-label'>Reste</div><div class='order-mobile-summary-value'>" + vm.remainingLabel + "</div></div>" +
+        "</div>" +
+        "<div class='order-mobile-section'>" +
+          "<div class='info-list'>" +
+            "<div class='info-item'><div class='info-label'>Créée le</div><div class='info-value'>" + escapeHtml(vm.createdDateLabel + " à " + vm.createdTimeLabel) + "</div></div>" +
+            "<div class='info-item'><div class='info-label'>Paiement</div><div class='info-value'>" + vm.paymentGatewayLabel + "</div></div>" +
+            "<div class='info-item'><div class='info-label'>Statut</div><div class='info-value'>" + vm.paymentStatusLabel + "</div></div>" +
+            "<div class='info-item'><div class='info-label'>Pièces</div><div class='info-value'>" + vm.itemsLabel + "</div></div>" +
+          "</div>" +
+        "</div>" +
+        "<div class='order-mobile-primary-actions'>" +
+          "<button type='button' id='sendClientBtn' class='save-order-btn' style='margin-top:0;'>Envoyer au client</button>" +
+          "<button type='button' id='sendMaisonBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer à Bouchra</button>" +
+          "<button type='button' id='previewInvoiceBtn' class='save-order-btn' style='margin-top:0;'>Facture</button>" +
+          "<button type='button' id='previewReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Reçu</button>" +
+        "</div>" +
+        "<details class='order-mobile-secondary'>" +
+          "<summary>Autres actions</summary>" +
+          "<div class='order-mobile-secondary-body'>" +
+            "<div class='order-mobile-secondary-actions'>" +
+              "<button type='button' id='printInvoiceBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer facture</button>" +
+              "<button type='button' id='printReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer reçu</button>" +
+              "<button type='button' id='reviewBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer demande avis Google</button>" +
+            "</div>" +
+          "</div>" +
+        "</details>" +
+        "<div class='order-mobile-section'><h4>Client</h4><div class='info-list'>" + vm.clientInfoRows.join("") + "</div></div>" +
+        "<div class='order-mobile-section'><h4>Paiement</h4><div class='info-list'>" +
+          "<div class='info-item'><div class='info-label'>Nombre de paiements</div><div class='info-value'>" + vm.paymentCountText + "</div></div>" +
+          "<div class='info-item'><div class='info-label'>Détail</div><div class='info-value'>" + vm.paymentBreakdownMobileHtml + "</div></div>" +
+        "</div></div>" +
+        "<div class='order-mobile-section order-mobile-form-host'><h4>Traitement</h4><div id='quickOrderForm'></div></div>";
+      attachOrderDetailInteractions(orderMobileDetailBodyEl, order, vm.needsBankDetails);
+      orderMobileDetailOverlayEl.classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+    }
+
+    function renderDesktopOrderDetail(order) {
+      const vm = buildOrderDetailViewModel(order);
+      orderDetailEl.innerHTML = "";
+      const detail = document.createElement("div");
+      detail.innerHTML =
+        "<div class='line detail-title-row'><strong>" +
+        escapeHtml(order.name) +
+        "</strong><span class='pill'>Rang #" +
+        escapeHtml(order.rank) +
+        "</span></div>" +
+        "<div class='order-meta-row'>" +
+        paymentBadgeHtml(order) +
+        treatmentBadgeHtml(order) +
+        vm.gatewayTag +
+        "</div>" +
+        "<div class='status'>Reçu le " +
+        escapeHtml(vm.createdDateLabel) +
+        " à " +
+        escapeHtml(vm.createdTimeLabel) +
+        " · " +
+        escapeHtml(order.orderLocation || "Non renseigné") +
+        "</div>" +
+        "<div class='order-shell'>" +
+          "<div class='order-card'>" +
+            "<h4>Client</h4>" +
+            "<div class='info-list'>" +
+            vm.clientInfoRows.join("") +
+            "</div>" +
+            "<div class='line' style='margin-top:10px; gap:8px;'>" +
+              "<button type='button' id='reviewBtn' class='save-order-btn' style='margin-top:0;'>Envoyer demande avis Google</button>" +
+            "</div>" +
+          "</div>" +
+          "<div class='order-card'>" +
+            "<h4>Traitement</h4>" +
+            "<div class='status'>Statut de livraison et date planifiée</div>" +
+            "<div id='quickOrderForm'></div>" +
+          "</div>" +
+          "<div class='order-card'>" +
+            "<h4>Paiement</h4>" +
+            "<div class='info-list'>" +
+            vm.paymentInfoRows.join("") +
+            "</div>" +
+            "<div class='line' style='margin-top:10px; gap:8px;'>" +
+              "<button type='button' id='printInvoiceBtn' class='save-order-btn' style='margin-top:0;'>Imprimer facture</button>" +
+              "<button type='button' id='printReceiptBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Imprimer reçu</button>" +
+              "<button type='button' id='sendClientBtn' class='save-order-btn' style='margin-top:0;'>Envoyer au client</button>" +
+              "<button type='button' id='sendMaisonBtn' class='save-order-btn btn-secondary' style='margin-top:0;'>Envoyer à Bouchra</button>" +
+            "</div>" +
+          "</div>" +
+        "</div>";
+
+      attachOrderDetailInteractions(detail, order, vm.needsBankDetails);
+      orderDetailEl.appendChild(detail);
+    }
+
+    function handleOrderSelection(order) {
+      selectedOrderId = order.id;
+      if (isOrdersMobileView()) {
+        mobileDetailOpen = true;
+      }
+      renderOrdersView();
+    }
+
+    function renderOrdersListDesktop(visibleOrders) {
+      ordersListEl.classList.remove("mobile-stack");
+      ordersListEl.innerHTML =
+        "<table class='orders-table'>" +
+        "<thead><tr>" +
+        "<th>Commande</th>" +
+        "<th>Date</th>" +
+        "<th>Client</th>" +
+        "<th>Reste à payer</th>" +
+        "<th>Statut du paiement</th>" +
+        "<th>Livraison</th>" +
+        "</tr></thead><tbody></tbody></table>";
+
+      const tbody = ordersListEl.querySelector("tbody");
+      visibleOrders.forEach((order) => {
+        const row = document.createElement("tr");
+        if (order.id === selectedOrderId) {
+          row.className = "active-row";
         }
 
-        saveStatus.textContent = "Enregistré";
-        await loadOrders();
-        setTimeout(() => {
-          saveStatus.textContent = "";
-        }, 1200);
+        const shippingClass = order.shippingStatus === "shipped" ? "pill shipped" : "pill";
+        row.innerHTML =
+          "<td><strong>" +
+          escapeHtml(order.name) +
+          "</strong><div class='customer-sub'>#" +
+          escapeHtml(order.id) +
+          "</div></td>" +
+          "<td>" +
+          escapeHtml(formatOrderDateLabel(order.createdAt)) +
+          "</td>" +
+          "<td><div class='customer-main'>" +
+          escapeHtml(order.customerLabel || "Client inconnu") +
+          "</div><div class='customer-sub'>" +
+          "Tél: " +
+          escapeHtml(customerPhoneLabel(order)) +
+          " · " +
+          order.articles.length +
+          " article(s)</div></td>" +
+          "<td>" +
+          escapeHtml(remainingAmountLabel(order)) +
+          "</td>" +
+          "<td>" +
+          paymentBadgeHtml(order) +
+          "</td>" +
+          "<td><span class='" +
+          shippingClass +
+          "'>" +
+          escapeHtml(statusLabel(order.shippingStatus)) +
+          "</span></td>";
+        row.addEventListener("click", () => {
+          handleOrderSelection(order);
+        });
+        tbody.appendChild(row);
       });
+    }
 
-      orderDetailEl.appendChild(detail);
+    function renderOrdersListMobile(visibleOrders) {
+      ordersListEl.classList.add("mobile-stack");
+      ordersListEl.innerHTML =
+        "<div class='mobile-order-card-list'>" +
+        visibleOrders.map((order) => buildMobileOrderCardHtml(order)).join("") +
+        "</div>";
+      ordersListEl.querySelectorAll(".mobile-order-card[data-order-id]").forEach((card) => {
+        card.addEventListener("click", () => {
+          const orderId = card.getAttribute("data-order-id");
+          const order = visibleOrders.find((item) => item.id === orderId);
+          if (order) handleOrderSelection(order);
+        });
+      });
+    }
+
+    function renderDeliveryQueueDesktop(turns) {
+      deliveryQueueListEl.classList.remove("mobile-stack");
+      deliveryQueueListEl.innerHTML =
+        "<table class='orders-table'>" +
+        "<thead><tr>" +
+        "<th>Tour</th>" +
+        "<th>Commande</th>" +
+        "<th>Client</th>" +
+        "<th>Date livraison</th>" +
+        "<th>Statut</th>" +
+        "</tr></thead><tbody></tbody></table>";
+
+      const tbody = deliveryQueueListEl.querySelector("tbody");
+      turns.forEach((order, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML =
+          "<td><strong>" +
+          (index + 1) +
+          "</strong></td>" +
+          "<td>" +
+          escapeHtml(order.name) +
+          "</td>" +
+          "<td>" +
+          escapeHtml(order.customerLabel || "Client inconnu") +
+          "<div class='customer-sub'>Tél: " +
+          escapeHtml(customerPhoneLabel(order)) +
+          "</div>" +
+          "</td>" +
+          "<td>" +
+          escapeHtml(order.shippingDate ? String(order.shippingDate).slice(0, 10) : "Non planifiée") +
+          "</td>" +
+          "<td><span class='pill'>" +
+          escapeHtml(statusLabel(order.shippingStatus)) +
+          "</span></td>";
+        row.addEventListener("click", () => {
+          handleOrderSelection(order);
+        });
+        tbody.appendChild(row);
+      });
+    }
+
+    function renderDeliveryQueueMobile(turns) {
+      deliveryQueueListEl.classList.add("mobile-stack");
+      deliveryQueueListEl.innerHTML =
+        "<div class='mobile-order-card-list'>" +
+        turns.map((order, index) => buildMobileDeliveryCardHtml(order, index)).join("") +
+        "</div>";
+      deliveryQueueListEl.querySelectorAll(".mobile-order-card[data-delivery-order-id]").forEach((card) => {
+        card.addEventListener("click", () => {
+          const orderId = card.getAttribute("data-delivery-order-id");
+          const order = turns.find((item) => item.id === orderId);
+          if (order) handleOrderSelection(order);
+        });
+      });
+    }
+
+    function renderOrdersView() {
+      const visibleOrders = getVisibleOrders();
+
+      if (visibleOrders.length === 0) {
+        closeMobileOrderDetail();
+        ordersListEl.classList.remove("mobile-stack");
+        ordersListEl.innerHTML = "<div class='status'>Aucun résultat pour votre recherche.</div>";
+        deliveryQueueListEl.classList.remove("mobile-stack");
+        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison pour cette recherche.</div>";
+        orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
+        return;
+      }
+
+      if (!selectedOrderId || !visibleOrders.some((order) => order.id === selectedOrderId)) {
+        selectedOrderId = visibleOrders[0].id;
+      }
+
+      if (isOrdersMobileView()) {
+        renderOrdersListMobile(visibleOrders);
+      } else {
+        renderOrdersListDesktop(visibleOrders);
+      }
+
+      renderDeliveryQueue(visibleOrders);
+
+      const selected = visibleOrders.find((order) => order.id === selectedOrderId);
+      if (!selected) {
+        closeMobileOrderDetail();
+        orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
+        return;
+      }
+
+      if (isOrdersMobileView()) {
+        orderDetailEl.innerHTML = "<div class='detail-empty'>Sélectionnez une commande pour ouvrir la fiche mobile.</div>";
+        if (mobileDetailOpen) {
+          renderMobileOrderDetail(selected);
+        } else {
+          closeMobileOrderDetail();
+        }
+        return;
+      }
+
+      closeMobileOrderDetail();
+      renderDesktopOrderDetail(selected);
+    }
+
+    function refreshLocationOptions(data) {
+      const values = new Set();
+      defaultLocationOptions.forEach((location) => values.add(location));
+      data.forEach((order) => {
+        const value = String(order.orderLocation || "").trim();
+        if (value && value.toLowerCase() !== "non renseigné") {
+          values.add(value);
+        }
+      });
+      locationOptions = Array.from(values).sort((a, b) => a.localeCompare(b));
+    }
+
+    async function loadOrders() {
+      const query = new URLSearchParams();
+      if (syncFromEl && syncFromEl.value) query.set("from", syncFromEl.value);
+      if (syncToEl && syncToEl.value) query.set("to", syncToEl.value);
+      const res = await fetch("/admin/api/orders" + (query.toString() ? "?" + query.toString() : ""));
+      const parsed = await readJsonSafe(res);
+      if (!parsed.ok) {
+        ordersListEl.innerHTML = "<div class='status'>Impossible de charger les commandes.</div>";
+        return;
+      }
+
+      orders = parsed.data.orders || [];
+      if (orders.length === 0) {
+        closeMobileOrderDetail();
+        ordersListEl.classList.remove("mobile-stack");
+        ordersListEl.innerHTML = "<div class='status'>Aucune commande chargée. Cliquez sur Synchroniser les commandes.</div>";
+        deliveryQueueListEl.classList.remove("mobile-stack");
+        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison en attente.</div>";
+        orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
+        updateKpis([]);
+        return;
+      }
+
+      refreshLocationOptions(orders);
+      updateKpis(orders);
+      renderOrdersView();
+    }
+
+    function renderDeliveryQueue(data) {
+      const turns = buildDeliveryTurns(data);
+      if (turns.length === 0) {
+        deliveryQueueListEl.classList.remove("mobile-stack");
+        deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison en attente.</div>";
+        return;
+      }
+
+      if (isOrdersMobileView()) {
+        renderDeliveryQueueMobile(turns);
+      } else {
+        renderDeliveryQueueDesktop(turns);
+      }
+    }
+
+    function renderOrderDetail(order) {
+      if (isOrdersMobileView()) {
+        mobileDetailOpen = true;
+        renderOrdersView();
+        return;
+      }
+      renderDesktopOrderDetail(order);
     }
 
     function validDateRange(from, to) {
@@ -4146,6 +4855,25 @@ adminRouter.get(["/", "/orders"], (req, res) => {
 
     orderSearchEl.addEventListener("input", () => {
       orderSearchTerm = orderSearchEl.value || "";
+      renderOrdersView();
+    });
+    if (orderMobileBackBtnEl) {
+      orderMobileBackBtnEl.addEventListener("click", () => {
+        closeMobileOrderDetail();
+      });
+    }
+    if (orderMobileDetailOverlayEl) {
+      orderMobileDetailOverlayEl.addEventListener("click", (event) => {
+        if (event.target === orderMobileDetailOverlayEl) {
+          closeMobileOrderDetail();
+        }
+      });
+    }
+    window.addEventListener("resize", () => {
+      if (!orders.length) return;
+      if (!isOrdersMobileView()) {
+        closeMobileOrderDetail();
+      }
       renderOrdersView();
     });
     toggleRevenueCurveEl.addEventListener("change", () => {
