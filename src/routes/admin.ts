@@ -1273,6 +1273,80 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       transform: none;
       box-shadow: none;
     }
+    .orders-head-invoice-btn {
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid #1f2328;
+      background: #1f2328;
+      color: #fff;
+      box-shadow: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .orders-head-invoice-btn:hover,
+    .orders-head-invoice-btn:active {
+      background: #1f2328;
+      color: #fff;
+      transform: none;
+      box-shadow: none;
+    }
+    .invoice-sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(32, 34, 35, 0.44);
+      z-index: 40;
+    }
+    .invoice-sheet-backdrop.hidden {
+      display: none;
+    }
+    .invoice-sheet {
+      width: min(1380px, calc(100vw - 32px));
+      height: min(92vh, 980px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border-radius: 18px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #dfe3e8;
+      box-shadow: 0 20px 56px rgba(15, 23, 42, 0.2);
+    }
+    .invoice-sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid #e1e3e5;
+      background: #fff;
+    }
+    .invoice-sheet-title {
+      font-size: 18px;
+      font-weight: 650;
+      color: #202223;
+    }
+    .invoice-sheet-close {
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid #d2d5d8;
+      background: #fff;
+      color: #202223;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .invoice-sheet-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+    }
     h1 {
       margin: 0;
       font-size: 32px;
@@ -3186,6 +3260,15 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         background: #fff;
         padding-top: 10px;
       }
+      .invoice-sheet-backdrop {
+        padding: 0;
+      }
+      .invoice-sheet {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        border: 0;
+      }
     }
   </style>
 </head>
@@ -3193,7 +3276,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
   <div class="wrap orders-page ${orderViewMode === "detail" ? "orders-detail-mode" : ""}">
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
-      <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
       <a href="/admin/client-flows${navSuffix}">Flows clients</a>
@@ -3222,7 +3304,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         ${orderViewMode === "detail" ? `<a class="orders-detail-back" href="${detailBackHref}">← Retour à Commandes</a>` : ""}
       </div>
       <div class="orders-page-head-actions">
-        <button id="syncNowBtn" type="button" class="orders-head-sync-btn">Synchroniser</button>
+        ${orderViewMode === "detail" ? "" : `<button id="newInvoiceBtn" type="button" class="orders-head-invoice-btn">Nouvelle facture</button>`}
       </div>
     </div>
 
@@ -3320,6 +3402,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         <button id="ordersTopPeriodCloseBtn" type="button" class="orders-period-popover-close">Fermer</button>
       </div>
     </div>
+    ${orderViewMode === "detail" ? "" : `
+    <div id="invoiceSheetBackdrop" class="invoice-sheet-backdrop hidden">
+      <div class="invoice-sheet" role="dialog" aria-modal="true" aria-labelledby="invoiceSheetTitle">
+        <div class="invoice-sheet-head">
+          <div id="invoiceSheetTitle" class="invoice-sheet-title">Nouvelle facture</div>
+          <button id="invoiceSheetCloseBtn" type="button" class="invoice-sheet-close">Fermer</button>
+        </div>
+        <iframe id="invoiceSheetFrame" class="invoice-sheet-frame" title="Nouvelle facture"></iframe>
+      </div>
+    </div>`}
 
     <section class="card orders-primary-card">
       <div class="orders-toolbar">
@@ -3611,8 +3703,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const periodHorizonBarEl = document.getElementById("periodHorizonBar");
     const orderSearchEl = document.getElementById("orderSearch");
     const orderStateFilterEl = document.getElementById("orderStateFilter");
-    const syncNowBtnEl = document.getElementById("syncNowBtn");
     const syncStatusEl = document.getElementById("syncStatus");
+    const newInvoiceBtnEl = document.getElementById("newInvoiceBtn");
+    const invoiceSheetBackdropEl = document.getElementById("invoiceSheetBackdrop");
+    const invoiceSheetFrameEl = document.getElementById("invoiceSheetFrame");
+    const invoiceSheetCloseBtnEl = document.getElementById("invoiceSheetCloseBtn");
     const ordersListEl = document.getElementById("ordersList");
     const deliveryQueueListEl = document.getElementById("deliveryQueueList");
     const orderDetailEl = document.getElementById("orderDetail");
@@ -6242,7 +6337,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       if (orders.length === 0) {
         closeMobileOrderDetail();
         ordersListEl.classList.remove("mobile-stack");
-        ordersListEl.innerHTML = "<div class='status'>Aucune commande chargée. Cliquez sur Synchroniser les commandes.</div>";
+        ordersListEl.innerHTML = "<div class='status'>Aucune commande chargée pour cette période.</div>";
         deliveryQueueListEl.classList.remove("mobile-stack");
         deliveryQueueListEl.innerHTML = "<div class='status'>Aucune livraison en attente.</div>";
         orderDetailEl.innerHTML = "<div class='detail-empty'>Aucune commande sélectionnée.</div>";
@@ -6455,11 +6550,52 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       orderSearchTerm = orderSearchEl.value || "";
       renderOrdersView();
     });
-    if (syncNowBtnEl) {
-      syncNowBtnEl.addEventListener("click", () => {
-        syncOrders();
+    function invoiceSheetUrl() {
+      const url = new URL("/admin/invoices", window.location.origin);
+      const current = new URL(window.location.href);
+      ["host", "shop", "embedded", "ea"].forEach((key) => {
+        const value = current.searchParams.get(key);
+        if (value) url.searchParams.set(key, value);
+      });
+      url.searchParams.set("modal", "1");
+      return url.toString();
+    }
+    function closeInvoiceSheet() {
+      if (!(invoiceSheetBackdropEl instanceof HTMLElement)) return;
+      invoiceSheetBackdropEl.classList.add("hidden");
+      document.body.style.overflow = "";
+      if (invoiceSheetFrameEl instanceof HTMLIFrameElement) {
+        invoiceSheetFrameEl.src = "about:blank";
+      }
+    }
+    function openInvoiceSheet() {
+      if (!(invoiceSheetBackdropEl instanceof HTMLElement) || !(invoiceSheetFrameEl instanceof HTMLIFrameElement)) return;
+      invoiceSheetFrameEl.src = invoiceSheetUrl();
+      invoiceSheetBackdropEl.classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+    }
+    if (newInvoiceBtnEl) {
+      newInvoiceBtnEl.addEventListener("click", () => {
+        openInvoiceSheet();
       });
     }
+    if (invoiceSheetCloseBtnEl) {
+      invoiceSheetCloseBtnEl.addEventListener("click", () => {
+        closeInvoiceSheet();
+      });
+    }
+    if (invoiceSheetBackdropEl) {
+      invoiceSheetBackdropEl.addEventListener("click", (event) => {
+        if (event.target === invoiceSheetBackdropEl) {
+          closeInvoiceSheet();
+        }
+      });
+    }
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && invoiceSheetBackdropEl && !invoiceSheetBackdropEl.classList.contains("hidden")) {
+        closeInvoiceSheet();
+      }
+    });
     if (orderStateFilterEl) {
       orderStateFilterEl.addEventListener("change", () => {
         const nextTab = orderStateFilterEl.value || "all";
@@ -6527,12 +6663,18 @@ adminRouter.get("/invoices", (req, res) => {
   const shop: string = typeof req.query.shop === "string" ? req.query.shop : "";
   const embedded: string = typeof req.query.embedded === "string" ? req.query.embedded : "";
   const embeddedAccess: string = typeof req.query.ea === "string" ? req.query.ea : "";
+  const modalMode = req.query.modal === "1";
   const navParams = new URLSearchParams();
   if (host) navParams.set("host", host);
   if (shop) navParams.set("shop", shop);
   if (embedded) navParams.set("embedded", embedded);
   if (embeddedAccess) navParams.set("ea", embeddedAccess);
   const navSuffix = navParams.toString() ? `?${navParams.toString()}` : "";
+
+  if (!modalMode) {
+    res.redirect(`/admin/orders${navSuffix}`);
+    return;
+  }
 
   res.type("html").send(`<!doctype html>
 <html lang="fr">
@@ -6587,20 +6729,19 @@ adminRouter.get("/invoices", (req, res) => {
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap"${modalMode ? ` style="max-width:none;margin:0;padding:16px;height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr);"` : ""}>
     <div class="top">
-      <h1>Factures</h1>
+      <h1>${modalMode ? "Nouvelle facture" : "Factures"}</h1>
     </div>
-    <ui-nav-menu>
+    ${modalMode ? "" : `<ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
-      <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
       <a href="/admin/client-flows${navSuffix}">Flows clients</a>
       <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
       <a href="/admin/control-center${navSuffix}#outils">Outils</a>
-    </ui-nav-menu>
-    <p class="intro">Version 1: génération manuelle premium avec modèles Bouchra / Coin de Couture.</p>
+    </ui-nav-menu>`}
+    <p class="intro">${modalMode ? "Création manuelle de facture, directement depuis Commandes." : "Version 1: génération manuelle premium avec modèles Bouchra / Coin de Couture."}</p>
     <div class="layout">
       <section class="card">
         <h2 class="section-title">Création de facture</h2>
@@ -7540,7 +7681,6 @@ adminRouter.get("/insights", (req, res) => {
     <h1>Insights</h1>
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
-      <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
       <a href="/admin/client-flows${navSuffix}">Flows clients</a>
@@ -8639,7 +8779,6 @@ adminRouter.get("/forecast", (req, res) => {
     <h1>Forecast</h1>
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
-      <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
       <a href="/admin/client-flows${navSuffix}">Flows clients</a>
@@ -10140,7 +10279,6 @@ adminRouter.get("/forecast-v2", (req, res) => {
     <h1>Forecast V2</h1>
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
-      <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
       <a href="/admin/client-flows${navSuffix}">Flows clients</a>
@@ -11029,7 +11167,6 @@ adminRouter.get("/priority", (req, res) => {
   <div class="page">
     <nav class="nav">
       <a href="/admin/orders${navSuffix}">Commandes</a>
-      <a href="/admin/invoices${navSuffix}">Factures</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
       <a href="/admin/client-flows${navSuffix}">Flows clients</a>

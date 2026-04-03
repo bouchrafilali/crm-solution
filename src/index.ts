@@ -746,7 +746,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       <div class="hero-actions">
         <input id="moduleSearch" class="search" type="search" placeholder="Rechercher un module..." />
         <div class="hero-meta">
-          <span class="meta-chip">6 modules principaux</span>
+          <span class="meta-chip">5 modules principaux</span>
           <span class="meta-chip">Outils séparés</span>
           <span class="meta-chip">Navigation simplifiée</span>
         </div>
@@ -773,15 +773,6 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <div class="content">
               <p class="title">Commandes</p>
               <p class="subtitle">Vue principale des commandes, paiements, documents et suivi opérationnel</p>
-            </div>
-            <span class="status active">Actif</span>
-            <span class="arrow">›</span>
-          </a>
-          <a class="module-card module-item" data-app-id="invoice" data-search="factures facture generation pdf facturation documents" href="/admin/invoices${navSuffix}">
-            <div class="icon">◔</div>
-            <div class="content">
-              <p class="title">Factures</p>
-              <p class="subtitle">Génération, aperçu et envoi des documents de facturation de la Maison</p>
             </div>
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
@@ -918,14 +909,13 @@ function renderAdminControlCenterPage(navSuffix: string): string {
       blueprint: { label: "Blueprint", icon: "◇", href: "/blueprint${navSuffix}" },
       ml: { label: "ML Dashboard", icon: "◌", href: "/admin/ml${navSuffix}" },
       spline: { label: "Spline", icon: "⬡", href: "/admin/spline${navSuffix}" },
-      invoice: { label: "Factures", icon: "◔", href: "/admin/invoices${navSuffix}" },
       orders: { label: "Commandes", icon: "◐", href: "/admin/orders${navSuffix}" },
       appointments: { label: "Rendez-vous", icon: "◒", href: "/admin/appointments${navSuffix}" },
       "whatsapp-lab": { label: "Laboratoire WhatsApp", icon: "◫", href: "/whatsapp-lab${navSuffix}" },
       logic: { label: "Schéma logique", icon: "⌘", href: "/whatsapp-logic-diagram${navSuffix}" },
       workflow: { label: "Flux manager", icon: "⇄", href: "/whatsapp-intelligence/workflow${navSuffix}" }
     };
-    const defaultRecentApps = ["orders", "invoice", "client-flows", "whatsapp"];
+    const defaultRecentApps = ["orders", "client-flows", "whatsapp", "appointments"];
 
     function readRecentApps() {
       try {
