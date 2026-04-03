@@ -494,17 +494,12 @@ mlAutomationRouter.get("/admin/ml", (req, res) => {
         return (
           <div className="container">
             <ui-nav-menu>
-              <a href={"/admin" + NAV_SUFFIX}>Commandes</a>
+              <a href={"/admin/orders" + NAV_SUFFIX}>Commandes</a>
               <a href={"/admin/invoices" + NAV_SUFFIX}>Factures</a>
-              <a href={"/admin/insights" + NAV_SUFFIX}>Insights</a>
               <a href={"/admin/appointments" + NAV_SUFFIX}>Rendez-vous</a>
               <a href={"/admin/forecast" + NAV_SUFFIX}>Forecast</a>
-              <a href={"/admin/forecast-v2" + NAV_SUFFIX}>Forecast V2</a>
-              <a href={"/admin/ml" + NAV_SUFFIX}>ML Dashboard</a>
-              <a href={"/admin/priority" + NAV_SUFFIX}>Priority</a>
-              <a href={"/blueprint" + NAV_SUFFIX}>Blueprint</a>
-              <a href={"/admin/spline" + NAV_SUFFIX}>Spline</a>
-              <a href={"/admin/whatsapp-intelligence" + NAV_SUFFIX}>WhatsApp Intelligence</a>
+              <a href={"/admin/whatsapp-intelligence" + NAV_SUFFIX}>WhatsApp</a>
+              <a href={"/admin/control-center" + NAV_SUFFIX + "#outils"}>Outils</a>
             </ui-nav-menu>
             <div className="header">
               <div className="header-title">Machine Learning & Automation</div>

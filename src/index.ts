@@ -393,7 +393,7 @@ function renderAdminControlCenterPage(navSuffix: string): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Centre de Contrôle — Mobile-Lab</title>
+  <title>Centre de Contrôle — Maison BFL</title>
   <style>
     :root{
       --bg:#0a1020;
@@ -979,9 +979,9 @@ function renderAdminControlCenterPage(navSuffix: string): string {
 <body>
   <main class="wrap">
     <section class="orientation">
-      <article class="tile"><div class="k">Point de départ recommandé</div><div class="v">Insights</div><div class="d">Le meilleur point d'entrée pour comprendre la situation business et les priorités.</div></article>
-      <article class="tile"><div class="k">Zone de décision</div><div class="v">Forecast</div><div class="d">À utiliser pour les projections, la planification, le revenu attendu et les scénarios.</div></article>
-      <article class="tile"><div class="k">Zone d'exécution</div><div class="v">Mobile App</div><div class="d">Pour l'action, l'activité opérateur, les validations et l'exécution quotidienne.</div></article>
+      <article class="tile"><div class="k">Page principale</div><div class="v">Centre de contrôle</div><div class="d">Hub d’orientation de l’app pour choisir rapidement le bon module sans doublon.</div></article>
+      <article class="tile"><div class="k">Modules quotidiens</div><div class="v">5 modules canoniques</div><div class="d">Commandes, Factures, Rendez-vous, Forecast et WhatsApp concentrent la navigation principale.</div></article>
+      <article class="tile"><div class="k">Zone secondaire</div><div class="v">Outils</div><div class="d">Architecture, IA, mobile et workflows avancés restent accessibles, mais hors navigation quotidienne.</div></article>
     </section>
 
     <header class="modules-head">
@@ -997,108 +997,123 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     </div>
 
     <div class="mobile-home">
-      <section class="home-section section-block" data-section="operations">
-        <p class="home-section-title">Operations</p>
+      <section class="home-section section-block" data-section="modules">
+        <p class="home-section-title">Modules principaux</p>
         <div class="home-grid">
-          <a class="home-app module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/${navSuffix}#/index">
+          <a class="home-app module-item" data-app-id="orders" data-search="commandes paiements acomptes soldes documents ordre commerce" href="/admin/orders${navSuffix}">
+            <span class="home-app-icon">◐</span><span class="home-app-label">Commandes</span>
+          </a>
+          <a class="home-app module-item" data-app-id="invoice" data-search="factures facture generation pdf facturation documents" href="/admin/invoices${navSuffix}">
+            <span class="home-app-icon">◔</span><span class="home-app-label">Factures</span>
+          </a>
+          <a class="home-app module-item" data-app-id="appointments" data-search="rendez-vous showroom planning disponibilites rappels" href="/admin/appointments${navSuffix}">
+            <span class="home-app-icon">◒</span><span class="home-app-label">Rendez-vous</span>
+          </a>
+          <a class="home-app module-item" data-app-id="forecast" data-search="forecast previsions revenue demande scenarios planification" href="/admin/forecast${navSuffix}">
+            <span class="home-app-icon">◍</span><span class="home-app-label">Forecast</span>
+          </a>
+          <a class="home-app module-item" data-app-id="whatsapp" data-search="whatsapp conversations priorites intelligence flux conversion" href="/admin/whatsapp-intelligence${navSuffix}">
+            <span class="home-app-icon">◈</span><span class="home-app-label">WhatsApp</span>
+          </a>
+        </div>
+      </section>
+
+      <section id="outils" class="home-section section-block" data-section="tools">
+        <p class="home-section-title">Outils</p>
+        <div class="home-grid">
+          <a class="home-app module-item" data-app-id="agent" data-search="agent control centre operations runs leads approvals system brain ia" href="/agent-control-center-v1/${navSuffix}#/index">
             <span class="home-app-icon">◎</span><span class="home-app-label">Agent Control</span>
+          </a>
+          <a class="home-app module-item" data-app-id="blueprint" data-search="blueprint architecture systeme cartographie flux modules services" href="/blueprint${navSuffix}">
+            <span class="home-app-icon">◇</span><span class="home-app-label">Blueprint</span>
+          </a>
+          <a class="home-app module-item" data-app-id="ml" data-search="ml dashboard intelligence artificielle automation machine learning" href="/admin/ml${navSuffix}">
+            <span class="home-app-icon">◌</span><span class="home-app-label">ML Dashboard</span>
+          </a>
+          <a class="home-app module-item" data-app-id="spline" data-search="spline 3d viewer scene visualisation" href="/admin/spline${navSuffix}">
+            <span class="home-app-icon">⬡</span><span class="home-app-label">Spline</span>
           </a>
           <a class="home-app module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
             <span class="home-app-icon">◉</span><span class="home-app-label">Mobile App</span>
           </a>
-        </div>
-      </section>
-
-      <section class="home-section section-block" data-section="intelligence">
-        <p class="home-section-title">Intelligence</p>
-        <div class="home-grid">
-          <a class="home-app module-item" data-app-id="insights" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
-            <span class="home-app-icon">◌</span><span class="home-app-label">Insights</span>
+          <a class="home-app module-item" data-app-id="whatsapp-lab" data-search="whatsapp lab experimentation tests outils" href="/whatsapp-lab${navSuffix}">
+            <span class="home-app-icon">◫</span><span class="home-app-label">WhatsApp Lab</span>
           </a>
-          <a class="home-app module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast${navSuffix}">
-            <span class="home-app-icon">◍</span><span class="home-app-label">Forecast</span>
+          <a class="home-app module-item" data-app-id="logic" data-search="logic diagram schema logique whatsapp systeme" href="/whatsapp-logic-diagram${navSuffix}">
+            <span class="home-app-icon">⌘</span><span class="home-app-label">Logic Diagram</span>
           </a>
-          <a class="home-app module-item" data-app-id="whatsapp" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
-            <span class="home-app-icon">◈</span><span class="home-app-label">WhatsApp</span>
-          </a>
-          <a class="home-app module-item" data-app-id="blueprint" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
-            <span class="home-app-icon">◇</span><span class="home-app-label">Blueprint</span>
-          </a>
-        </div>
-      </section>
-
-      <section class="home-section section-block" data-section="business">
-        <p class="home-section-title">Business</p>
-        <div class="home-grid">
-          <a class="home-app module-item" data-app-id="invoice" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
-            <span class="home-app-icon">◔</span><span class="home-app-label">Facture</span>
-          </a>
-          <a class="home-app module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin/orders${navSuffix}">
-            <span class="home-app-icon">◐</span><span class="home-app-label">Orders</span>
-          </a>
-          <a class="home-app module-item" data-app-id="appointments" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
-            <span class="home-app-icon">◒</span><span class="home-app-label">Appointments</span>
+          <a class="home-app module-item" data-app-id="workflow" data-search="manager approval flow validation manager whatsapp" href="/whatsapp-intelligence/workflow${navSuffix}">
+            <span class="home-app-icon">⇄</span><span class="home-app-label">Manager Flow</span>
           </a>
         </div>
       </section>
     </div>
 
     <div class="sections-grid">
-      <section class="section section-block" data-section="operations">
-        <p class="section-title">Opérations</p>
+      <section class="section section-block" data-section="modules">
+        <p class="section-title">Modules principaux</p>
         <div class="rows">
-          <a class="row module-row module-item" data-app-id="agent" data-search="agent control center operations runs leads approvals system brain" href="/agent-control-center-v1/${navSuffix}#/index">
-            <div class="icon">◎</div>
+          <a class="row module-row module-item" data-app-id="orders" data-search="commandes paiements acomptes soldes documents ordre commerce" href="/admin/orders${navSuffix}">
+            <div class="icon">◐</div>
             <div class="content">
-              <p class="title">Agent Control Center V1</p>
-              <p class="subtitle">Cockpit d'opérations IA pour les runs, validations, leads et supervision système</p>
+              <p class="title">Commandes</p>
+              <p class="subtitle">Vue principale des commandes, paiements, documents et suivi opérationnel</p>
             </div>
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
-            <div class="icon">◉</div>
+          <a class="row module-row module-item" data-app-id="invoice" data-search="factures facture generation pdf facturation documents" href="/admin/invoices${navSuffix}">
+            <div class="icon">◔</div>
             <div class="content">
-              <p class="title">Mobile App</p>
-              <p class="subtitle">Espace opérationnel pour une exécution rapide avec workflows opérateur</p>
+              <p class="title">Factures</p>
+              <p class="subtitle">Génération, aperçu et envoi des documents de facturation de la Maison</p>
             </div>
-            <span class="status progress">En cours</span>
+            <span class="status active">Actif</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row module-item" data-app-id="appointments" data-search="rendez-vous showroom planning disponibilites rappels" href="/admin/appointments${navSuffix}">
+            <div class="icon">◒</div>
+            <div class="content">
+              <p class="title">Rendez-vous</p>
+              <p class="subtitle">Organisation showroom, disponibilités, confirmations et coordination client</p>
+            </div>
+            <span class="status active">Actif</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row module-item" data-app-id="forecast" data-search="forecast previsions revenue demande scenarios planification" href="/admin/forecast${navSuffix}">
+            <div class="icon">◍</div>
+            <div class="content">
+              <p class="title">Forecast</p>
+              <p class="subtitle">Pilotage des projections de revenu, du rythme commercial et des scénarios</p>
+            </div>
+            <span class="status active">Actif</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row module-item" data-app-id="whatsapp" data-search="whatsapp conversations priorites intelligence flux conversion" href="/admin/whatsapp-intelligence${navSuffix}">
+            <div class="icon">◈</div>
+            <div class="content">
+              <p class="title">WhatsApp</p>
+              <p class="subtitle">Espace conversationnel, priorisation, supervision et flux d’exécution WhatsApp</p>
+            </div>
+            <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
         </div>
       </section>
 
-      <section class="section section-block" data-section="intelligence">
-        <p class="section-title">Intelligence</p>
+      <section id="outils-desktop" class="section section-block" data-section="tools">
+        <p class="section-title">Outils</p>
         <div class="rows">
-          <a class="row module-row module-item" data-app-id="insights" data-search="insights analytics conversion intelligence performance overview" href="/admin/insights${navSuffix}">
-            <div class="icon">◌</div>
+          <a class="row module-row module-item" data-app-id="agent" data-search="agent control centre operations runs leads approvals system brain ia" href="/agent-control-center-v1/${navSuffix}#/index">
+            <div class="icon">◎</div>
             <div class="content">
-              <p class="title">Insights</p>
-              <p class="subtitle">Business intelligence et analyses actionnables sur les signaux de performance</p>
+              <p class="title">Agent Control</p>
+              <p class="subtitle">Cockpit IA pour la supervision, les runs et les validations système</p>
             </div>
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="forecast" data-search="forecast projections revenue demand scenarios planning" href="/admin/forecast${navSuffix}">
-            <div class="icon">◍</div>
-            <div class="content">
-              <p class="title">Forecast</p>
-              <p class="subtitle">Pilotage des projections de revenu, de demande et d'opérations</p>
-            </div>
-            <span class="status active">Actif</span>
-            <span class="arrow">›</span>
-          </a>
-          <a class="row module-row module-item" data-app-id="whatsapp" data-search="whatsapp intelligence priority stage detection learning loop replies" href="/whatsapp-intelligence${navSuffix}">
-            <div class="icon">◈</div>
-            <div class="content">
-              <p class="title">WhatsApp Intelligence</p>
-              <p class="subtitle">Analyse conversationnelle, priorités et guidance stratégique opérateur</p>
-            </div>
-            <span class="status active">Actif</span>
-            <span class="arrow">›</span>
-          </a>
-          <a class="row module-row module-item" data-app-id="blueprint" data-search="blueprint architecture system map flux modules services" href="/blueprint${navSuffix}">
+          <a class="row module-row module-item" data-app-id="blueprint" data-search="blueprint architecture systeme cartographie flux modules services" href="/blueprint${navSuffix}">
             <div class="icon">◇</div>
             <div class="content">
               <p class="title">Blueprint</p>
@@ -1107,37 +1122,58 @@ function renderAdminControlCenterPage(navSuffix: string): string {
             <span class="status active">Actif</span>
             <span class="arrow">›</span>
           </a>
-        </div>
-      </section>
-
-      <section class="section section-block" data-section="business">
-        <p class="section-title">Business</p>
-        <div class="rows">
-          <a class="row module-row module-item" data-app-id="invoice" data-search="creer nouvelle facture invoice generation facturation" href="/admin/invoices${navSuffix}">
-            <div class="icon">◔</div>
+          <a class="row module-row module-item" data-app-id="ml" data-search="ml dashboard intelligence artificielle automation machine learning" href="/admin/ml${navSuffix}">
+            <div class="icon">◌</div>
             <div class="content">
-              <p class="title">Créer une nouvelle facture</p>
-              <p class="subtitle">Accès direct au générateur de facture et à l’aperçu PDF</p>
+              <p class="title">ML Dashboard</p>
+              <p class="subtitle">Analyse de l’automatisation, monitoring IA et métriques internes</p>
             </div>
-            <span class="status active">Actif</span>
+            <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="orders" data-search="orders payments deposits balances invoices commerce" href="/admin/orders${navSuffix}">
-            <div class="icon">◐</div>
+          <a class="row module-row module-item" data-app-id="spline" data-search="spline 3d viewer scene visualisation" href="/admin/spline${navSuffix}">
+            <div class="icon">⬡</div>
             <div class="content">
-              <p class="title">Orders & Payments</p>
-              <p class="subtitle">Visibilité commerciale sur commandes, acomptes, soldes et état de paiement</p>
+              <p class="title">Spline</p>
+              <p class="subtitle">Visualisation 3D et intégrations de scène pour les expériences avancées</p>
             </div>
-            <span class="status active">Actif</span>
+            <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
-          <a class="row module-row module-item" data-app-id="appointments" data-search="appointments showroom scheduling reminders availability" href="/admin/appointments-v2${navSuffix}">
-            <div class="icon">◒</div>
+          <a class="row module-row module-item" data-app-id="mobile" data-search="mobile app conversations approvals execution operator actions" href="/whatsapp-intelligence/mobile-lab${navSuffix}">
+            <div class="icon">◉</div>
             <div class="content">
-              <p class="title">Appointments</p>
-              <p class="subtitle">Planification showroom, confirmations, rappels et coordination</p>
+              <p class="title">Mobile App</p>
+              <p class="subtitle">Vue opérateur mobile pour exécution rapide, validations et actions terrain</p>
             </div>
-            <span class="status active">Actif</span>
+            <span class="status progress">Secondaire</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row module-item" data-app-id="whatsapp-lab" data-search="whatsapp lab experimentation tests outils" href="/whatsapp-lab${navSuffix}">
+            <div class="icon">◫</div>
+            <div class="content">
+              <p class="title">WhatsApp Lab</p>
+              <p class="subtitle">Zone d’expérimentation et de tests pour les interfaces et composants WhatsApp</p>
+            </div>
+            <span class="status progress">Secondaire</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row module-item" data-app-id="logic" data-search="logic diagram schema logique whatsapp systeme" href="/whatsapp-logic-diagram${navSuffix}">
+            <div class="icon">⌘</div>
+            <div class="content">
+              <p class="title">Logic Diagram</p>
+              <p class="subtitle">Schéma logique et lecture des enchaînements internes de l’écosystème WhatsApp</p>
+            </div>
+            <span class="status progress">Secondaire</span>
+            <span class="arrow">›</span>
+          </a>
+          <a class="row module-row module-item" data-app-id="workflow" data-search="manager approval flow validation manager whatsapp" href="/whatsapp-intelligence/workflow${navSuffix}">
+            <div class="icon">⇄</div>
+            <div class="content">
+              <p class="title">Manager Approval Flow</p>
+              <p class="subtitle">Workflow de validation managériale pour les devis et décisions sensibles</p>
+            </div>
+            <span class="status progress">Secondaire</span>
             <span class="arrow">›</span>
           </a>
         </div>
@@ -1189,17 +1225,21 @@ function renderAdminControlCenterPage(navSuffix: string): string {
     const recentAppsTrack = document.getElementById("recentAppsTrack");
     const sections = Array.from(document.querySelectorAll(".section-block"));
     const appCatalog = {
-      agent: { label: "Agent", icon: "◎", href: "/agent-control-center-v1/${navSuffix}#/index" },
-      mobile: { label: "Mobile", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
-      insights: { label: "Insights", icon: "◌", href: "/admin/insights${navSuffix}" },
+      agent: { label: "Agent Control", icon: "◎", href: "/agent-control-center-v1/${navSuffix}#/index" },
+      mobile: { label: "Mobile App", icon: "◉", href: "/whatsapp-intelligence/mobile-lab${navSuffix}" },
       forecast: { label: "Forecast", icon: "◍", href: "/admin/forecast${navSuffix}" },
-      whatsapp: { label: "WhatsApp", icon: "◈", href: "/whatsapp-intelligence${navSuffix}" },
+      whatsapp: { label: "WhatsApp", icon: "◈", href: "/admin/whatsapp-intelligence${navSuffix}" },
       blueprint: { label: "Blueprint", icon: "◇", href: "/blueprint${navSuffix}" },
-      invoice: { label: "Facture", icon: "◔", href: "/admin/invoices${navSuffix}" },
-      orders: { label: "Orders", icon: "◐", href: "/admin/orders${navSuffix}" },
-      appointments: { label: "RDV", icon: "◒", href: "/admin/appointments-v2${navSuffix}" }
+      ml: { label: "ML Dashboard", icon: "◌", href: "/admin/ml${navSuffix}" },
+      spline: { label: "Spline", icon: "⬡", href: "/admin/spline${navSuffix}" },
+      invoice: { label: "Factures", icon: "◔", href: "/admin/invoices${navSuffix}" },
+      orders: { label: "Commandes", icon: "◐", href: "/admin/orders${navSuffix}" },
+      appointments: { label: "Rendez-vous", icon: "◒", href: "/admin/appointments${navSuffix}" },
+      "whatsapp-lab": { label: "WhatsApp Lab", icon: "◫", href: "/whatsapp-lab${navSuffix}" },
+      logic: { label: "Logic Diagram", icon: "⌘", href: "/whatsapp-logic-diagram${navSuffix}" },
+      workflow: { label: "Manager Flow", icon: "⇄", href: "/whatsapp-intelligence/workflow${navSuffix}" }
     };
-    const defaultRecentApps = ["agent", "mobile", "insights", "whatsapp"];
+    const defaultRecentApps = ["orders", "invoice", "forecast", "whatsapp"];
 
     function readRecentApps() {
       try {
@@ -1279,7 +1319,7 @@ app.get("/", (req, res) => {
 
 app.get("/admin", (req, res) => {
   const navSuffix = buildAdminNavSuffix(req);
-  res.redirect(`/admin/orders${navSuffix}`);
+  res.redirect(`/admin/control-center${navSuffix}`);
 });
 
 app.get("/admin/control-center", (req, res) => {
@@ -1288,23 +1328,28 @@ app.get("/admin/control-center", (req, res) => {
   res.type("html").send(renderAdminControlCenterPage(navSuffix));
 });
 
-const appShellRouteMap: Array<{ path: string; hash: string }> = [
-  { path: "/control-center", hash: "#/control-center" },
-  { path: "/agent-control-center", hash: "#/agent-control-center" },
-  { path: "/mobile-app", hash: "#/mobile-app" },
-  { path: "/insights", hash: "#/insights" },
-  { path: "/forecast", hash: "#/forecast" },
-  { path: "/whatsapp-intelligence-app", hash: "#/whatsapp-intelligence" },
-  { path: "/blueprint-app", hash: "#/blueprint" },
-  { path: "/create-invoice", hash: "#/create-invoice" },
-  { path: "/orders-payments", hash: "#/orders-payments" },
-  { path: "/appointments", hash: "#/appointments" }
+const appShellRouteMap: Array<{ path: string; target: string }> = [
+  { path: "/control-center", target: "/admin/control-center" },
+  { path: "/agent-control-center", target: "/agent-control-center-v1/#/index" },
+  { path: "/mobile-app", target: "/whatsapp-intelligence/mobile-lab" },
+  { path: "/insights", target: "/admin/insights" },
+  { path: "/forecast", target: "/admin/forecast" },
+  { path: "/whatsapp-intelligence-app", target: "/admin/whatsapp-intelligence" },
+  { path: "/blueprint-app", target: "/blueprint" },
+  { path: "/create-invoice", target: "/admin/invoices" },
+  { path: "/orders-payments", target: "/admin/orders" },
+  { path: "/appointments", target: "/admin/appointments" }
 ];
 
 for (const route of appShellRouteMap) {
   app.get(route.path, (req, res) => {
     const suffix = buildAdminNavSuffix(req);
-    res.redirect(`/agent-control-center-v1/${suffix}${route.hash}`);
+    if (route.target.includes("#")) {
+      const [path, hash = ""] = route.target.split("#");
+      res.redirect(`${path}${suffix}${hash ? `#${hash}` : ""}`);
+      return;
+    }
+    res.redirect(`${route.target}${suffix}`);
   });
 }
 
@@ -1451,13 +1496,13 @@ app.get(["/spline", "/admin/spline"], (_req, res) => {
       <p class="error-msg" id="error-msg">The Spline scene could not be loaded. Check SPLINE_SCENE_URL and your network connection.</p>
       <div class="error-actions">
         <a href="/admin/spline" class="error-btn">Retry</a>
-        <a href="/admin" class="error-btn">← Back to Admin</a>
+        <a href="/admin/control-center" class="error-btn">← Centre de contrôle</a>
       </div>
     </div>
 
     <!-- Top Bar (revealed after load) -->
     <div id="topbar">
-      <a href="/admin" class="topbar-back">← Admin</a>
+      <a href="/admin/control-center" class="topbar-back">← Centre de contrôle</a>
       <div class="topbar-badge">
         <span class="topbar-dot"></span>
         3D Scene Active

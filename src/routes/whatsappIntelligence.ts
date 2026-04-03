@@ -5587,9 +5587,11 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
     * { box-sizing:border-box; }
     body { margin:0; background:radial-gradient(1100px 500px at 18% -10%, #17243a 0%, #060b14 58%); color:var(--txt); font:14px/1.5 "Avenir Next","Helvetica Neue",Arial,sans-serif; }
     .wrap { max-width:1280px; margin:22px auto; padding:0 14px; }
-    .nav { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+    .nav { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
     .nav a { color:#d6e0f3; text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:7px 12px; background:#0b1423; font-size:13px; }
     .nav a.current { background:#162237; border-color:#4f6b94; color:#fff; }
+    .subnav { margin-bottom:16px; }
+    .subnav a { font-size:12px; background:#09111d; }
     .card { border:1px solid var(--line); border-radius:14px; background:linear-gradient(180deg,#0c1423,#0a1220); padding:16px; }
     .tabs { display:flex; gap:8px; margin:8px 0 14px; }
     .tab { border:1px solid #314868; border-radius:999px; background:#0f182a; color:#e6eefc; padding:7px 12px; cursor:pointer; }
@@ -5619,15 +5621,15 @@ whatsappRouter.get("/admin/whatsapp-intelligence/settings", (req, res) => {
     <nav class="nav">
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
-      <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/ml${navSuffix}">ML Dashboard</a>
-      <a href="/admin/priority${navSuffix}">Priority</a>
-      <a href="/blueprint${navSuffix}">Blueprint</a>
-      <a href="/admin/spline${navSuffix}">Spline</a>
-      <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence WhatsApp</a>
-      <a href="/whatsapp-intelligence/workflow${navSuffix}">Manager Approval Flow</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
+    </nav>
+    <nav class="nav subnav">
+      <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
+      <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
+      <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
       <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
       <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
       <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
@@ -11222,6 +11224,8 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
     .nav { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
     .nav a { text-decoration:none; color:#d5dced; border:1px solid var(--line); border-radius:999px; padding:8px 14px; font-size:13px; background:#0f1621; }
     .nav a.current { border-color:#546586; color:#fff; }
+    .subnav { margin-bottom:18px; }
+    .subnav a { font-size:12px; }
     h1 { margin:0; font-weight:500; font-size:34px; }
     .sub { margin:6px 0 14px; color:var(--muted); font-size:14px; }
 
@@ -12665,19 +12669,19 @@ whatsappRouter.get("/admin/whatsapp-intelligence", (req, res) => {
       <nav class="nav">
         <a href="/admin/orders${navSuffix}">Commandes</a>
         <a href="/admin/invoices${navSuffix}">Factures</a>
-        <a href="/admin/insights${navSuffix}">Insights</a>
         <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
         <a href="/admin/forecast${navSuffix}">Forecast</a>
-        <a href="/admin/ml${navSuffix}">ML Dashboard</a>
-      <a href="/admin/priority${navSuffix}">Priority</a>
-        <a href="/blueprint${navSuffix}">Blueprint</a>
-        <a href="/admin/spline${navSuffix}">Spline</a>
-        <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">Intelligence WhatsApp</a>
-        <a href="/whatsapp/priority-inbox${navSuffix}">📥 Priority Inbox</a>
-        <a href="/whatsapp-intelligence/workflow${navSuffix}">Manager Approval Flow</a>
+        <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+        <a href="/admin/control-center${navSuffix}#outils">Outils</a>
+      </nav>
+      <nav class="nav subnav">
+        <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
+        <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
+        <a href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
         <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
         <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
         <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
+        <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
       </nav>
       <h1>Intelligence WhatsApp</h1>
       <p class="sub">Module interne de pilotage de conversion pour les demandes WhatsApp.</p>
@@ -20551,12 +20555,21 @@ whatsappRouter.get("/whatsapp-intelligence/workflow", (req, res) => {
 <body>
   <div class="wrap">
     <nav class="nav">
-      <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence WhatsApp</a>
-      <a href="/whatsapp/priority-inbox${navSuffix}">Priority Inbox</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
+      <a href="/admin/invoices${navSuffix}">Factures</a>
+      <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
+      <a href="/admin/forecast${navSuffix}">Forecast</a>
+      <a class="current" href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
+    </nav>
+    <nav class="nav">
+      <a href="/admin/whatsapp-intelligence${navSuffix}">Intelligence</a>
+      <a href="/whatsapp/priority-inbox${navSuffix}">Boîte prioritaire</a>
       <a href="/admin/whatsapp-intelligence/settings${navSuffix}">Réglages</a>
       <a href="/whatsapp-intelligence/mobile-lab${navSuffix}">Mobile App</a>
+      <a href="/whatsapp-lab${navSuffix}">WhatsApp Lab</a>
       <a href="/whatsapp-logic-diagram${navSuffix}">Logic Diagram</a>
-      <a class="current" href="/whatsapp-intelligence/workflow${navSuffix}">Manager Approval Flow</a>
+      <a class="current" href="/whatsapp-intelligence/workflow${navSuffix}">Flux manager</a>
     </nav>
     <div class="title">WhatsApp Intelligence – Manager Approval Flow</div>
     <div class="sub">Manager-in-the-loop pricing validation and controlled stage progression</div>

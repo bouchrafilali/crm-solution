@@ -2331,14 +2331,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
-      <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/ml${navSuffix}">ML Dashboard</a>
-      <a href="/admin/priority${navSuffix}">Priority</a>
-      <a href="/blueprint${navSuffix}">Blueprint</a>
-      <a href="/admin/spline${navSuffix}">Spline</a>
-      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp Intelligence</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
     <p class="intro">Maison Bouchra Filali Lahlou · suivi raffiné des commandes et livraisons</p>
 
@@ -5141,14 +5137,10 @@ adminRouter.get("/invoices", (req, res) => {
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
-      <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/ml${navSuffix}">ML Dashboard</a>
-      <a href="/admin/priority${navSuffix}">Priority</a>
-      <a href="/blueprint${navSuffix}">Blueprint</a>
-      <a href="/admin/spline${navSuffix}">Spline</a>
-      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp Intelligence</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
     <p class="intro">Version 1: génération manuelle premium avec modèles Bouchra / Coin de Couture.</p>
     <div class="layout">
@@ -6091,14 +6083,10 @@ adminRouter.get("/insights", (req, res) => {
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
-      <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/ml${navSuffix}">ML Dashboard</a>
-      <a href="/admin/priority${navSuffix}">Priority</a>
-      <a href="/blueprint${navSuffix}">Blueprint</a>
-      <a href="/admin/spline${navSuffix}">Spline</a>
-      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp Intelligence</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
     <p class="intro">Analyse IA séparée pour ne pas impacter la vitesse de synchronisation des commandes.</p>
 
@@ -7193,14 +7181,10 @@ adminRouter.get("/forecast", (req, res) => {
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
-      <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/ml${navSuffix}">ML Dashboard</a>
-      <a href="/admin/priority${navSuffix}">Priority</a>
-      <a href="/blueprint${navSuffix}">Blueprint</a>
-      <a href="/admin/spline${navSuffix}">Spline</a>
-      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp Intelligence</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
     <p class="intro">Page dédiée aux prévisions de chiffre d'affaires (BigQuery ML) avec graphe interactif tactile.</p>
 
@@ -8697,15 +8681,10 @@ adminRouter.get("/forecast-v2", (req, res) => {
     <ui-nav-menu>
       <a href="/admin/orders${navSuffix}">Commandes</a>
       <a href="/admin/invoices${navSuffix}">Factures</a>
-      <a href="/admin/insights${navSuffix}">Insights</a>
       <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/forecast-v2${navSuffix}">Forecast V2</a>
-      <a href="/admin/ml${navSuffix}">ML Dashboard</a>
-      <a href="/admin/priority${navSuffix}">Priority</a>
-      <a href="/blueprint${navSuffix}">Blueprint</a>
-      <a href="/admin/spline${navSuffix}">Spline</a>
-      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp Intelligence</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils">Outils</a>
     </ui-nav-menu>
     <p class="intro">Moteur de décision exécutif pour pilotage CA, charge atelier et risque d'encaissement.</p>
 
@@ -9588,11 +9567,12 @@ adminRouter.get("/priority", (req, res) => {
 <body>
   <div class="page">
     <nav class="nav">
-      <a href="/admin${navSuffix}">Operations</a>
-      <a href="/admin/insights${navSuffix}">Insights</a>
+      <a href="/admin/orders${navSuffix}">Commandes</a>
+      <a href="/admin/invoices${navSuffix}">Factures</a>
+      <a href="/admin/appointments${navSuffix}">Rendez-vous</a>
       <a href="/admin/forecast${navSuffix}">Forecast</a>
-      <a href="/admin/priority${navSuffix}" class="active">Priority</a>
-      <a href="/admin/appointments${navSuffix}">Appointments</a>
+      <a href="/admin/whatsapp-intelligence${navSuffix}">WhatsApp</a>
+      <a href="/admin/control-center${navSuffix}#outils" class="active">Outils</a>
     </nav>
     <section class="hero">
       <div>
