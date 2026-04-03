@@ -20649,6 +20649,20 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
       font-size:14px;
       color:#202223;
     }
+    .season-notes{
+      margin-top:10px;
+      padding-top:10px;
+      border-top:1px solid var(--line);
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.45;
+    }
+    .season-notes strong{
+      color:#202223;
+    }
     .season-timing{
       font-weight:700;
       white-space:nowrap;
@@ -20742,6 +20756,12 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
                   <li><span class="season-timing">T-30 jours</span><span class="season-stage">conversion</span></li>
                   <li><span class="season-timing">T-10 jours</span><span class="season-stage">express</span></li>
                 </ul>
+                <div class="season-notes">
+                  <div><strong>Période :</strong> Avril → Septembre</div>
+                  <div><strong>Pic :</strong> Juin–Août</div>
+                  <div><strong>Cibles :</strong> mariées, invitées, fiançailles</div>
+                  <div><strong>Budget :</strong> très gros budgets</div>
+                </div>
               </section>
             </div>
           </div>
