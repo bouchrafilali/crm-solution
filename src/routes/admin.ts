@@ -2873,6 +2873,42 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       color: #6d7175;
       font-size: 13px;
     }
+    .modal-disclosure {
+      margin-top: 12px;
+      border: 1px solid #d9dadd;
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .modal-disclosure-toggle {
+      width: 100%;
+      border: 0;
+      background: #fff;
+      color: #202223;
+      min-height: 46px;
+      padding: 0 14px;
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+    .modal-disclosure-toggle::after {
+      content: "▾";
+      font-size: 14px;
+      color: #6d7175;
+      transition: transform 140ms ease;
+    }
+    .modal-disclosure.is-collapsed .modal-disclosure-toggle::after {
+      transform: rotate(-90deg);
+    }
+    .modal-disclosure-body {
+      padding: 0 0 12px;
+    }
+    .modal-disclosure.is-collapsed .modal-disclosure-body {
+      display: none;
+    }
     .template-toggle-row {
       display: flex;
       gap: 8px;
@@ -3419,48 +3455,53 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             <button id="bankTemplateReceiptBtn" type="button" class="template-toggle-btn">Reçu</button>
           </div>
         </div>
-        <div id="bankProfileGroup" class="modal-grid">
-          <div>
-            <label for="bankProfileType">Format du compte</label>
-            <select id="bankProfileType">
-              <option value="us">Compte US (Routing + Account)</option>
-              <option value="ma">RIB Maroc</option>
-              <option value="eu">IBAN FR/EU</option>
-              <option value="other">Autre</option>
-            </select>
-          </div>
-          <div>
-            <label for="bankBeneficiaryName">Bénéficiaire (facture)</label>
-            <input id="bankBeneficiaryName" type="text" />
-          </div>
-        </div>
-        <div id="bankFieldsGroup">
-          <div class="modal-grid">
-            <div>
-              <label id="bankNameLabel" for="bankNameInput">Banque</label>
-              <input id="bankNameInput" type="text" />
+        <div id="bankDisclosureWrap" class="modal-disclosure">
+          <button id="bankDisclosureToggle" type="button" class="modal-disclosure-toggle">Coordonnées bancaires à afficher</button>
+          <div id="bankDisclosureBody" class="modal-disclosure-body">
+            <div id="bankProfileGroup" class="modal-grid">
+              <div>
+                <label for="bankProfileType">Format du compte</label>
+                <select id="bankProfileType">
+                  <option value="us">Compte US (Routing + Account)</option>
+                  <option value="ma">RIB Maroc</option>
+                  <option value="eu">IBAN FR/EU</option>
+                  <option value="other">Autre</option>
+                </select>
+              </div>
+              <div>
+                <label for="bankBeneficiaryName">Bénéficiaire (facture)</label>
+                <input id="bankBeneficiaryName" type="text" />
+              </div>
             </div>
-            <div>
-              <label id="swiftLabel" for="swiftInput">SWIFT / BIC</label>
-              <input id="swiftInput" type="text" />
-            </div>
-            <div>
-              <label id="routingLabel" for="routingInput">Routing / ABA</label>
-              <input id="routingInput" type="text" />
-            </div>
-            <div>
-              <label id="accountLabel" for="accountInput">N° compte / IBAN / RIB</label>
-              <input id="accountInput" type="text" />
-            </div>
-            <div>
-              <label for="bankAddressInput">Adresse banque</label>
-              <input id="bankAddressInput" type="text" />
-            </div>
-          </div>
-          <div class="modal-grid">
-            <div>
-              <label for="referenceInput">Référence virement</label>
-              <input id="referenceInput" type="text" />
+            <div id="bankFieldsGroup">
+              <div class="modal-grid">
+                <div>
+                  <label id="bankNameLabel" for="bankNameInput">Banque</label>
+                  <input id="bankNameInput" type="text" />
+                </div>
+                <div>
+                  <label id="swiftLabel" for="swiftInput">SWIFT / BIC</label>
+                  <input id="swiftInput" type="text" />
+                </div>
+                <div>
+                  <label id="routingLabel" for="routingInput">Routing / ABA</label>
+                  <input id="routingInput" type="text" />
+                </div>
+                <div>
+                  <label id="accountLabel" for="accountInput">N° compte / IBAN / RIB</label>
+                  <input id="accountInput" type="text" />
+                </div>
+                <div>
+                  <label for="bankAddressInput">Adresse banque</label>
+                  <input id="bankAddressInput" type="text" />
+                </div>
+              </div>
+              <div class="modal-grid">
+                <div>
+                  <label for="referenceInput">Référence virement</label>
+                  <input id="referenceInput" type="text" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3612,6 +3653,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     const bankModalPreviewFrame = document.getElementById("bankModalPreviewFrame");
     const bankProfileGroupEl = document.getElementById("bankProfileGroup");
     const bankFieldsGroupEl = document.getElementById("bankFieldsGroup");
+    const bankDisclosureWrapEl = document.getElementById("bankDisclosureWrap");
+    const bankDisclosureToggleEl = document.getElementById("bankDisclosureToggle");
+    const bankDisclosureBodyEl = document.getElementById("bankDisclosureBody");
+
+    let bankDisclosureExpanded = false;
 
     let orders = [];
     let selectedOrderId = null;
@@ -4296,6 +4342,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       bankTemplateReceiptBtn.setAttribute("aria-pressed", String(isReceipt));
       bankFieldsGroupEl.classList.toggle("hidden", !showBankInfo);
       bankProfileGroupEl.classList.toggle("hidden", !showBankInfo);
+      bankDisclosureWrapEl.classList.toggle("hidden", !showBankInfo);
+      bankDisclosureWrapEl.classList.toggle("is-collapsed", showBankInfo && !bankDisclosureExpanded);
+      bankDisclosureToggleEl.textContent = bankDisclosureExpanded
+        ? "Masquer les coordonnées bancaires"
+        : "Afficher les coordonnées bancaires";
+      bankDisclosureToggleEl.setAttribute("aria-expanded", String(showBankInfo && bankDisclosureExpanded));
+      bankDisclosureBodyEl.classList.toggle("hidden", !showBankInfo || !bankDisclosureExpanded);
       bankModalPreviewHead.textContent = "Aperçu du " + label;
       bankModalConfirmBtn.textContent = isReceipt ? "Utiliser ce reçu" : "Utiliser cette facture";
       bankModalPreviewBtn.textContent = bankModalPreviewWrap.classList.contains("hidden")
@@ -4352,6 +4405,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         bankAddressInputEl.value = existing.bankAddress || "";
         referenceInputEl.value = existing.paymentReference || order.name || "";
         applyBankProfileUI(bankProfileTypeEl.value);
+        bankDisclosureExpanded = false;
         bankModalPreviewWrap.classList.add("hidden");
         bankModalPreviewFrame.removeAttribute("src");
         syncBankTemplateUi();
@@ -4364,6 +4418,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           bankTemplateInvoiceBtn.onclick = null;
           bankTemplateReceiptBtn.onclick = null;
           bankProfileTypeEl.onchange = null;
+          bankDisclosureToggleEl.onclick = null;
           if (invoicePreviewBlobUrl) {
             URL.revokeObjectURL(invoicePreviewBlobUrl);
             invoicePreviewBlobUrl = "";
@@ -4385,6 +4440,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
             void renderBankModalPreview(order, showBankSection);
           }
         };
+        bankDisclosureToggleEl.onclick = () => {
+          bankDisclosureExpanded = !bankDisclosureExpanded;
+          syncBankTemplateUi();
+        };
         bankModalCancelBtn.onclick = () => {
           bankModalEl.classList.add("hidden");
           cleanup();
@@ -4399,6 +4458,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           cleanup();
           resolve(selected);
         };
+        void renderBankModalPreview(order, showBankSection);
       });
     }
 
