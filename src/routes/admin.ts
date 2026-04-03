@@ -1944,35 +1944,40 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .orders-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 14px;
       min-width: 1280px;
+      color: #303030;
     }
     .orders-table thead th {
       text-align: left;
-      color: #616161;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 11px 14px;
-      border-bottom: 1px solid #d9d9d9;
+      color: #6d7175;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 20px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e1e3e5;
       background: #ffffff;
       position: sticky;
       top: 0;
       z-index: 1;
     }
     .orders-table td {
-      padding: 12px 14px;
-      border-bottom: 1px solid #e0e0e0;
+      padding: 10px 16px;
+      border-bottom: 1px solid #e1e3e5;
       vertical-align: middle;
       background: #fff;
+      color: #303030;
+      font-size: 14px;
+      line-height: 20px;
     }
     .orders-table tr {
       cursor: pointer;
     }
     .orders-table tr:hover td {
-      background: #f8f8f8;
+      background: #f6f6f7;
     }
     .orders-table tr.active-row td {
-      background: #f2f2f2;
+      background: #f1f2f3;
     }
     .orders-table-action-cell {
       width: 170px;
@@ -2050,12 +2055,35 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       padding: 0 12px;
     }
     .customer-main {
-      font-weight: 600;
+      color: #303030;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 20px;
     }
     .customer-sub {
       color: var(--muted);
       font-size: 12px;
       margin-top: 2px;
+    }
+    .orders-table .customer-sub {
+      display: none;
+    }
+    .order-cell-primary {
+      color: #202223;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 20px;
+    }
+    .order-cell-date,
+    .order-cell-customer,
+    .order-cell-money {
+      color: #303030;
+      font-size: 14px;
+      font-weight: 450;
+      line-height: 20px;
+    }
+    .order-cell-money {
+      white-space: nowrap;
     }
     .pill {
       border-radius: 999px;
@@ -2655,21 +2683,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       align-items: center;
       gap: 6px;
       border-radius: 999px;
-      padding: 4px 12px;
+      min-height: 30px;
+      padding: 0 12px;
       border: 1px solid transparent;
       background: #f0f0f0;
       color: #616161;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
-      line-height: 1;
+      line-height: 20px;
+      letter-spacing: 0;
     }
     .badge-icon {
-      font-size: 10px;
+      font-size: 12px;
       line-height: 1;
-      opacity: 0.65;
+      opacity: 0.9;
     }
     .badge-status.paid {
-      background: #e3e3e3;
+      background: #e4e5e7;
       color: #616161;
     }
     .badge-status.partial {
@@ -2681,11 +2711,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       color: #8a6116;
     }
     .badge-status.unfulfilled {
-      background: #ffe66b;
-      color: #5c4c00;
+      background: #ffea8a;
+      color: #614800;
     }
     .badge-status.fulfilled {
-      background: #e3e3e3;
+      background: #e4e5e7;
       color: #616161;
     }
     .badge-status.gateway {
@@ -5952,15 +5982,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       visibleOrders.forEach((order) => {
         const row = document.createElement("tr");
         row.innerHTML =
-          "<td><strong>" +
+          "<td><span class='order-cell-primary'>" +
           escapeHtml(order.name) +
-          "</strong><div class='customer-sub'>#" +
-          escapeHtml(order.id) +
-          "</div></td>" +
-          "<td>" +
+          "</span></td>" +
+          "<td><span class='order-cell-date'>" +
           escapeHtml(formatOrderDateLabel(order.createdAt)) +
-          "</td>" +
-          "<td><div class='customer-main'>" +
+          "</span></td>" +
+          "<td><div class='customer-main order-cell-customer'>" +
           escapeHtml(order.customerLabel || "Client inconnu") +
           "</div></td>" +
           "<td>" +
@@ -5969,9 +5997,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "<td>" +
           treatmentBadgeHtml(order) +
           "</td>" +
-          "<td><strong>" +
+          "<td><span class='order-cell-money'>" +
           formatMoney(order.totalAmount || 0, order.currency) +
-          "</strong></td>" +
+          "</span></td>" +
           "<td class='orders-table-action-cell'>" +
           "<div class='orders-table-action'>" +
             "<details class='orders-row-action-menu'>" +
