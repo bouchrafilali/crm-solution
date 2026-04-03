@@ -3290,7 +3290,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
               <select id="orderStateFilter" class="orders-filter-state-select">
                 <option value="all">Toutes</option>
                 <option value="unpaid">À encaisser</option>
-                <option value="open">En cours</option>
                 <option value="shipped">Livrées</option>
                 <option value="paid">Soldées</option>
               </select>
@@ -4987,7 +4986,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const labels = {
         all: "Toutes",
         unpaid: "À encaisser",
-        open: "En cours",
         shipped: "Livrées",
         paid: "Soldées"
       };
@@ -4996,6 +4994,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         const count = countOrdersForTab(tab);
         optionEl.textContent = labels[tab] + " (" + count + ")";
       });
+      if (activeOrderTab === "open") {
+        activeOrderTab = "all";
+      }
       orderStateFilterEl.value = activeOrderTab;
     }
 
@@ -5940,8 +5941,8 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         "<th>Commande</th>" +
         "<th>Date</th>" +
         "<th>Client</th>" +
-        "<th>Paiement</th>" +
-        "<th>Livraison</th>" +
+        "<th>Statut du paiement</th>" +
+        "<th>Statut du traitement de la commande</th>" +
         "<th>Total</th>" +
         "<th>Document</th>" +
         "<th>Avis Google</th>" +
@@ -5950,13 +5951,6 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const tbody = ordersListEl.querySelector("tbody");
       visibleOrders.forEach((order) => {
         const row = document.createElement("tr");
-        const shippingState = String(order.shippingStatus || "");
-        const shippingClass =
-          shippingState === "shipped"
-            ? "pill shipped"
-            : shippingState === "ready"
-              ? "pill ready"
-              : "pill";
         row.innerHTML =
           "<td><strong>" +
           escapeHtml(order.name) +
@@ -5972,11 +5966,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           "<td>" +
           paymentBadgeHtml(order) +
           "</td>" +
-          "<td><span class='" +
-          shippingClass +
-          "'>" +
-          escapeHtml(statusLabel(order.shippingStatus)) +
-          "</span></td>" +
+          "<td>" +
+          treatmentBadgeHtml(order) +
+          "</td>" +
           "<td><strong>" +
           formatMoney(order.totalAmount || 0, order.currency) +
           "</strong></td>" +
