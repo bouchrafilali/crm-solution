@@ -20711,6 +20711,15 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
 
         <article class="flow-card">
           <div class="flow-card-head">
+            <h2>Livraison confirmée</h2>
+            <span class="flow-chip">Logistique</span>
+          </div>
+          <div class="flow-placeholder">Espace réservé au flow WhatsApp déclenché quand un waybill DHL est ajouté à la commande.</div>
+          <div class="flow-footer">Déclenchement dès ajout du numéro de suivi / waybill transporteur sur la commande.</div>
+        </article>
+
+        <article class="flow-card">
+          <div class="flow-card-head">
             <h2>J+3</h2>
             <span class="flow-chip">À préparer</span>
           </div>
