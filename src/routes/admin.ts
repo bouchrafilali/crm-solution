@@ -1742,6 +1742,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       gap: 14px;
     }
     .orders-main-surface {
+      grid-template-columns: minmax(0, 1fr);
       padding: 0 16px 16px;
       align-items: start;
       background: #fff;
@@ -1893,6 +1894,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       display: grid;
       gap: 10px;
     }
+    .order-detail-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+      gap: 12px;
+      align-items: start;
+    }
     .order-summary-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1925,6 +1932,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       border-radius: 12px;
       background: #fff;
       padding: 12px;
+      min-height: 100%;
     }
     .order-actions-card h4 {
       margin: 0 0 10px;
@@ -2195,9 +2203,15 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       margin-top: 10px;
     }
     .order-action-block {
-      margin-top: 4px;
+      margin-top: 0;
       display: grid;
       gap: 8px;
+    }
+    .order-actions-primary-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
     }
     .order-action-primary {
       width: 100%;
@@ -2229,6 +2243,61 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .order-action-print {
       position: relative;
+    }
+    .order-action-send {
+      position: relative;
+    }
+    .order-action-send details {
+      position: relative;
+    }
+    .order-action-send summary {
+      list-style: none;
+    }
+    .order-action-send summary::-webkit-details-marker {
+      display: none;
+    }
+    .order-action-send-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 48px;
+      padding: 0 16px;
+      border-radius: 12px;
+      text-align: center;
+      gap: 8px;
+    }
+    .order-action-send-toggle::after {
+      content: "▾";
+      margin-left: 4px;
+      font-size: 12px;
+      opacity: 0.78;
+    }
+    .order-action-send-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: min(320px, 100%);
+      display: grid;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid #dfe3e8;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
+      z-index: 6;
+    }
+    .order-action-send-menu .save-order-btn {
+      width: 100%;
+      min-height: 42px;
+      margin-top: 0;
+      justify-content: flex-start;
+      padding: 0 14px;
+      font-weight: 600;
+    }
+    .order-review-btn {
+      min-height: 48px;
+      margin-top: 0;
     }
     .order-action-print details {
       position: relative;
@@ -2710,12 +2779,14 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       .kpi-chart-toggle { border-right: 0; border-bottom: 1px solid #e1e3e5; }
       .kpi-chart-toggle:last-child { border-bottom: 0; }
       .kpi-dual-grid { grid-template-columns: 1fr; }
+      .order-detail-top { grid-template-columns: 1fr; }
       .detail-grid { grid-template-columns: 1fr; }
       .modal-grid { grid-template-columns: 1fr; }
       .article-row { grid-template-columns: 1fr; }
       .detail-box { position: static; min-height: 280px; }
       .order-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .order-shell { grid-template-columns: 1fr; }
+      .order-actions-primary-row { grid-template-columns: 1fr; }
       .orders-toolbar-filters { grid-template-columns: 1fr 1fr; }
       .orders-toolbar-field-wide { grid-column: 1 / -1; }
     }
@@ -5142,6 +5213,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       const reviewBtn = container.querySelector("#reviewBtn");
       const sendClientBtn = container.querySelector("#sendClientBtn");
       const sendMaisonBtn = container.querySelector("#sendMaisonBtn");
+      const sendClientInvoiceBtn = container.querySelector("#sendClientInvoiceBtn");
+      const sendClientReceiptBtn = container.querySelector("#sendClientReceiptBtn");
+      const sendMaisonInvoiceBtn = container.querySelector("#sendMaisonInvoiceBtn");
+      const sendMaisonReceiptBtn = container.querySelector("#sendMaisonReceiptBtn");
       const printInvoiceBtn = container.querySelector("#printInvoiceBtn");
       const printReceiptBtn = container.querySelector("#printReceiptBtn");
       const maisonPhone = "+212661981392";
@@ -5247,6 +5322,13 @@ adminRouter.get(["/", "/orders"], (req, res) => {
         popup.print();
       }
 
+      function closeParentDetails(el) {
+        const detailsEl = el ? el.closest("details") : null;
+        if (detailsEl) {
+          detailsEl.removeAttribute("open");
+        }
+      }
+
       if (sendClientBtn) {
         sendClientBtn.addEventListener("click", async () => {
           await sendDocument(order.customerPhone || "", "classic");
@@ -5255,6 +5337,30 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       if (sendMaisonBtn) {
         sendMaisonBtn.addEventListener("click", async () => {
           await sendDocument(maisonPhone, "classic");
+        });
+      }
+      if (sendClientInvoiceBtn) {
+        sendClientInvoiceBtn.addEventListener("click", async () => {
+          closeParentDetails(sendClientInvoiceBtn);
+          await sendDocument(order.customerPhone || "", "classic");
+        });
+      }
+      if (sendClientReceiptBtn) {
+        sendClientReceiptBtn.addEventListener("click", async () => {
+          closeParentDetails(sendClientReceiptBtn);
+          await sendDocument(order.customerPhone || "", "showroom_receipt");
+        });
+      }
+      if (sendMaisonInvoiceBtn) {
+        sendMaisonInvoiceBtn.addEventListener("click", async () => {
+          closeParentDetails(sendMaisonInvoiceBtn);
+          await sendDocument(maisonPhone, "classic");
+        });
+      }
+      if (sendMaisonReceiptBtn) {
+        sendMaisonReceiptBtn.addEventListener("click", async () => {
+          closeParentDetails(sendMaisonReceiptBtn);
+          await sendDocument(maisonPhone, "showroom_receipt");
         });
       }
       if (reviewBtn) {
@@ -5409,28 +5515,41 @@ adminRouter.get(["/", "/orders"], (req, res) => {
           treatmentBadgeHtml(order) +
           vm.gatewayTag +
           "</div>" +
-          "<div class='order-summary-grid'>" +
-            "<div class='order-summary-card'><div class='order-summary-label'>Créée</div><div class='order-summary-value'>" + escapeHtml(vm.createdDateLabel + " à " + vm.createdTimeLabel) + "</div></div>" +
-            "<div class='order-summary-card'><div class='order-summary-label'>Canal</div><div class='order-summary-value'>" + escapeHtml(order.orderLocation || "Non renseigné") + "</div></div>" +
-            "<div class='order-summary-card'><div class='order-summary-label'>Total</div><div class='order-summary-value'>" + vm.totalLabel + "</div></div>" +
-            "<div class='order-summary-card'><div class='order-summary-label'>Reste à payer</div><div class='order-summary-value'>" + vm.remainingLabel + "</div></div>" +
-          "</div>" +
-          "<div class='order-actions-card'>" +
-            "<h4>Actions</h4>" +
-            "<div class='order-action-block'>" +
-              "<button type='button' id='sendMaisonBtn' class='save-order-btn action-primary order-action-primary'>Envoyer à Bouchra</button>" +
-              "<div class='order-action-utility-row'>" +
-                "<button type='button' id='sendClientBtn' class='save-order-btn action-secondary'>Envoyer au client</button>" +
-                "<div class='order-action-print'>" +
-                  "<details>" +
-                    "<summary class='save-order-btn order-action-print-toggle'>Imprimer</summary>" +
-                    "<div class='order-action-print-menu'>" +
-                      "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer la facture</button>" +
-                      "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer le reçu</button>" +
-                    "</div>" +
-                  "</details>" +
+          "<div class='order-detail-top'>" +
+            "<div class='order-summary-grid'>" +
+              "<div class='order-summary-card'><div class='order-summary-label'>Créée</div><div class='order-summary-value'>" + escapeHtml(vm.createdDateLabel + " à " + vm.createdTimeLabel) + "</div></div>" +
+              "<div class='order-summary-card'><div class='order-summary-label'>Canal</div><div class='order-summary-value'>" + escapeHtml(order.orderLocation || "Non renseigné") + "</div></div>" +
+              "<div class='order-summary-card'><div class='order-summary-label'>Total</div><div class='order-summary-value'>" + vm.totalLabel + "</div></div>" +
+              "<div class='order-summary-card'><div class='order-summary-label'>Reste à payer</div><div class='order-summary-value'>" + vm.remainingLabel + "</div></div>" +
+            "</div>" +
+            "<div class='order-actions-card'>" +
+              "<h4>Actions rapides</h4>" +
+              "<div class='order-action-block'>" +
+                "<div class='order-actions-primary-row'>" +
+                  "<div class='order-action-send'>" +
+                    "<details>" +
+                      "<summary class='save-order-btn action-primary order-action-send-toggle'>🧾 Envoyer un document</summary>" +
+                      "<div class='order-action-send-menu'>" +
+                        "<button type='button' id='sendClientInvoiceBtn' class='save-order-btn action-secondary'>Facture au client</button>" +
+                        "<button type='button' id='sendClientReceiptBtn' class='save-order-btn action-secondary'>Reçu au client</button>" +
+                        "<button type='button' id='sendMaisonInvoiceBtn' class='save-order-btn action-secondary'>Facture à Bouchra</button>" +
+                        "<button type='button' id='sendMaisonReceiptBtn' class='save-order-btn action-secondary'>Reçu à Bouchra</button>" +
+                      "</div>" +
+                    "</details>" +
+                  "</div>" +
+                  "<button type='button' id='reviewBtn' class='save-order-btn action-secondary order-review-btn'>⭐ Envoyer l'avis Google</button>" +
                 "</div>" +
-                "<button type='button' id='reviewBtn' class='save-order-btn action-secondary'>Envoyer l'avis Google</button>" +
+                "<div class='order-action-utility-row'>" +
+                  "<div class='order-action-print'>" +
+                    "<details>" +
+                      "<summary class='save-order-btn order-action-print-toggle'>Imprimer</summary>" +
+                      "<div class='order-action-print-menu'>" +
+                        "<button type='button' id='printInvoiceBtn' class='save-order-btn action-secondary'>Imprimer la facture</button>" +
+                        "<button type='button' id='printReceiptBtn' class='save-order-btn action-secondary'>Imprimer le reçu</button>" +
+                      "</div>" +
+                    "</details>" +
+                  "</div>" +
+                "</div>" +
               "</div>" +
             "</div>" +
           "</div>" +
