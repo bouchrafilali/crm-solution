@@ -1525,10 +1525,18 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     input, select {
       width: 100%;
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-      font-size: 14px;
+      border-radius: 10px;
+      padding: 0 12px;
+      min-height: 38px;
+      font-size: 13px;
       background: #fff;
+      color: #202223;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #8c9196;
+      box-shadow: 0 0 0 1px #8c9196;
     }
     button, a.button {
       border: 1px solid #5e656d;
@@ -1644,16 +1652,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       color: var(--muted);
       font-size: 12px;
       font-weight: 600;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
+      padding: 11px 14px;
+      border-bottom: 1px solid #e6e9ec;
       background: #fafbfb;
       position: sticky;
       top: 0;
       z-index: 1;
     }
     .orders-table td {
-      padding: 14px;
-      border-bottom: 1px solid #edf0f2;
+      padding: 12px 14px;
+      border-bottom: 1px solid #eef1f3;
       vertical-align: middle;
       background: #fff;
     }
@@ -1661,10 +1669,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       cursor: pointer;
     }
     .orders-table tr:hover td {
-      background: #f8f9fa;
+      background: #f7f8f9;
     }
     .orders-table tr.active-row td {
-      background: #f4f6f8;
+      background: #f5f6f7;
     }
     .customer-main {
       font-weight: 600;
@@ -1676,20 +1684,24 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .pill {
       border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 12px;
-      background: #f1f2f3;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #f6f6f7;
+      border: 1px solid #e1e3e5;
       color: #4a4f55;
       display: inline-flex;
       align-items: center;
     }
     .pill.partial {
-      background: #f8dca8;
-      color: #6b4500;
+      background: #faf7ef;
+      border-color: #e8dfc8;
+      color: #6c6142;
     }
     .pill.shipped {
-      background: #dff3e0;
-      color: #207a3c;
+      background: #f1f8f4;
+      border-color: #d7e7dc;
+      color: #4f6b57;
     }
     .detail-box {
       border: 1px solid var(--border);
@@ -1706,11 +1718,11 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
     }
     .shopify-detail-summary {
-      margin-top: 12px;
+      margin-top: 8px;
     }
     .order-detail-layout {
       display: grid;
-      gap: 12px;
+      gap: 10px;
     }
     .order-summary-grid {
       display: grid;
@@ -1722,7 +1734,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       border: 1px solid #e5e7eb;
       border-radius: 12px;
       background: #fff;
-      padding: 12px 14px;
+      padding: 10px 12px;
     }
     .order-summary-label {
       color: #6d7175;
@@ -1732,18 +1744,18 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       text-transform: uppercase;
     }
     .order-summary-value {
-      margin-top: 6px;
-      font-size: 15px;
+      margin-top: 4px;
+      font-size: 14px;
       font-weight: 700;
       color: #202223;
-      line-height: 1.3;
+      line-height: 1.25;
       word-break: break-word;
     }
     .order-actions-card {
       border: 1px solid #e5e7eb;
       border-radius: 12px;
       background: #fff;
-      padding: 14px;
+      padding: 12px;
     }
     .order-actions-card h4 {
       margin: 0 0 10px;
@@ -1760,22 +1772,23 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       border: 1px solid #e5e7eb;
       border-radius: 12px;
       background: #fff;
-      padding: 14px;
+      padding: 12px;
       margin-bottom: 0;
     }
     .order-card h4 {
-      margin: 0 0 10px;
-      font-size: 13px;
+      margin: 0 0 8px;
+      font-size: 12px;
       font-weight: 700;
-      letter-spacing: 0.01em;
-      text-transform: none;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6d7175;
     }
     .order-meta-row {
       display: flex;
       gap: 8px;
       align-items: center;
       flex-wrap: wrap;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .mobile-order-card-list {
       display: grid;
@@ -1811,10 +1824,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       gap: 10px;
     }
     .mobile-order-card-title {
-      font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
-      font-size: 22px;
+      font-family: inherit;
+      font-size: 17px;
       font-weight: 700;
-      line-height: 1.05;
+      line-height: 1.2;
       color: #202223;
     }
     .mobile-order-card-date {
@@ -1930,9 +1943,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .order-mobile-head-title {
       margin-top: 3px;
-      font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
-      font-size: 24px;
-      line-height: 1.05;
+      font-family: inherit;
+      font-size: 20px;
+      line-height: 1.15;
       font-weight: 700;
       color: #202223;
     }
@@ -2013,9 +2026,9 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       margin-top: 10px;
     }
     .order-action-block {
-      margin-top: 14px;
+      margin-top: 4px;
       display: grid;
-      gap: 10px;
+      gap: 8px;
     }
     .order-action-primary {
       width: 100%;
@@ -2038,7 +2051,7 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .order-action-utility-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
       align-items: start;
     }
     .order-action-utility-row .save-order-btn,
@@ -2063,16 +2076,16 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       justify-content: center;
       width: 100%;
       min-width: 156px;
-      min-height: 46px;
-      padding: 0 18px;
-      border-radius: 12px;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 10px;
       background: #fff;
       color: #202223;
-      border: 1px solid #d7dbe0;
+      border: 1px solid #d2d5d8;
       box-shadow: none;
       cursor: pointer;
-      font-weight: 700;
-      font-size: 14px;
+      font-weight: 600;
+      font-size: 13px;
       line-height: 1;
       text-align: center;
     }
@@ -2095,12 +2108,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       right: 0;
       width: 220px;
       display: grid;
-      gap: 8px;
-      padding: 10px;
+      gap: 6px;
+      padding: 8px;
       border: 1px solid #dfe3e8;
-      border-radius: 14px;
+      border-radius: 12px;
       background: #fff;
-      box-shadow: 0 18px 38px rgba(15, 23, 42, 0.12);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
       z-index: 6;
     }
     .order-action-print-menu .save-order-btn {
@@ -2195,20 +2208,20 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     .badge-status {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       border-radius: 999px;
-      padding: 6px 14px;
-      border: 1px solid #dadde0;
-      background: #f2f3f5;
+      padding: 4px 10px;
+      border: 1px solid #e1e3e5;
+      background: #f6f6f7;
       color: #4a4d52;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       line-height: 1;
     }
     .badge-icon {
-      font-size: 13px;
+      font-size: 10px;
       line-height: 1;
-      opacity: 0.9;
+      opacity: 0.65;
     }
     .badge-status.paid {
       background: #ededee;
@@ -2216,35 +2229,35 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       color: #4d5156;
     }
     .badge-status.partial {
-      background: #f8d79d;
-      border-color: #f0c67a;
-      color: #6c4a00;
+      background: #faf7ef;
+      border-color: #e8dfc8;
+      color: #6c6142;
     }
     .badge-status.pending {
-      background: #fff3cd;
-      border-color: #f7dd8f;
-      color: #6d5600;
+      background: #f8f7f3;
+      border-color: #e5e2d8;
+      color: #655f52;
     }
     .badge-status.unfulfilled {
-      background: #f7e7a3;
-      border-color: #ebd270;
-      color: #695300;
+      background: #f8f7f3;
+      border-color: #e5e2d8;
+      color: #655f52;
     }
     .badge-status.fulfilled {
-      background: #dff3e0;
-      border-color: #c5e8c8;
-      color: #1f6b36;
+      background: #f1f8f4;
+      border-color: #d7e7dc;
+      color: #4f6b57;
     }
     .badge-status.gateway {
-      background: #eef6f3;
-      border-color: #cfe6dd;
-      color: #1f5f4c;
+      background: #f6f6f7;
+      border-color: #e1e3e5;
+      color: #4d5156;
       font-weight: 600;
     }
     .tag-soft.gateway {
-      background: #eef6f3;
-      border-color: #cfe6dd;
-      color: #1f5f4c;
+      background: #f6f6f7;
+      border-color: #e1e3e5;
+      color: #4d5156;
     }
     .order-calendar {
       margin-top: 6px;
@@ -2274,26 +2287,27 @@ adminRouter.get(["/", "/orders"], (req, res) => {
     }
     .info-list {
       display: grid;
-      gap: 8px;
-      margin-top: 6px;
+      gap: 6px;
+      margin-top: 4px;
     }
     .info-item {
       display: grid;
       gap: 2px;
       padding: 8px 10px;
-      border: 1px solid var(--border);
+      border: 1px solid #eceef0;
       border-radius: 8px;
       background: #fff;
     }
     .info-label {
       color: #6b6f73;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.01em;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
     }
     .info-value {
       color: #222426;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       line-height: 1.3;
       word-break: break-word;
@@ -2302,12 +2316,12 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       width: 100%;
       border-collapse: collapse;
       margin-top: 4px;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
     }
     .payment-detail-table td {
-      border-bottom: 1px solid #eceef0;
-      padding: 6px 8px;
+      border-bottom: 1px solid #eef1f3;
+      padding: 5px 0;
       text-align: left;
       vertical-align: top;
     }
@@ -2321,10 +2335,10 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       white-space: nowrap;
     }
     .detail-title-row {
-      margin-bottom: 6px;
+      margin-bottom: 2px;
     }
     .detail-title-row strong {
-      font-size: 20px;
+      font-size: 18px;
       font-family: inherit;
       letter-spacing: -0.01em;
     }
@@ -2345,19 +2359,20 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       gap: 8px;
     }
     .article-row {
-      border: 1px solid var(--border);
+      border: 1px solid #eceef0;
       border-radius: 8px;
       padding: 8px;
       display: grid;
       grid-template-columns: 1fr 130px;
       gap: 8px;
       align-items: center;
+      background: #fff;
     }
     .article-title {
       font-size: 14px;
     }
     .save-order-btn {
-      margin-top: 12px;
+      margin-top: 8px;
     }
     .save-order-btn.action-primary {
       border-color: #1f2328;
@@ -2366,17 +2381,17 @@ adminRouter.get(["/", "/orders"], (req, res) => {
       box-shadow: none;
     }
     .save-order-btn.action-secondary {
-      border-color: #d0d5dc;
+      border-color: #d2d5d8;
       background: #fff;
       color: #202223;
-      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+      box-shadow: none;
     }
     .save-order-btn.action-secondary:hover,
     .save-order-btn.action-secondary:active {
       background: #fff;
       color: #202223;
       transform: none;
-      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+      box-shadow: none;
     }
     .modal-backdrop {
       position: fixed;
