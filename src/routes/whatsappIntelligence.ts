@@ -21002,6 +21002,70 @@ Je peux vous proposer celles qui pourraient vous correspondre.</p>
                   <div><strong>Cibles :</strong> mariées, invitées, fiançailles</div>
                   <div><strong>Budget :</strong> très gros budgets</div>
                 </div>
+                <details class="season-details">
+                  <summary>Voir le flow complet Mariage</summary>
+                  <div class="season-details-body">
+                    <section class="season-detail-section">
+                      <h4>Structure</h4>
+                      <div class="season-detail-kv">
+                        <div><strong>Période :</strong> Avril → Septembre</div>
+                        <div><strong>Pic :</strong> Juin → Août</div>
+                        <div><strong>Positionnement :</strong> haute couture, accompagnement personnalisé, pièce unique</div>
+                        <div><strong>Cibles :</strong> mariées, invitées, fiançailles</div>
+                      </div>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Phases</h4>
+                      <ul class="season-detail-list">
+                        <li><strong>Inspiration</strong> — T-90 à T-60 jours, projection + désir, angle inspiration / créations récentes, action: envoyer 2 visuels maximum.</li>
+                        <li><strong>Qualification</strong> — T-60 à T-45 jours, comprendre le besoin, angle événement / date / style, action: poser les questions clés.</li>
+                        <li><strong>Conversion</strong> — T-45 à T-20 jours, prise de commande, angle création sur mesure / planning atelier, action: call, showroom ou acompte.</li>
+                        <li><strong>Upgrade</strong> — après accord ou acompte, augmenter le panier, angle cape / 2ème tenue, action: proposer un complément.</li>
+                        <li><strong>Urgence</strong> — T-15 à T-5 jours, last bookings, angle créneaux restants / semi-mesure, action: proposition rapide.</li>
+                      </ul>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Messages prêts</h4>
+                      <div class="season-message-list">
+                        <article class="season-message">
+                          <div class="season-message-title">Inspiration</div>
+                          <p class="season-message-text">Bonjour [Prénom],
+Nous avons récemment finalisé quelques pièces qui pourraient parfaitement convenir pour un mariage.
+Je peux vous en partager une sélection si vous le souhaitez.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Qualification</div>
+                          <p class="season-message-text">Pour mieux vous orienter, pourriez-vous me préciser la date de votre événement ainsi que vos préférences de style ?</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Conversion</div>
+                          <p class="season-message-text">Nous pouvons créer une pièce parfaitement adaptée à votre événement.
+Je peux vous proposer un rendez-vous (ou un appel) afin de définir tous les détails ensemble.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Upgrade</div>
+                          <p class="season-message-text">Cette tenue peut être accompagnée d’une cape ou d’une seconde pièce dans le même esprit pour varier les looks.
+Souhaitez-vous que je vous montre ?</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Urgence</div>
+                          <p class="season-message-text">Nous avons encore quelques créneaux disponibles avec un délai adapté à votre date.
+Je peux vous proposer des options si vous le souhaitez.</p>
+                        </article>
+                      </div>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Logique copilote</h4>
+                      <ul class="season-detail-list">
+                        <li>Si <strong>season == MARIAGE</strong> et <strong>event_detected == true</strong> → priorité max, déclenchement qualification.</li>
+                        <li>Si <strong>client.budget_estimated &gt; 4000</strong> → tag VIP, stratégie call direct + accompagnement personnalisé.</li>
+                        <li>Si <strong>no_event_info</strong> → forcer la demande de date d’événement.</li>
+                        <li>Si <strong>acompte_paid</strong> → déclenchement upgrade.</li>
+                        <li>Si <strong>days_to_event &lt; 20</strong> → déclenchement urgence.</li>
+                      </ul>
+                    </section>
+                  </div>
+                </details>
               </section>
             </div>
           </div>
