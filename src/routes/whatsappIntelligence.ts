@@ -20750,6 +20750,13 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
                   <li><span class="season-timing">T-20 jours</span><span class="season-stage">vente</span></li>
                   <li><span class="season-timing">T-7 jours</span><span class="season-stage">urgence</span></li>
                 </ul>
+                <div class="season-notes">
+                  <div><strong>Période :</strong> -45 jours avant Ramadan → Eid</div>
+                  <div><strong>Pic :</strong> T-20 → T-5 jours</div>
+                  <div><strong>Cibles :</strong> clientes existantes, VIP, volume élevé</div>
+                  <div><strong>Objectif :</strong> multi-achats + répétition</div>
+                  <div><strong>Positionnement :</strong> élégance quotidienne / renouvellement</div>
+                </div>
               </section>
               <section class="season-block">
                 <h3 class="season-title">Hiver</h3>
