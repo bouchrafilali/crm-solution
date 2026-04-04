@@ -20668,8 +20668,7 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
       border-top:1px solid var(--line);
       padding-top:10px;
     }
-    .season-details summary{
-      list-style:none;
+    .season-details-trigger{
       display:inline-flex;
       align-items:center;
       gap:8px;
@@ -20684,21 +20683,18 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
       cursor:pointer;
       user-select:none;
     }
-    .season-details summary::-webkit-details-marker{
-      display:none;
-    }
-    .season-details summary::after{
-      content:"▾";
+    .season-details-trigger::after{
+      content:"↗";
       font-size:11px;
       color:#6d7175;
-    }
-    .season-details[open] summary::after{
-      transform:rotate(180deg);
     }
     .season-details-body{
       margin-top:12px;
       display:grid;
       gap:12px;
+    }
+    .season-flow-template{
+      display:none;
     }
     .season-detail-section{
       border:1px solid var(--line);
@@ -20768,10 +20764,73 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
       font-size:12px;
       color:var(--subtle);
     }
+    .season-flow-modal-backdrop{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      background:rgba(32,34,35,.52);
+      z-index:50;
+    }
+    .season-flow-modal-backdrop.hidden{
+      display:none;
+    }
+    .season-flow-modal{
+      width:min(920px,calc(100vw - 32px));
+      max-height:min(88vh,920px);
+      display:grid;
+      grid-template-rows:auto minmax(0,1fr);
+      border:1px solid var(--line);
+      border-radius:20px;
+      background:#fff;
+      overflow:hidden;
+      box-shadow:0 24px 64px rgba(15,23,42,.22);
+    }
+    .season-flow-modal-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:16px 18px;
+      border-bottom:1px solid var(--line);
+      background:#fff;
+    }
+    .season-flow-modal-title{
+      margin:0;
+      font-size:18px;
+      font-weight:800;
+      color:#202223;
+    }
+    .season-flow-modal-close{
+      min-height:34px;
+      padding:0 12px;
+      border:1px solid #d2d5d8;
+      border-radius:10px;
+      background:#fff;
+      color:#202223;
+      font-size:12px;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .season-flow-modal-body{
+      overflow:auto;
+      padding:18px;
+      background:#f6f6f7;
+    }
     @media (max-width: 980px){
       .grid{grid-template-columns:1fr}
       h1{font-size:28px}
       .flow-card{min-height:240px}
+      .season-flow-modal-backdrop{padding:0}
+      .season-flow-modal{
+        width:100vw;
+        max-height:100vh;
+        height:100vh;
+        border-radius:0;
+        border:0;
+      }
     }
   </style>
 </head>
@@ -20850,9 +20909,10 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
                   <div><strong>Objectif :</strong> multi-achats + répétition</div>
                   <div><strong>Positionnement :</strong> élégance quotidienne / renouvellement</div>
                 </div>
-                <details class="season-details">
-                  <summary>Voir le flow complet Ramadan</summary>
-                  <div class="season-details-body">
+                <div class="season-details">
+                  <button type="button" class="season-details-trigger" data-season-flow="ramadan">Voir le flow complet Ramadan</button>
+                  <div id="seasonFlowRamadan" class="season-flow-template">
+                    <div class="season-details-body">
                     <section class="season-detail-section">
                       <h4>Structure</h4>
                       <div class="season-detail-kv">
@@ -20914,8 +20974,9 @@ Je peux vous les présenter si vous le souhaitez.</p>
                         <li>Si <strong>client.country != Morocco</strong> → adapter avec proposition de livraison internationale.</li>
                       </ul>
                     </section>
+                    </div>
                   </div>
-                </details>
+                </div>
               </section>
               <section class="season-block">
                 <h3 class="season-title">Hiver</h3>
@@ -20929,9 +20990,10 @@ Je peux vous les présenter si vous le souhaitez.</p>
                   <div><strong>Objectif :</strong> maintenir revenu + préparer haute saison</div>
                   <div><strong>Positionnement :</strong> luxe discret / textures riches</div>
                 </div>
-                <details class="season-details">
-                  <summary>Voir le flow complet Hiver</summary>
-                  <div class="season-details-body">
+                <div class="season-details">
+                  <button type="button" class="season-details-trigger" data-season-flow="hiver">Voir le flow complet Hiver</button>
+                  <div id="seasonFlowHiver" class="season-flow-template">
+                    <div class="season-details-body">
                     <section class="season-detail-section">
                       <h4>Structure</h4>
                       <div class="season-detail-kv">
@@ -20986,8 +21048,9 @@ Je peux vous proposer celles qui pourraient vous correspondre.</p>
                         <li>Si <strong>no_response</strong> → fallback last minute.</li>
                       </ul>
                     </section>
+                    </div>
                   </div>
-                </details>
+                </div>
               </section>
               <section class="season-block">
                 <h3 class="season-title">Mariage</h3>
@@ -21002,9 +21065,10 @@ Je peux vous proposer celles qui pourraient vous correspondre.</p>
                   <div><strong>Cibles :</strong> mariées, invitées, fiançailles</div>
                   <div><strong>Budget :</strong> très gros budgets</div>
                 </div>
-                <details class="season-details">
-                  <summary>Voir le flow complet Mariage</summary>
-                  <div class="season-details-body">
+                <div class="season-details">
+                  <button type="button" class="season-details-trigger" data-season-flow="mariage">Voir le flow complet Mariage</button>
+                  <div id="seasonFlowMariage" class="season-flow-template">
+                    <div class="season-details-body">
                     <section class="season-detail-section">
                       <h4>Structure</h4>
                       <div class="season-detail-kv">
@@ -21064,8 +21128,9 @@ Je peux vous proposer des options si vous le souhaitez.</p>
                         <li>Si <strong>days_to_event &lt; 20</strong> → déclenchement urgence.</li>
                       </ul>
                     </section>
+                    </div>
                   </div>
-                </details>
+                </div>
               </section>
             </div>
           </div>
@@ -21074,6 +21139,69 @@ Je peux vous proposer des options si vous le souhaitez.</p>
       </div>
     </section>
   </div>
+  <div id="seasonFlowModalBackdrop" class="season-flow-modal-backdrop hidden">
+    <div class="season-flow-modal" role="dialog" aria-modal="true" aria-labelledby="seasonFlowModalTitle">
+      <div class="season-flow-modal-head">
+        <h2 id="seasonFlowModalTitle" class="season-flow-modal-title">Flow saisonnier</h2>
+        <button id="seasonFlowModalClose" type="button" class="season-flow-modal-close">Fermer</button>
+      </div>
+      <div id="seasonFlowModalBody" class="season-flow-modal-body"></div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const modalBackdrop = document.getElementById("seasonFlowModalBackdrop");
+      const modalBody = document.getElementById("seasonFlowModalBody");
+      const modalTitle = document.getElementById("seasonFlowModalTitle");
+      const closeBtn = document.getElementById("seasonFlowModalClose");
+      const triggers = Array.from(document.querySelectorAll("[data-season-flow]"));
+
+      function openSeasonFlow(flowName) {
+        if (!(modalBackdrop instanceof HTMLElement) || !(modalBody instanceof HTMLElement) || !(modalTitle instanceof HTMLElement)) return;
+        const normalized = String(flowName || "").trim().toLowerCase();
+        const targetId =
+          normalized === "ramadan" ? "seasonFlowRamadan" :
+          normalized === "hiver" ? "seasonFlowHiver" :
+          normalized === "mariage" ? "seasonFlowMariage" : "";
+        if (!targetId) return;
+        const template = document.getElementById(targetId);
+        if (!(template instanceof HTMLElement)) return;
+        modalBody.innerHTML = template.innerHTML;
+        modalTitle.textContent = "Flow complet " + (normalized === "ramadan" ? "Ramadan" : normalized === "hiver" ? "Hiver" : "Mariage");
+        modalBackdrop.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeSeasonFlow() {
+        if (!(modalBackdrop instanceof HTMLElement) || !(modalBody instanceof HTMLElement)) return;
+        modalBackdrop.classList.add("hidden");
+        modalBody.innerHTML = "";
+        document.body.style.overflow = "";
+      }
+
+      triggers.forEach((trigger) => {
+        trigger.addEventListener("click", () => {
+          openSeasonFlow(trigger.getAttribute("data-season-flow"));
+        });
+      });
+
+      if (closeBtn) {
+        closeBtn.addEventListener("click", () => closeSeasonFlow());
+      }
+      if (modalBackdrop) {
+        modalBackdrop.addEventListener("click", (event) => {
+          if (event.target === modalBackdrop) {
+            closeSeasonFlow();
+          }
+        });
+      }
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeSeasonFlow();
+        }
+      });
+    })();
+  </script>
 </body>
 </html>`);
 });
