@@ -20929,6 +20929,65 @@ Je peux vous les présenter si vous le souhaitez.</p>
                   <div><strong>Objectif :</strong> maintenir revenu + préparer haute saison</div>
                   <div><strong>Positionnement :</strong> luxe discret / textures riches</div>
                 </div>
+                <details class="season-details">
+                  <summary>Voir le flow complet Hiver</summary>
+                  <div class="season-details-body">
+                    <section class="season-detail-section">
+                      <h4>Structure</h4>
+                      <div class="season-detail-kv">
+                        <div><strong>Période :</strong> Novembre → Février</div>
+                        <div><strong>Positionnement :</strong> luxe discret, pièces plus structurées, textures riches comme le velours et les broderies profondes</div>
+                        <div><strong>Cibles :</strong> clientes internationales, clientes VIP, anciennes clientes à fort panier</div>
+                      </div>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Phases</h4>
+                      <ul class="season-detail-list">
+                        <li><strong>Discovery</strong> — T-45 à T-30 jours, réveiller l’intérêt, angle nouvelles textures / pièces hivernales, action: envoyer une inspiration ciblée.</li>
+                        <li><strong>Soft conversion</strong> — T-30 à T-15 jours, déclencher un achat discret, angle pièces disponibles / créations récentes, action: proposer une pièce adaptée.</li>
+                        <li><strong>Private push</strong> — T-15 à T-5 jours, conversion VIP, angle pièce réservée / sélection privée, action: message personnalisé.</li>
+                        <li><strong>Last minute</strong> — T-5 à J, écouler le stock premium, angle disponible immédiatement, action: livraison rapide.</li>
+                      </ul>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Messages prêts</h4>
+                      <div class="season-message-list">
+                        <article class="season-message">
+                          <div class="season-message-title">Discovery</div>
+                          <p class="season-message-text">Bonjour [Prénom],
+Nous venons de finaliser quelques pièces dans des textures plus hivernales, très élégantes.
+Je peux vous en partager une sélection si vous le souhaitez.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Soft conversion</div>
+                          <p class="season-message-text">Nous avons actuellement quelques pièces disponibles qui pourraient parfaitement correspondre à vos prochaines occasions.
+Souhaitez-vous que je vous montre une sélection ?</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Private push</div>
+                          <p class="season-message-text">Bonjour [Prénom],
+Une pièce vient d’être finalisée et m’a immédiatement fait penser à vous.
+Je peux vous la réserver si vous le souhaitez.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Last minute</div>
+                          <p class="season-message-text">Nous avons encore quelques pièces disponibles immédiatement avec livraison rapide.
+Je peux vous proposer celles qui pourraient vous correspondre.</p>
+                        </article>
+                      </div>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Logique copilote</h4>
+                      <ul class="season-detail-list">
+                        <li>Si <strong>season == HIVER</strong> et <strong>client.country in ["France", "US"]</strong> → priorité haute.</li>
+                        <li>Si <strong>client.total_spent &gt; 4000</strong> → déclenchement private push.</li>
+                        <li>Si <strong>client.last_purchase &gt; 60 days</strong> → déclenchement discovery.</li>
+                        <li>Si <strong>client.engagement == HIGH</strong> → déclenchement soft conversion.</li>
+                        <li>Si <strong>no_response</strong> → fallback last minute.</li>
+                      </ul>
+                    </section>
+                  </div>
+                </details>
               </section>
               <section class="season-block">
                 <h3 class="season-title">Mariage</h3>
