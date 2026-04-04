@@ -20663,6 +20663,99 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
     .season-notes strong{
       color:#202223;
     }
+    .season-details{
+      margin-top:10px;
+      border-top:1px solid var(--line);
+      padding-top:10px;
+    }
+    .season-details summary{
+      list-style:none;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      min-height:32px;
+      padding:0 12px;
+      border:1px solid #d2d5d8;
+      border-radius:999px;
+      background:#fff;
+      color:#202223;
+      font-size:12px;
+      font-weight:700;
+      cursor:pointer;
+      user-select:none;
+    }
+    .season-details summary::-webkit-details-marker{
+      display:none;
+    }
+    .season-details summary::after{
+      content:"▾";
+      font-size:11px;
+      color:#6d7175;
+    }
+    .season-details[open] summary::after{
+      transform:rotate(180deg);
+    }
+    .season-details-body{
+      margin-top:12px;
+      display:grid;
+      gap:12px;
+    }
+    .season-detail-section{
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      padding:12px;
+    }
+    .season-detail-section h4{
+      margin:0 0 8px;
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      color:#202223;
+    }
+    .season-detail-kv{
+      display:grid;
+      gap:6px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.45;
+    }
+    .season-detail-kv strong{
+      color:#202223;
+    }
+    .season-detail-list{
+      margin:0;
+      padding-left:18px;
+      display:grid;
+      gap:6px;
+      color:#202223;
+      font-size:13px;
+      line-height:1.5;
+    }
+    .season-message-list{
+      display:grid;
+      gap:10px;
+    }
+    .season-message{
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fafbfb;
+      padding:12px;
+    }
+    .season-message-title{
+      margin:0 0 6px;
+      font-size:13px;
+      font-weight:800;
+      color:#202223;
+    }
+    .season-message-text{
+      margin:0;
+      white-space:pre-line;
+      color:#4d5156;
+      font-size:13px;
+      line-height:1.55;
+    }
     .season-timing{
       font-weight:700;
       white-space:nowrap;
@@ -20757,6 +20850,72 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
                   <div><strong>Objectif :</strong> multi-achats + répétition</div>
                   <div><strong>Positionnement :</strong> élégance quotidienne / renouvellement</div>
                 </div>
+                <details class="season-details">
+                  <summary>Voir le flow complet Ramadan</summary>
+                  <div class="season-details-body">
+                    <section class="season-detail-section">
+                      <h4>Structure</h4>
+                      <div class="season-detail-kv">
+                        <div><strong>Période :</strong> -45 jours → Eid</div>
+                        <div><strong>Positionnement :</strong> élégance quotidienne, pièces légères et raffinées, renouvellement avec plusieurs tenues</div>
+                        <div><strong>Cibles :</strong> clientes existantes, VIP, nouvelles clientes à volume élevé</div>
+                      </div>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Phases</h4>
+                      <ul class="season-detail-list">
+                        <li><strong>Teaser</strong> — T-45 à T-30 jours, créer désir + anticipation, angle avant-première / nouvelles pièces Ramadan, action: montrer 1-2 pièces et ouvrir la discussion.</li>
+                        <li><strong>Conversion</strong> — T-30 à T-15 jours, déclencher les commandes, angle ouverture carnet / pièces disponibles, action: call ou commande directe.</li>
+                        <li><strong>Accélération</strong> — T-15 à T-7 jours, augmenter le volume avec multi-achats, angle plusieurs tenues / compléter votre sélection, action: proposer une 2ème tenue.</li>
+                        <li><strong>Urgence</strong> — T-7 à T-2 jours, last sales, angle disponible immédiatement / livraison rapide, action: stock ou semi-fini.</li>
+                        <li><strong>Eid push</strong> — J-3 à J+2, pic final + post-Eid, angle tenues Eid / dernières pièces.</li>
+                      </ul>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Messages prêts</h4>
+                      <div class="season-message-list">
+                        <article class="season-message">
+                          <div class="season-message-title">Teaser</div>
+                          <p class="season-message-text">Bonjour [Prénom],
+Nous commençons à finaliser nos premières pièces pour Ramadan.
+Je peux vous proposer une sélection en avant-première si vous le souhaitez.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Conversion</div>
+                          <p class="season-message-text">Nous ouvrons actuellement notre carnet pour les créations de Ramadan.
+Certaines pièces sont déjà réservées, je peux vous proposer une sélection adaptée.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Accélération</div>
+                          <p class="season-message-text">Beaucoup de nos clientes prévoient plusieurs tenues pour Ramadan.
+Je peux vous proposer une seconde pièce dans un esprit complémentaire si vous le souhaitez.
+
+Clé: multiplier le panier.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Urgence</div>
+                          <p class="season-message-text">Nous avons encore quelques pièces disponibles immédiatement avec livraison rapide.
+Je peux vous proposer celles qui pourraient vous correspondre.</p>
+                        </article>
+                        <article class="season-message">
+                          <div class="season-message-title">Eid</div>
+                          <p class="season-message-text">Nous avons reçu quelques pièces parfaites pour l’Aïd.
+Je peux vous les présenter si vous le souhaitez.</p>
+                        </article>
+                      </div>
+                    </section>
+                    <section class="season-detail-section">
+                      <h4>Logique copilote</h4>
+                      <ul class="season-detail-list">
+                        <li>Si <strong>season == RAMADAN</strong> et <strong>client.total_spent &gt; 4000</strong> → priorité VIP, déclenchement teaser early.</li>
+                        <li>Si <strong>client.last_purchase &lt; 90 days</strong> → déclenchement conversion.</li>
+                        <li>Si <strong>client.has_order_ramadan == true</strong> → déclenchement accélération.</li>
+                        <li>Si <strong>client.no_response</strong> → fallback urgence.</li>
+                        <li>Si <strong>client.country != Morocco</strong> → adapter avec proposition de livraison internationale.</li>
+                      </ul>
+                    </section>
+                  </div>
+                </details>
               </section>
               <section class="season-block">
                 <h3 class="season-title">Hiver</h3>
