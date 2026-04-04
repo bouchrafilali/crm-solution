@@ -20757,6 +20757,12 @@ whatsappRouter.get("/admin/client-flows", (req, res) => {
                   <li><span class="season-timing">T-30 jours</span><span class="season-stage">nouveautés</span></li>
                   <li><span class="season-timing">T-10 jours</span><span class="season-stage">push léger</span></li>
                 </ul>
+                <div class="season-notes">
+                  <div><strong>Période :</strong> Novembre → Février</div>
+                  <div><strong>Cibles :</strong> VIP, international, clientes existantes</div>
+                  <div><strong>Objectif :</strong> maintenir revenu + préparer haute saison</div>
+                  <div><strong>Positionnement :</strong> luxe discret / textures riches</div>
+                </div>
               </section>
               <section class="season-block">
                 <h3 class="season-title">Mariage</h3>
